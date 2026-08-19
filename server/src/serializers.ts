@@ -1,4 +1,5 @@
 import type { Tender } from "@tenderly/shared";
+import { ANALYSIS_SCHEMA_VERSION, orphanedAnswers } from "./analysis-schema.js";
 import type { BidAnswer, PublicTender, TenderRecord } from "./types.js";
 
 function accessLabel(access: TenderRecord["analysis"] extends infer _T ? string : never) {
@@ -82,6 +83,9 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [])
     })) ?? [],
     risks: analysis?.risks ?? [],
     synopsisSlides: analysis?.synopsisSlides ?? [],
+    schemaVersion: analysis?.schemaVersion,
+    analysisOutdated: Boolean(analysis) && analysis?.schemaVersion !== ANALYSIS_SCHEMA_VERSION,
+    orphanedAnswers: orphanedAnswers(analysis ?? null, answers),
   };
 }
 

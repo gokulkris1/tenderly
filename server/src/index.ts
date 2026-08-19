@@ -11,7 +11,7 @@ import { aiConfigured, analyseTender, draftBidAnswer } from "./ai.js";
 import { combineSourceText, extractDocumentText } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender, scoreTenderPreview } from "./etenders.js";
 import {
-  addEvidence, addPerson, createUser, findUserByEmail, getCompany, getTender, getUserById, initializeDatabase,
+  addEvidence, addPerson, createUser, findUserByEmail, getCompany, getTender, getUserById, initializeDatabase, migrateAnalysisSchema,
   listAnswers, listDocuments, listEvidence, listNotifications, listPeople, listTenders, persistentDatabase, saveAnswer,
   saveDocument, saveTenderAnalysis, setEvidenceVerified, updateCompany, updateTenderMetadata, upsertTender,
 } from "./db.js";
@@ -357,6 +357,9 @@ app.use((error: unknown, _req: Request, res: Response, _next: unknown) => {
 });
 
 await initializeDatabase();
+// Re-key analyses written before stable question ids existed (TLY-40). Idempotent.
+const migrated = await migrateAnalysisSchema();
+if (migrated.tenders) console.log(`analysis schema migration · tenders=${migrated.tenders} answers=${migrated.answers} checklistOverrides=${migrated.overrides}`);
 app.listen(port, "0.0.0.0", () => {
   console.log(`Tenderly API listening on port ${port} · database=${persistentDatabase ? "postgres" : "memory"} · ai=${aiConfigured() ? "configured" : "not-configured"}`);
 });

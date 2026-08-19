@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import pg from "pg";
+import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
 
 const { Pool } = pg;
@@ -314,4 +315,74 @@ export async function listNotifications(accountId: string) {
   if (!pool) return [...memory.notifications.values()].filter((item) => item.accountId === accountId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const result = await pool.query("SELECT * FROM notifications WHERE account_id=$1 ORDER BY created_at DESC LIMIT 100", [accountId]);
   return result.rows.map((row) => ({ id: row.id, accountId: row.account_id, externalId: row.external_id, title: row.title, sourceUrl: row.source_url, matchScore: row.match_score, payload: row.payload, read: row.read, createdAt: row.created_at } as NotificationRow));
+}
+
+/**
+ * One-off data migration for TLY-40.
+ *
+ * Analyses written before schema version 2 carry question and checklist ids the
+ * model invented, and `bid_answers` plus `metadata.checklistOverrides` are keyed
+ * on them. Re-keying both together preserves work a human already reviewed;
+ * without it the first re-analysis silently orphans every saved answer.
+ *
+ * Idempotent: a tender already on the current version is skipped.
+ */
+export async function migrateAnalysisSchema(): Promise<{ tenders: number; answers: number; overrides: number }> {
+  const counts = { tenders: 0, answers: 0, overrides: 0 };
+
+  const remapOne = (record: TenderRecord, answers: BidAnswer[]) => {
+    if (!record.analysis || !needsMigration(record.analysis)) return null;
+    const { analysis, questionIdMap, checklistIdMap } = remapLegacyAnalysis(record.analysis);
+    const overrides = (record.metadata.checklistOverrides ?? {}) as Record<string, string>;
+    const nextOverrides: Record<string, string> = {};
+    for (const [oldId, value] of Object.entries(overrides)) {
+      const mapped = checklistIdMap.get(oldId) ?? oldId;
+      nextOverrides[mapped] = value;
+      if (mapped !== oldId) counts.overrides++;
+    }
+    const answerUpdates = answers
+      .map((answer) => ({ answer, next: questionIdMap.get(answer.questionId) }))
+      .filter((entry): entry is { answer: BidAnswer; next: string } => Boolean(entry.next) && entry.next !== entry.answer.questionId);
+    return { analysis, nextOverrides, answerUpdates };
+  };
+
+  if (!pool) {
+    for (const record of memory.tenders.values()) {
+      const answers = [...memory.answers.values()].filter((answer) => answer.tenderId === record.id);
+      const result = remapOne(record, answers);
+      if (!result) continue;
+      record.analysis = result.analysis;
+      record.metadata = { ...record.metadata, checklistOverrides: result.nextOverrides };
+      for (const { answer, next } of result.answerUpdates) {
+        memory.answers.delete(`${answer.tenderId}:${answer.questionId}`);
+        answer.questionId = next;
+        memory.answers.set(`${answer.tenderId}:${next}`, answer);
+        counts.answers++;
+      }
+      counts.tenders++;
+    }
+    return counts;
+  }
+
+  const tenders = await pool.query("SELECT * FROM tenders WHERE analysis IS NOT NULL");
+  for (const row of tenders.rows) {
+    const record = mapTenderRow(row);
+    const answerRows = await pool.query("SELECT * FROM bid_answers WHERE tender_id=$1", [record.id]);
+    const answers = answerRows.rows.map((answerRow) => ({
+      id: answerRow.id, tenderId: answerRow.tender_id, questionId: answerRow.question_id,
+      response: answerRow.response, status: answerRow.status, evidence: answerRow.evidence_json ?? [],
+    } as BidAnswer));
+    const result = remapOne(record, answers);
+    if (!result) continue;
+    await pool.query(
+      "UPDATE tenders SET analysis=$2, metadata=$3, updated_at=now() WHERE id=$1",
+      [record.id, JSON.stringify(result.analysis), JSON.stringify({ ...record.metadata, checklistOverrides: result.nextOverrides })],
+    );
+    for (const { answer, next } of result.answerUpdates) {
+      await pool.query("UPDATE bid_answers SET question_id=$2 WHERE id=$1", [answer.id, next]);
+      counts.answers++;
+    }
+    counts.tenders++;
+  }
+  return counts;
 }
