@@ -2,12 +2,11 @@
 
 Audit date: 2026-08-19 · Branch: `TLY-0-bootstrap` · Auditor: engineering agent (Phase 0)
 
-> **Repository anomaly (read first).** The git history on `main` contains only `README.md`
-> (single "Initial commit"). The entire working v1 application lives **untracked** in
-> `tenderly-v1-source/`. A stale remote branch `origin/copilot/tenderly-application-development`
-> holds an older, different layout (`backend/`, `frontend/`). Before sprint work begins the v1
-> source must be committed to the repository (an E1 story), otherwise branches, PRs and CI have
-> nothing to operate on.
+> **Update (TLY-19, TLY-20).** The v1 source is now committed at the repository root, and the
+> vestigial Next.js / Cloudflare Worker / D1 / Drizzle scaffolding has been removed. The stale
+> `origin/copilot/tenderly-application-development` branch is archived as tag `archive/copilot-v0`.
+> Sections below describing that scaffolding are kept only where they explain how the code got
+> here; the live layout is the table in section 2.
 
 ---
 
@@ -38,11 +37,10 @@ The browser never talks to Postgres or OpenAI. All secrets live on Render.
 |---|---|---|
 | `tenderly-v1-source/components/TenderlyApp.tsx` | **Real** | Entire web UI: ~974-line monolith. All types, state, API client, and every screen (Discover, My bids, Evidence, Team, Company, Settings; bid stages Qualify → Synopsis → Respond → Assemble → Submit) in one file. |
 | `tenderly-v1-source/web-static/` | **Real** | Vite entry (`index.html`, `main.tsx` → renders `TenderlyApp`). |
-| `tenderly-v1-source/vite.netlify.config.ts` | **Real** | The production web build (`dist-netlify`); injects `NEXT_PUBLIC_API_URL` at build time; blank ⇒ built-in demo workspace. |
+| `tenderly-v1-source/vite.netlify.config.ts` | **Real** | The production web build (`dist-netlify`); injects `VITE_API_URL` at build time; blank ⇒ built-in demo workspace. |
 | `tenderly-v1-source/server/` | **Real** | The API. See §3. |
 | `tenderly-v1-source/netlify.toml`, `render.yaml` | **Real** | Deploy config (§6). |
-| `tenderly-v1-source/app/`, `next.config.ts`, `worker/`, `examples/d1/`, `db/` (drizzle), `build/sites-vite-plugin.ts`, `vite.config.ts`, `drizzle.config.ts` | **Vestigial** | Next.js/vinext/Cloudflare-Worker/D1/Drizzle starter scaffolding. `app/page.tsx` just re-renders `TenderlyApp`; the Worker/D1 path is never deployed. Confusing duplicate of the Vite path; removal is an E1 story. |
-| `tests/rendered-html.test.mjs` | Real (thin) | Asserts on built HTML output. |
+| `tests/rendered-html.test.mjs` | Removed (TLY-20) | Asserted on the Cloudflare Worker build output; deleted with the Worker. |
 
 ## 3. API server (`tenderly-v1-source/server/`)
 
@@ -91,13 +89,13 @@ Indexes: PKs, unique constraints, `tender_documents(tender_id)`, `notifications(
 
 ## 5. Web app
 
-React 19 SPA, no router — section/stage navigation is component state inside `TenderlyApp.tsx`. Inline `fetch` API client with Bearer token kept in `localStorage`-backed state; demo mode when `NEXT_PUBLIC_API_URL` is blank. All wire types duplicated by hand from the server. CSS in `components/tenderly.css`. No component tests; one built-HTML smoke test.
+React 19 SPA, no router — section/stage navigation is component state inside `TenderlyApp.tsx`. Inline `fetch` API client with Bearer token kept in `localStorage`-backed state; demo mode when `VITE_API_URL` is blank. All wire types duplicated by hand from the server. CSS in `components/tenderly.css`. No component tests; one built-HTML smoke test.
 
 ## 6. Deployment topology
 
 | Layer | Service | Config |
 |---|---|---|
-| Web | Netlify (`tenderly.netlify.app`) | `netlify.toml`: build `npm run build:netlify`, publish `dist-netlify`, SPA redirect, security headers. Env: `NEXT_PUBLIC_API_URL`. |
+| Web | Netlify (`tenderly.netlify.app`) | `netlify.toml`: build `npm run build:netlify`, publish `dist-netlify`, SPA redirect, security headers. Env: `VITE_API_URL`. |
 | API | Render web service `tenderly-api` | `render.yaml`: Node 22, health check `/health`, autodeploy on commit. Env: `DATABASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL=gpt-5.6`, generated `JWT_SECRET`/`CRON_SECRET`, `CORS_ORIGINS`, crawler tuning. |
 | Cron | Render cron `tenderly-discovery` (starter plan) | `15 7 * * *` daily; own build; shares `DATABASE_URL`. |
 | DB | Neon Postgres | Schema applied by API at boot. |

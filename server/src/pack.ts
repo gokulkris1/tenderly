@@ -10,6 +10,7 @@ const PALE = "E8F5EF";
 const PAPER = "F5F7F5";
 
 function safeFilename(value: string) {
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what must be stripped from a generated filename
   return value.replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").replace(/\s+/g, " ").trim().slice(0, 100) || "Tender";
 }
 

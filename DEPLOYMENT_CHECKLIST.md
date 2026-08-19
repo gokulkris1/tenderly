@@ -18,7 +18,7 @@
 ## Netlify
 
 - [ ] Deploy repository root; `netlify.toml` contains the build/publish settings.
-- [ ] Set `NEXT_PUBLIC_API_URL` to the Render API URL (no trailing slash).
+- [ ] Set `VITE_API_URL` to the Render API URL (no trailing slash).
 - [ ] Confirm the production site is `https://tenderly.netlify.app`.
 - [ ] Register your first Tenderly account.
 

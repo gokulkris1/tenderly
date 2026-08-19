@@ -60,7 +60,7 @@ npm ci
 npm run dev:netlify
 ```
 
-Open the local Vite URL. `NEXT_PUBLIC_API_URL=http://localhost:8787` connects the UI to the API. If `NEXT_PUBLIC_API_URL` is blank, the UI intentionally runs its built-in demonstration workspace.
+Open the local Vite URL. `VITE_API_URL=http://localhost:8787` connects the UI to the API. If `VITE_API_URL` is blank, the UI intentionally runs its built-in demonstration workspace.
 
 ## Deploy: Neon → Render → Netlify
 
@@ -95,7 +95,7 @@ Once the web service is healthy, copy its public URL, for example `https://tende
 The root `netlify.toml` is ready to use.
 
 1. Connect the repository to Netlify with the repository root as the base.
-2. Add `NEXT_PUBLIC_API_URL=<your Render API URL>` in Netlify environment variables. Do not add a trailing slash.
+2. Add `VITE_API_URL=<your Render API URL>` in Netlify environment variables. Do not add a trailing slash.
 3. Deploy. The configured publish directory is `dist-netlify`.
 4. Point/keep the site at `https://tenderly.netlify.app`.
 5. Visit `<Render URL>/health`; it should report `database: configured` and `ai: configured` before using a real bid.

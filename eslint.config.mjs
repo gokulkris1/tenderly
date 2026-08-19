@@ -1,23 +1,34 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import js from "@eslint/js";
+import globals from "globals";
+import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-    // Build output is not source. Without these, eslint lints server/dist and
-    // reports every compiled artefact twice.
-    "**/dist/**",
-    "**/dist-netlify/**",
-    "**/node_modules/**",
-  ]),
-]);
-
-export default eslintConfig;
+// The Vite + React app and the Express API. Nothing here depends on Next.js:
+// the eslint-config-next preset left with the rest of the Next scaffolding.
+export default tseslint.config(
+  {
+    ignores: [
+      "node_modules/**",
+      "**/dist/**",
+      "dist-netlify/**",
+      "**/*.tsbuildinfo",
+      "playwright-report/**",
+      "test-results/**",
+    ],
+  },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ["**/*.{ts,tsx,mts,mjs}"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: { "react-hooks": reactHooks },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      // Deliberate throwaways are prefixed with an underscore.
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+    },
+  },
+);

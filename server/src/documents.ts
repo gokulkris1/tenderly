@@ -15,6 +15,7 @@ const MAX_SHEET_ROWS = 2500;
 const MAX_SHEET_COLUMNS = 80;
 
 function cap(text: string) {
+  // eslint-disable-next-line no-control-regex -- stripping NUL from extracted document text is the point of this line
   return text.replace(/\u0000/g, "").replace(/\r/g, "").trim().slice(0, MAX_TEXT_CHARS_PER_FILE);
 }
 
