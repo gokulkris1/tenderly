@@ -117,6 +117,8 @@ export type Tender = {
   analysisOutdated?: boolean;
   /** Saved answers whose question the latest analysis no longer contains. */
   orphanedAnswers?: OrphanedAnswer[];
+  /** Which sector presets or keywords put this notice in the Discover list. */
+  matchedBy?: MatchReason[];
 };
 
 export type EvidenceItem = {
@@ -154,4 +156,28 @@ export type CompanyProfile = {
   cpv: string;
   certifications: string;
   insurance: string;
+};
+
+/** A plain-English sector a user can tick, instead of hunting CPV codes. */
+export type SectorPreset = {
+  slug: string;
+  label: string;
+  description: string;
+  cpvCodes: { code: string; label: string }[];
+};
+
+/** What a company wants to see in Discover. */
+export type DiscoveryPreferences = {
+  sectors: string[];
+  keywords: string[];
+  cpvCodes: string[];
+  valueMin: number | null;
+  valueMax: number | null;
+};
+
+/** Why a notice is in the list — shown so a user can correct their profile. */
+export type MatchReason = {
+  sector: string;
+  label: string;
+  keyword: string;
 };

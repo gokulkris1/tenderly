@@ -283,3 +283,18 @@ button:disabled { cursor: wait; opacity: .62; }
   .section-intro { align-items: flex-start; flex-direction: column; }.slide-stack { grid-template-columns: 1fr; }.brief-slide:last-child { grid-column: auto; aspect-ratio: 16/10.7; }.brief-slide { min-height: 270px; }.bottom-action { gap: 10px; }.bottom-action small { display: none; }.answer-head { padding: 16px 13px; }.answer-brief, .editor-toolbar, .answer-editor textarea, .editor-foot, .evidence-strip { margin-left: 13px; margin-right: 13px; }.answer-editor textarea { width: calc(100% - 26px); }.editor-foot { align-items: flex-start; gap: 8px; flex-direction: column; }.response-next { padding: 11px 13px; }.response-next small { display: none; }.assembly-aside, .profile-aside, .form-grid, .cv-grid, .team-grid { grid-template-columns: 1fr; }.form-grid label.wide { grid-column: auto; }.team-card { grid-template-columns: 42px 1fr; }.team-card > strong { grid-column: 2; }.evidence-table { overflow-x: auto; }.evidence-table > div { min-width: 580px; }.notification-popover { right: 10px; left: 10px; width: auto; }.auth-screen { grid-template-columns: 1fr; padding: 24px; }.auth-brand { display: none; }.auth-card { justify-self: center; }
   .section-actions { width: 100%; justify-content: flex-start; }
 }
+
+/* TLY-34 — discovery preferences: sectors are the lever, CPV is the detail. */
+.sector-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; width: 100%; padding: 6px 0; }
+.sector-card { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px; cursor: pointer; background: #fff; }
+.sector-card.selected { border-color: var(--green-2); background: var(--green-soft); }
+.sector-card input { margin-top: 2px; }
+.sector-card strong { display: block; font-size: 9px; }
+.sector-card small { display: block; color: #64736e; font-size: 7.5px; line-height: 1.45; margin-top: 2px; }
+.value-band { display: inline-flex; gap: 6px; }
+.value-band input { width: 96px; }
+.cpv-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 320px; }
+.cpv-chips i { font-style: normal; font-size: 7px; background: #edf0ef; color: #4a5a55; border-radius: 6px; padding: 2px 5px; }
+.match-reasons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.match-reasons i { font-style: normal; font-size: 7px; background: var(--green-soft); color: var(--green-2); border-radius: 6px; padding: 2px 6px; }
+.muted { color: #64736e; font-size: 8px; }

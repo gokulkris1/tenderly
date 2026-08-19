@@ -7,6 +7,8 @@ import "./tenderly.css";
 import type {
   BidQuestion,
   CompanyProfile,
+  DiscoveryPreferences,
+  SectorPreset,
   Decision,
   EvidenceItem,
   Gate,
@@ -223,6 +225,8 @@ export default function TenderlyApp() {
   const [authReady, setAuthReady] = useState(!API_BASE);
   // The authoritative blocker list the API returns when it refuses a final pack.
   const [blockers, setBlockers] = useState<string[]>([]);
+  const [sectors, setSectors] = useState<SectorPreset[]>([]);
+  const [preferences, setPreferences] = useState<DiscoveryPreferences>({ sectors: [], keywords: [], cpvCodes: [], valueMin: null, valueMax: null });
 
   const isDemo = !API_BASE;
   currentToken = token;
@@ -250,8 +254,9 @@ export default function TenderlyApp() {
     async function loadWorkspace() {
       setLoading("initial");
       try {
-        const [bidsData, companyData, evidenceData, peopleData, notificationsData] = await Promise.all([
+        const [bidsData, companyData, evidenceData, peopleData, notificationsData, sectorsData, preferencesData] = await Promise.all([
           apiClient.listTenders(), apiClient.getCompany(), apiClient.listEvidence(), apiClient.listPeople(), apiClient.listNotifications(),
+          apiClient.listSectors(), apiClient.getPreferences(),
         ]);
         if (!active) return;
         setTenders(bidsData.items ?? []);
@@ -259,6 +264,8 @@ export default function TenderlyApp() {
         setEvidence(evidenceData.items ?? []);
         setPeople(peopleData.items ?? []);
         setNotifications(notificationsData.items ?? []);
+        setSectors(sectorsData.items ?? []);
+        setPreferences(preferencesData.preferences);
         if (bidsData.items?.[0]) setSelectedId(bidsData.items[0].id);
 
         try {
@@ -289,6 +296,20 @@ export default function TenderlyApp() {
     if (!needle) return discoveries;
     return discoveries.filter((tender) => `${tender.title} ${tender.authority} ${tender.category}`.toLowerCase().includes(needle));
   }, [query, discoveries]);
+
+  async function saveDiscoveryPreferences(next: DiscoveryPreferences) {
+    if (isDemo) { setPreferences(next); setToast("Preferences saved in the demo workspace"); return; }
+    try {
+      setLoading("preferences");
+      const data = await apiClient.savePreferences(next);
+      setPreferences(data.preferences);
+      setToast("Discovery preferences saved · refreshing opportunities");
+      const refreshed = await apiClient.discover();
+      setDiscoveries(refreshed.items ?? []);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not save preferences");
+    } finally { setLoading(""); }
+  }
 
   async function refreshDiscovery() {
     if (isDemo) {
@@ -593,6 +614,8 @@ export default function TenderlyApp() {
               loading={loading === "feed"}
               openBid={openBid}
               setShowImport={setShowImport}
+              hasPreferences={preferences.sectors.length > 0 || preferences.keywords.length > 0}
+              onOpenSettings={() => setSection("Settings")}
             />
           )}
           {section === "My bids" && selected && (
@@ -618,7 +641,7 @@ export default function TenderlyApp() {
           }} />}
           {section === "Evidence" && <EvidenceView tab={evidenceTab} setTab={setEvidenceTab} evidence={evidence} people={people} onUploadEvidence={uploadEvidenceFile} onUploadCv={uploadCvFile} onVerify={setEvidenceVerification} loading={loading} />}
           {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} loading={loading === "cv-upload"} />}
-          {section === "Settings" && <SettingsView isDemo={isDemo} />}
+          {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} />}
         </div>
       </main>
 
@@ -628,8 +651,8 @@ export default function TenderlyApp() {
   );
 }
 
-function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid, setShowImport }: {
-  tenders: Tender[]; query: string; setQuery: (value: string) => void; refreshDiscovery: () => void; loading: boolean; openBid: (id: string) => void; setShowImport: (value: boolean) => void;
+function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid, setShowImport, hasPreferences, onOpenSettings }: {
+  tenders: Tender[]; query: string; setQuery: (value: string) => void; refreshDiscovery: () => void; loading: boolean; openBid: (id: string) => void; setShowImport: (value: boolean) => void; hasPreferences: boolean; onOpenSettings: () => void;
 }) {
   return (
     <div className="discover-page">
@@ -656,6 +679,16 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
         <div className="feed-actions"><button className="refresh-btn" onClick={refreshDiscovery} disabled={loading}>{loading ? "Checking…" : "↻ Refresh live"}</button></div>
       </section>
 
+      {!hasPreferences && (
+        <section className="panel attention-card" data-testid="no-preferences">
+          <span>✦</span>
+          <div>
+            <strong>Set your discovery preferences</strong>
+            <p>Tenderly is showing every current opportunity. Tick the sectors you bid in and it will show only the ones worth your time.</p>
+          </div>
+          <button className="quiet-btn" onClick={onOpenSettings}>Choose sectors</button>
+        </section>
+      )}
       <div className="tender-list">
         {tenders.map((tender) => (
           <article className="tender-card" key={tender.id} onClick={() => openBid(tender.id)}>
@@ -665,6 +698,11 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
               <h3>{tender.title}</h3>
               <p className="authority">{tender.authority}</p>
               <div className="tender-facts"><span><small>Deadline</small><strong>{tender.deadline}</strong></span><span><small>Value</small><strong>{tender.value}</strong></span><span><small>Access</small><strong>{tender.access}</strong></span></div>
+              {(tender.matchedBy?.length ?? 0) > 0 && (
+                <div className="match-reasons" data-testid="match-reasons">
+                  {tender.matchedBy!.map((reason) => <i key={`${reason.sector}-${reason.keyword}`} title={`matched on "${reason.keyword}"`}>{reason.label}</i>)}
+                </div>
+              )}
             </div>
             <div className="tender-decision">
               <span className={`decision-pill decision-${decisionSlug(tender.decision)}`}>{tender.decision === "GO" ? "✓" : tender.decision === "PARTNER" ? "↔" : tender.decision === "NO_GO" ? "×" : "!"} {decisionLabel(tender.decision)}</span>
@@ -879,8 +917,78 @@ function TeamView({ people, onUploadCv, loading }: { people: PersonItem[]; onUpl
   return <div className="library-page"><div className="section-intro"><div><p className="eyebrow">TEAM & PARTNERS</p><h2>Know your bid shape before you write.</h2><p>Tenderly maps required roles to CV evidence and only flags a tie-up when a concrete capability, capacity or credential gap remains.</p></div><FileButton label={loading ? "Extracting…" : "＋ Add person / CV"} accept=".pdf,.docx,.txt" onFile={onUploadCv} /></div><div className="team-grid">{people.map((person) => <section className="panel team-card" key={person.id}><span className="cv-avatar">{person.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "CV"}</span><div><h3>{person.name}</h3><p>{person.title || "Parsed CV profile"}</p></div><strong>Available to match</strong><small>{person.skills.length ? person.skills.join(" · ") : "Tenderly will match requirements against the full extracted CV text."}</small></section>)}<section className="panel gap-card"><span>＋</span><h3>Build your partner bench</h3><p>Add trusted associates or partner CVs here. A tender analysis will identify exactly which required role or credential still lacks evidence.</p><FileButton label="Add partner CV" accept=".pdf,.docx,.txt" onFile={onUploadCv} /></section></div></div>;
 }
 
-function SettingsView({ isDemo }: { isDemo: boolean }) {
-  return <div className="settings-page"><div className="section-intro"><div><p className="eyebrow">SETTINGS</p><h2>Discovery & guardrails.</h2><p>Production guardrails are conservative by default. Deployment-level watcher values live in Render environment settings for this V1.</p></div></div><section className="panel settings-list"><div><span><strong>eTenders watcher</strong><small>Daily Render cron when enabled, plus manual Refresh live at any time</small></span><label className="switch disabled"><input type="checkbox" defaultChecked disabled /><i /></label></div><div><span><strong>Minimum notification match</strong><small>`TENDERLY_DISCOVERY_MIN_SCORE` · defaults to 45%</small></span><select defaultValue="45" disabled><option value="45">45% · Render config</option></select></div><div><span><strong>Conservative eligibility</strong><small>Missing proof is Review, not Pass. Conflicting source evidence blocks final readiness.</small></span><label className="switch disabled"><input type="checkbox" defaultChecked disabled /><i /></label></div><div><span><strong>Automatic final submission</strong><small>Disabled by design — a human always performs the final portal submit action.</small></span><label className="switch disabled"><input type="checkbox" disabled /><i /></label></div><div><span><strong>Connection</strong><small>{isDemo ? "Demo mode · set VITE_API_URL in Netlify to connect the Render API" : "Render API connected"}</small></span><span className={isDemo ? "connection demo" : "connection live"}>● {isDemo ? "Demo" : "Live"}</span></div></section></div>;
+function SettingsView({ isDemo, sectors, preferences, onSave, loading }: { isDemo: boolean; sectors: SectorPreset[]; preferences: DiscoveryPreferences; onSave: (preferences: DiscoveryPreferences) => void; loading: string }) {
+  const [draft, setDraft] = useState<DiscoveryPreferences>(preferences);
+  const [keywordText, setKeywordText] = useState(preferences.keywords.join(", "));
+  const [cpvText, setCpvText] = useState(preferences.cpvCodes.join(", "));
+  const [showAdvanced, setShowAdvanced] = useState(preferences.cpvCodes.length > 0);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setDraft(preferences);
+    setKeywordText(preferences.keywords.join(", "));
+    setCpvText(preferences.cpvCodes.join(", "));
+  }, [preferences]);
+
+  const toggleSector = (slug: string) => setDraft((current) => ({
+    ...current,
+    sectors: current.sectors.includes(slug) ? current.sectors.filter((item) => item !== slug) : [...current.sectors, slug],
+  }));
+
+  const coveredCodes = sectors.filter((preset) => draft.sectors.includes(preset.slug)).flatMap((preset) => preset.cpvCodes);
+
+  function save() {
+    const list = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
+    const codes = list(cpvText);
+    const badCode = codes.find((code) => !/^[0-9]{8}$/.test(code));
+    if (badCode) { setError(`A CPV code is 8 digits — "${badCode}" is not`); return; }
+    if (draft.valueMin !== null && draft.valueMax !== null && draft.valueMax <= draft.valueMin) {
+      setError("Upper value must be greater than lower value"); return;
+    }
+    setError("");
+    onSave({ ...draft, keywords: list(keywordText), cpvCodes: codes });
+  }
+
+  const numberOrNull = (value: string) => (value.trim() === "" ? null : Number(value.replace(/[^0-9]/g, "")));
+
+  return <div className="settings-page">
+    <div className="section-intro"><div><p className="eyebrow">SETTINGS</p><h2>What should Tenderly watch for?</h2><p>Pick the kind of work you bid for. Tenderly turns that into the CPV codes and keywords behind the scenes — you never have to go code-hunting on eTenders.</p></div></div>
+
+    <section className="panel settings-list" data-testid="discovery-preferences">
+      <div><span><strong>Sectors you bid in</strong><small>Tick what applies. Discover shows only opportunities matching these.</small></span></div>
+      <div className="sector-grid">
+        {sectors.map((preset) => (
+          <label key={preset.slug} className={draft.sectors.includes(preset.slug) ? "sector-card selected" : "sector-card"} data-testid={`sector-${preset.slug}`}>
+            <input type="checkbox" checked={draft.sectors.includes(preset.slug)} onChange={() => toggleSector(preset.slug)} />
+            <span><strong>{preset.label}</strong><small>{preset.description}</small></span>
+          </label>
+        ))}
+        {sectors.length === 0 && <p className="muted">Sector list unavailable — connect the API to choose sectors.</p>}
+      </div>
+
+      <div><span><strong>Extra keywords</strong><small>Anything the sectors miss, comma separated. Example: procurement portal, GIS</small></span>
+        <input value={keywordText} onChange={(event) => setKeywordText(event.target.value)} placeholder="e.g. case management, GIS" /></div>
+
+      <div><span><strong>Contract value range (EUR)</strong><small>Leave blank for no limit. Opportunities that do not state a value are always shown.</small></span>
+        <span className="value-band">
+          <input inputMode="numeric" aria-label="Minimum value" value={draft.valueMin ?? ""} onChange={(event) => setDraft({ ...draft, valueMin: numberOrNull(event.target.value) })} placeholder="from" />
+          <input inputMode="numeric" aria-label="Maximum value" value={draft.valueMax ?? ""} onChange={(event) => setDraft({ ...draft, valueMax: numberOrNull(event.target.value) })} placeholder="to" />
+        </span></div>
+
+      <div><span><strong>CPV codes these sectors cover</strong><small>{coveredCodes.length ? `${coveredCodes.length} codes applied once a tender is imported` : "Pick a sector to see its codes"}</small></span>
+        <span className="cpv-chips" data-testid="covered-cpv">{coveredCodes.map((entry) => <i key={entry.code} title={entry.label}>{entry.code}</i>)}</span></div>
+
+      <div><span><strong>Advanced</strong><small>Add CPV codes the sectors do not cover. Most people never need this.</small></span>
+        <button type="button" className="quiet-btn" onClick={() => setShowAdvanced((value) => !value)}>{showAdvanced ? "Hide" : "Add CPV codes"}</button></div>
+      {showAdvanced && <div><span><strong>Your own CPV codes</strong><small>8 digits each, comma separated</small></span>
+        <input aria-label="Additional CPV codes" value={cpvText} onChange={(event) => setCpvText(event.target.value)} placeholder="e.g. 79212000" /></div>}
+
+      {error && <p className="auth-error" data-testid="preferences-error">{error}</p>}
+      <div><span /><button className="continue-btn" onClick={save} disabled={loading === "preferences"}>{loading === "preferences" ? "Saving…" : "Save preferences"}</button></div>
+    </section>
+
+    <section className="panel settings-list"><div><span><strong>eTenders watcher</strong><small>Daily Render cron when enabled, plus manual Refresh live at any time</small></span><label className="switch disabled"><input type="checkbox" defaultChecked disabled /><i /></label></div><div><span><strong>Conservative eligibility</strong><small>Missing proof is Review, not Pass. Conflicting source evidence blocks final readiness.</small></span><label className="switch disabled"><input type="checkbox" defaultChecked disabled /><i /></label></div><div><span><strong>Automatic final submission</strong><small>Disabled by design — a human always performs the final portal submit action.</small></span><label className="switch disabled"><input type="checkbox" disabled /><i /></label></div><div><span><strong>Connection</strong><small>{isDemo ? "Demo mode · set VITE_API_URL in Netlify to connect the Render API" : "Render API connected"}</small></span><span className={isDemo ? "connection demo" : "connection live"}>● {isDemo ? "Demo" : "Live"}</span></div></section>
+  </div>;
 }
 
 function ImportModal({ value, setValue, onClose, onSubmit, loading }: { value: string; setValue: (value: string) => void; onClose: () => void; onSubmit: (event: FormEvent) => void; loading: boolean }) {

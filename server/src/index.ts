@@ -8,10 +8,11 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { accountId, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
 import { aiConfigured, aiModel, analyseTender, draftBidAnswer } from "./ai.js";
+import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { combineSourceText, extractDocumentText } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender, scoreTenderPreview } from "./etenders.js";
 import {
-  addEvidence, addPerson, createUser, findUserByEmail, getCompany, getTender, getUserById, initializeDatabase, migrateAnalysisSchema,
+  addEvidence, addPerson, createUser, findUserByEmail, getCompany, getPreferences, getTender, getUserById, initializeDatabase, migrateAnalysisSchema, savePreferences,
   listAnswers, listDocuments, listEvidence, listNotifications, listPeople, listTenders, persistentDatabase, saveAnswer,
   saveDocument, saveTenderAnalysis, setEvidenceVerified, updateCompany, updateTenderMetadata, upsertTender,
 } from "./db.js";
@@ -40,6 +41,14 @@ const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 30, standardHeader
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
 
 const credentialsSchema = z.object({ email: z.string().email().max(254), password: z.string().min(10).max(128), companyName: z.string().trim().min(2).max(200).optional() });
+const preferencesSchema = z.object({
+  sectors: z.array(z.string().max(60)).max(20).default([]),
+  keywords: z.array(z.string().max(60)).max(50).default([]),
+  cpvCodes: z.array(z.string().regex(/^[0-9]{8}$/, "A CPV code is 8 digits")).max(50).default([]),
+  valueMin: z.number().int().min(0).nullable().default(null),
+  valueMax: z.number().int().min(0).nullable().default(null),
+});
+
 const companySchema = z.object({
   name: z.string().trim().min(1).max(300), registration: z.string().max(300).default(""), turnover: z.string().max(500).default(""), employees: z.string().max(500).default(""), services: z.string().max(20_000).default(""), cpv: z.string().max(5000).default(""), certifications: z.string().max(10_000).default(""), insurance: z.string().max(10_000).default(""),
 });
@@ -121,14 +130,66 @@ app.put("/api/company", async (req: AuthenticatedRequest, res) => {
   try { const company = companySchema.parse(req.body) as CompanyProfile; res.json({ company: await updateCompany(accountId(req), company) }); } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
+
+// The sector presets a user picks from. Static, so the UI never hard-codes them.
+app.get("/api/sectors", async (_req: AuthenticatedRequest, res) => {
+  res.json({ items: SECTOR_PRESETS.map((preset) => ({ slug: preset.slug, label: preset.label, description: preset.description, cpvCodes: preset.cpvCodes })) });
+});
+
+app.get("/api/preferences", async (req: AuthenticatedRequest, res) => {
+  try { res.json({ preferences: await getPreferences(accountId(req)) }); }
+  catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.put("/api/preferences", async (req: AuthenticatedRequest, res) => {
+  try {
+    const parsed = preferencesSchema.parse(req.body);
+    if (parsed.valueMin !== null && parsed.valueMax !== null && parsed.valueMax <= parsed.valueMin) {
+      return res.status(400).json({ error: "Upper value must be greater than lower value" });
+    }
+    res.json({ preferences: await savePreferences(accountId(req), parsed) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
 app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
   try {
-    const company = await getCompany(accountId(req));
+    const account = accountId(req);
+    const [company, preferences] = await Promise.all([getCompany(account), getPreferences(account)]);
     const query = z.string().max(200).catch("").parse(req.query.query);
     const items = await discoverETenders(query);
     const profileText = `${company.services} ${company.cpv} ${company.certifications}`;
-    const serialised = items.map((item) => serializePublicTender(item, scoreTenderPreview(item, profileText))).sort((a, b) => b.match - a.match).slice(0, 50);
-    res.json({ items: serialised, source: "eTenders public current opportunities", checkedAt: new Date().toISOString() });
+
+    // The eTenders listing carries no CPV, so the list is filtered on sector
+    // keywords against title and description. CPV codes on the profile are
+    // applied once a tender is imported and its detail page is read.
+    const keywords = profileKeywords(preferences.sectors, preferences.keywords);
+    const filtered = keywords.length === 0
+      ? items.map((item) => ({ item, reasons: [] as ReturnType<typeof matchNotice> }))
+      : items
+          .map((item) => ({ item, reasons: matchNotice(`${item.title} ${item.description}`, preferences.sectors, preferences.keywords) }))
+          .filter((entry) => entry.reasons.length > 0);
+
+    const withinBand = filtered.filter(({ item }) => {
+      if (preferences.valueMin === null && preferences.valueMax === null) return true;
+      const digits = (item.estimatedValue || "").replace(/[^0-9]/g, "");
+      if (!digits) return true; // an unstated value is not a reason to hide an opportunity
+      const value = Number(digits);
+      if (preferences.valueMin !== null && value < preferences.valueMin) return false;
+      if (preferences.valueMax !== null && value > preferences.valueMax) return false;
+      return true;
+    });
+
+    const serialised = withinBand
+      .map(({ item, reasons }) => ({ ...serializePublicTender(item, scoreTenderPreview(item, profileText)), matchedBy: reasons }))
+      .sort((a, b) => b.match - a.match)
+      .slice(0, 50);
+    res.json({
+      items: serialised,
+      source: "eTenders public current opportunities",
+      filtered: keywords.length > 0,
+      profileCpvCodes: profileCpvCodes(preferences.sectors, preferences.cpvCodes),
+      checkedAt: new Date().toISOString(),
+    });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status === 500 ? 502 : mapped.status).json({ error: mapped.message }); }
 });
 
