@@ -1,89 +1,52 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
+import { bidAnswerDraftSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
 import { withStableIds } from "./analysis-schema.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, TenderAnalysis, TenderRecord } from "./types.js";
 
-const apiKey = process.env.OPENAI_API_KEY?.trim();
-const model = process.env.OPENAI_MODEL?.trim() || "gpt-5.6";
-const client = apiKey ? new OpenAI({ apiKey }) : null;
+const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+/** Model is pinned by configuration, not by the caller. */
+const model = process.env.ANTHROPIC_MODEL?.trim() || "claude-fable-5";
+const client = apiKey ? new Anthropic({ apiKey }) : null;
 
-const evidenceSchema = {
-  type: "object",
-  properties: {
-    sourceDocument: { type: "string" },
-    quote: { type: "string" },
-    confidence: { type: "string", enum: ["HIGH", "MEDIUM", "LOW"] },
-  },
-  required: ["sourceDocument", "quote", "confidence"],
-  additionalProperties: false,
-} as const;
+/**
+ * Analysis returns a large structured object; drafting returns one answer.
+ * Neither is streamed here — streaming drafting to the UI is TLY-68.
+ *
+ * 16000 is the SDK's ceiling for a non-streaming request: above it the client
+ * refuses outright ("Streaming is required for operations that may take longer
+ * than 10 minutes"). A full analysis is well inside this.
+ */
+const ANALYSIS_MAX_TOKENS = 16000;
+const DRAFT_MAX_TOKENS = 16000;
 
-const analysisSchema = {
-  type: "object",
-  properties: {
-    headline: { type: "string" },
-    executiveSummary: { type: "string" },
-    bidType: { type: "string", enum: ["OPEN_CONTRACT", "FRAMEWORK_ESTABLISHMENT", "FRAMEWORK_MINI_COMPETITION", "DPS", "RESTRICTED", "NEGOTIATED", "UNKNOWN"] },
-    access: { type: "string", enum: ["OPEN_TO_QUALIFIED_BIDDERS", "FRAMEWORK_MEMBERS_ONLY", "INVITED_ONLY", "UNKNOWN"] },
-    eligibility: { type: "string", enum: ["PASS", "FAIL", "REVIEW"] },
-    fitScore: { type: "integer", minimum: 0, maximum: 100 },
-    decision: { type: "string", enum: ["GO", "PARTNER", "REVIEW", "NO_GO"] },
-    partnerNeeded: { type: "boolean" },
-    partnerGaps: { type: "array", items: { type: "string" } },
-    deadline: { type: "string" },
-    clarificationDeadline: { type: "string" },
-    contractValue: { type: "string" },
-    duration: { type: "string" },
-    lots: { type: "array", items: { type: "string" } },
-    fatalGates: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string" }, requirement: { type: "string" }, bidderEvidence: { type: "string" }, status: { type: "string", enum: ["PASS", "REVIEW", "FAIL", "NOT_APPLICABLE"] }, action: { type: "string" }, evidence: evidenceSchema,
-        },
-        required: ["id", "requirement", "bidderEvidence", "status", "action", "evidence"], additionalProperties: false,
-      },
-    },
-    evaluationCriteria: {
-      type: "array",
-      items: { type: "object", properties: { name: { type: "string" }, weight: { type: "number" }, minimumScore: { type: "number" }, strategy: { type: "string" }, evidence: evidenceSchema }, required: ["name", "weight", "minimumScore", "strategy", "evidence"], additionalProperties: false },
-    },
-    questions: {
-      type: "array",
-      items: { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, prompt: { type: "string" }, weight: { type: "number" }, maxWords: { type: "integer" }, required: { type: "boolean" }, evidenceNeeded: { type: "array", items: { type: "string" } }, source: evidenceSchema }, required: ["id", "title", "prompt", "weight", "maxWords", "required", "evidenceNeeded", "source"], additionalProperties: false },
-    },
-    roles: {
-      type: "array",
-      items: { type: "object", properties: { role: { type: "string" }, quantity: { type: "integer" }, minimumExperience: { type: "string" }, qualifications: { type: "string" }, cvRequired: { type: "boolean" }, bidderMatch: { type: "string" }, status: { type: "string", enum: ["PASS", "REVIEW", "FAIL"] }, action: { type: "string" }, evidence: evidenceSchema }, required: ["role", "quantity", "minimumExperience", "qualifications", "cvRequired", "bidderMatch", "status", "action", "evidence"], additionalProperties: false },
-    },
-    clarificationQuestions: { type: "array", items: { type: "string" } },
-    risks: { type: "array", items: { type: "string" } },
-    submissionMethod: { type: "string" },
-    submissionChecklist: {
-      type: "array",
-      items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" }, required: { type: "boolean" }, kind: { type: "string", enum: ["RESPONSE", "BUYER_TEMPLATE", "SIGNATURE", "PRICING", "CV", "OTHER"] }, status: { type: "string", enum: ["READY", "ACTION", "VERIFY"] }, source: evidenceSchema }, required: ["id", "label", "required", "kind", "status", "source"], additionalProperties: false },
-    },
-    synopsisSlides: {
-      type: "array", minItems: 1, maxItems: 3,
-      items: { type: "object", properties: { title: { type: "string" }, bullets: { type: "array", items: { type: "string" }, maxItems: 7 } }, required: ["title", "bullets"], additionalProperties: false },
-    },
-  },
-  required: ["headline", "executiveSummary", "bidType", "access", "eligibility", "fitScore", "decision", "partnerNeeded", "partnerGaps", "deadline", "clarificationDeadline", "contractValue", "duration", "lots", "fatalGates", "evaluationCriteria", "questions", "roles", "clarificationQuestions", "risks", "submissionMethod", "submissionChecklist", "synopsisSlides"],
-  additionalProperties: false,
-} as const;
+/**
+ * Structured output is expressed as a single forced tool call rather than
+ * `output_config.format`. The analysis schema is large enough that a strict
+ * grammar is rejected outright ("The compiled grammar is too large"), so the
+ * schema travels as a tool input schema and the Zod schema validates the result.
+ * That keeps one call per analysis and still fails loudly on a malformed payload.
+ */
+function forcedTool(name: string, description: string, schema: z.ZodType) {
+  return {
+    tool: { name, description, input_schema: z.toJSONSchema(schema) as Anthropic.Tool["input_schema"] },
+    choice: { type: "tool" as const, name },
+  };
+}
 
-const draftSchema = {
-  type: "object",
-  properties: {
-    status: { type: "string", enum: ["DRAFTED", "NEEDS_INPUT"] },
-    answer: { type: "string" },
-    missingInputs: { type: "array", items: { type: "string" } },
-    evidenceUsed: { type: "array", items: { type: "string" } },
-    claimsToVerify: { type: "array", items: { type: "string" } },
-  },
-  required: ["status", "answer", "missingInputs", "evidenceUsed", "claimsToVerify"],
-  additionalProperties: false,
-} as const;
+/** Pulls the forced tool call out of a response and validates it. */
+function parseToolResult<T>(response: Anthropic.Message, schema: z.ZodType<T>, what: string): T {
+  if (response.stop_reason === "refusal") {
+    throw new Error(`AI ${what} was declined (${response.stop_details?.category ?? "unspecified"})`);
+  }
+  const block = response.content.find((item) => item.type === "tool_use");
+  if (!block || block.type !== "tool_use") throw new Error(`AI ${what} returned no structured output`);
+  const result = schema.safeParse(block.input);
+  if (!result.success) {
+    throw new Error(`AI ${what} did not match the expected shape: ${result.error.issues.slice(0, 3).map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`);
+  }
+  return result.data;
+}
 
 function sourceFallback(tender: TenderRecord, company: CompanyProfile): TenderAnalysis {
   const isOpen = /^open\b/i.test(tender.procedure);
@@ -92,8 +55,8 @@ function sourceFallback(tender: TenderRecord, company: CompanyProfile): TenderAn
   const bidType = framework && establishment ? "FRAMEWORK_ESTABLISHMENT" : isOpen ? "OPEN_CONTRACT" : "UNKNOWN";
   const evidence = { sourceDocument: "eTenders notice", quote: tender.procedure ? `Procedure: ${tender.procedure}` : "", confidence: tender.procedure ? "MEDIUM" as const : "LOW" as const };
   return withStableIds({
-    headline: "Full AI qualification needs an OpenAI API key",
-    executiveSummary: tender.description || "The opportunity was imported. Configure OPENAI_API_KEY to analyse the complete tender pack.",
+    headline: "Full AI qualification needs an Anthropic API key",
+    executiveSummary: tender.description || "The opportunity was imported. Configure ANTHROPIC_API_KEY to analyse the complete tender pack.",
     bidType,
     access: isOpen ? "OPEN_TO_QUALIFIED_BIDDERS" : "UNKNOWN",
     eligibility: "REVIEW",
@@ -106,7 +69,7 @@ function sourceFallback(tender: TenderRecord, company: CompanyProfile): TenderAn
     contractValue: tender.estimatedValue,
     duration: "",
     lots: [],
-    fatalGates: [{ id: "source-review", requirement: "Complete qualification review", bidderEvidence: company.services ? "Company profile loaded" : "Company profile incomplete", status: "REVIEW", action: "Configure OPENAI_API_KEY and re-run analysis", evidence }],
+    fatalGates: [{ id: "source-review", requirement: "Complete qualification review", bidderEvidence: company.services ? "Company profile loaded" : "Company profile incomplete", status: "REVIEW", action: "Configure ANTHROPIC_API_KEY and re-run analysis", evidence }],
     evaluationCriteria: [], questions: [], roles: [], clarificationQuestions: [], risks: ["Full tender-document qualification has not run"],
     submissionMethod: "Verify in tender documents", submissionChecklist: [],
     synopsisSlides: [{ title: "Opportunity", bullets: [tender.title, tender.authority, `Deadline: ${tender.deadline || "not found"}`] }],
@@ -150,16 +113,18 @@ This is decision support. Be concise, conservative and evidence-grounded.`;
     sources: sourceText,
   });
 
-  const response = await client.responses.create({
+  const { tool, choice } = forcedTool("record_tender_analysis", "Record the complete qualification analysis of this tender.", tenderAnalysisSchema);
+  const response = await client.messages.create({
     model,
-    store: false,
-    instructions,
-    input,
-    text: { format: { type: "json_schema", name: "tender_analysis", strict: true, schema: analysisSchema } },
+    max_tokens: ANALYSIS_MAX_TOKENS,
+    system: instructions,
+    messages: [{ role: "user", content: input }],
+    tools: [tool],
+    tool_choice: choice,
+    output_config: { effort: "high" },
   });
-  if (!response.output_text) throw new Error("AI analysis returned no structured output");
   // The model invents ids; replace them with ones derived from the questions themselves.
-  return withStableIds(JSON.parse(response.output_text) as TenderAnalysis);
+  return withStableIds(parseToolResult(response, tenderAnalysisSchema, "analysis") as TenderAnalysis);
 }
 
 export async function draftBidAnswer(args: {
@@ -170,7 +135,7 @@ export async function draftBidAnswer(args: {
   people: PersonRecord[];
   existingAnswers: BidAnswer[];
 }) {
-  if (!client) return { status: "NEEDS_INPUT" as const, answer: "", missingInputs: ["Configure OPENAI_API_KEY to draft evidence-grounded bid responses"], evidenceUsed: [], claimsToVerify: [] };
+  if (!client) return { status: "NEEDS_INPUT" as const, answer: "", missingInputs: ["Configure ANTHROPIC_API_KEY to draft evidence-grounded bid responses"], evidenceUsed: [], claimsToVerify: [] };
   const instructions = `You are Tenderly's evidence-bound bid writer. Draft only from supplied bidder facts, verified evidence and CV facts. Never fabricate client names, metrics, accreditations, staff experience or outcomes. If a fact needed to answer the scored question is missing, list it in missingInputs and write a useful draft around verified facts with [INPUT NEEDED: ...] placeholders. Respect the stated maxWords when it is above zero. Address the exact question and its scoring emphasis. Do not claim that a draft is final or compliant. evidenceUsed must name only supplied items actually used. claimsToVerify lists statements that a human should confirm before submission.`;
   const payload = {
     tender: { title: args.tender.title, authority: args.tender.authority, analysis: args.tender.analysis },
@@ -180,15 +145,20 @@ export async function draftBidAnswer(args: {
     people: args.people,
     priorAnswers: args.existingAnswers.map((answer) => ({ questionId: answer.questionId, response: answer.response })),
   };
-  const response = await client.responses.create({
+  const { tool, choice } = forcedTool("record_bid_answer", "Record the drafted answer to this scored question.", bidAnswerDraftSchema);
+  const response = await client.messages.create({
     model,
-    store: false,
-    instructions,
-    input: JSON.stringify(payload),
-    text: { format: { type: "json_schema", name: "bid_answer_draft", strict: true, schema: draftSchema } },
+    max_tokens: DRAFT_MAX_TOKENS,
+    system: instructions,
+    messages: [{ role: "user", content: JSON.stringify(payload) }],
+    tools: [tool],
+    tool_choice: choice,
+    output_config: { effort: "high" },
   });
-  if (!response.output_text) throw new Error("AI drafting returned no structured output");
-  return JSON.parse(response.output_text) as { status: "DRAFTED" | "NEEDS_INPUT"; answer: string; missingInputs: string[]; evidenceUsed: string[]; claimsToVerify: string[] };
+  return parseToolResult(response, bidAnswerDraftSchema, "drafting") as BidAnswerDraft;
 }
 
 export function aiConfigured() { return Boolean(client); }
+
+/** The configured model, so /health reports what is actually in use. */
+export function aiModel() { return model; }

@@ -7,7 +7,7 @@ import multer from "multer";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { accountId, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
-import { aiConfigured, analyseTender, draftBidAnswer } from "./ai.js";
+import { aiConfigured, aiModel, analyseTender, draftBidAnswer } from "./ai.js";
 import { combineSourceText, extractDocumentText } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender, scoreTenderPreview } from "./etenders.js";
 import {
@@ -73,7 +73,7 @@ async function analyseSavedTender(account: string, tenderId: string) {
 }
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "tenderly-api", database: persistentDatabase ? "configured" : "memory", ai: aiConfigured() ? "configured" : "not-configured", time: new Date().toISOString() });
+  res.json({ ok: true, service: "tenderly-api", database: persistentDatabase ? "configured" : "memory", ai: aiConfigured() ? "configured" : "not-configured", aiModel: aiModel(), time: new Date().toISOString() });
 });
 
 app.post("/api/auth/register", authLimiter, async (req, res) => {

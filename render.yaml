@@ -14,10 +14,10 @@ services:
         value: production
       - key: DATABASE_URL
         sync: false
-      - key: OPENAI_API_KEY
+      - key: ANTHROPIC_API_KEY
         sync: false
-      - key: OPENAI_MODEL
-        value: gpt-5.6
+      - key: ANTHROPIC_MODEL
+        value: claude-fable-5
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGINS
