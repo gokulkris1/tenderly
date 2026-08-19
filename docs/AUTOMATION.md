@@ -58,7 +58,7 @@ A Story reaches Done only through a passing Test ticket. Merging is not verifica
 |---|---|
 | `.github/workflows/pr.yml` | `ci-pr` — the required check. Lint, typecheck, unit tests, both builds, integration tests against a Postgres service container. Plus `pr-conventions`, which enforces the `TLY-n:` title and matching branch name. |
 | `.github/workflows/jira-sync.yml` | Branch and PR lifecycle transitions. |
-| `.github/workflows/main.yml` | Staging deploy, health poll, e2e, and the pass/fail report into Jira. Mirrors to `JIRA_AUTOMATION_WEBHOOK` if one is ever configured. |
+| `.github/workflows/main.yml` | Staging deploy, health poll, e2e, and the pass/fail report into Jira. The web deploys by advancing the `staging` branch, which Netlify branch-deploys from the same repository; the API deploys through its Render hook. Mirrors to `JIRA_AUTOMATION_WEBHOOK` if one is ever configured. |
 | `.github/workflows/prod.yml` | Manual or tag-triggered production deploy behind the `production` environment approval gate, then the `@smoke` suite. |
 | `.github/workflows/e2e-rerun.yml` | `workflow_dispatch` with `issueKeys` — what unblocks a Test after a Bug fix. |
 | `scripts/jira/client.mjs` | REST v3 + Agile v1 helper: auth, 429 retry, transitions, links, comments, and the acceptance-criteria extractor. |
@@ -99,6 +99,11 @@ run green while an environment is still being stood up rather than failing on ab
   `hashFiles(...)` guards, and only the backlog validation runs. That story must also
   add `@playwright/test` to the root dev dependencies, or the e2e steps stay skipped.
 - **The Playwright journeys are specifications, not passing tests.** They reference
-  `data-testid` hooks that arrive with the frontend split (E1-06, E1-07).
+  `data-testid` hooks that arrive with the frontend split (E1-06, E1-07) and seeded
+  staging data (E13-04), so they are tagged `@quarantine` and do not run. When every
+  journey is quarantined the suite has nothing to execute, and `main.yml` skips the
+  step rather than reporting an empty run as a pass — stories stay In Test until
+  E13-03 makes the journeys real. This is deliberate: a green tick with no test
+  behind it is the exact failure TLY-117 was filed for.
 - **Sprints require the board feature.** `start-sprint.mjs` fails with a clear message
   if the TLY board has no scrum/sprint support enabled.
