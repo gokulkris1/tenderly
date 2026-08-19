@@ -6,7 +6,7 @@ export default defineConfig({
   root: path.resolve(process.cwd(), "web-static"),
   plugins: [react()],
   define: {
-    "process.env.NEXT_PUBLIC_API_URL": JSON.stringify(process.env.NEXT_PUBLIC_API_URL ?? ""),
+    "process.env.VITE_API_URL": JSON.stringify(process.env.VITE_API_URL ?? ""),
   },
   build: {
     outDir: path.resolve(process.cwd(), "dist-netlify"),

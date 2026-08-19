@@ -196,6 +196,7 @@ export function parseDocumentListHtml(html: string, baseUrl: string, resourceId:
 }
 
 function sanitizeFilename(input: string) {
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what must be stripped from a downloaded filename
   return input.replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").replace(/\s+/g, " ").trim().slice(0, 180);
 }
 

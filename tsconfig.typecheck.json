@@ -1,16 +1,9 @@
 {
-  // Typecheck of real source. The excluded paths are the vestigial Next.js,
-  // Cloudflare Worker and D1 scaffolding, which does not compile without the
-  // wrangler toolchain — TLY-20 deletes them and these excludes go with it.
+  // The server has its own tsconfig and is typechecked by its own build.
+
   "extends": "./tsconfig.json",
   "exclude": [
     "node_modules",
-    "db",
-    "worker",
-    "examples",
-    "app",
-    "vite.config.ts",
-    "drizzle.config.ts",
     "server"
   ]
 }
