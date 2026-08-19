@@ -74,6 +74,13 @@ export type SubmissionItem = {
   source: string;
 };
 
+/** An answer whose question is no longer in the analysis. Never discarded. */
+export type OrphanedAnswer = {
+  questionId: string;
+  response: string;
+  status: string;
+};
+
 export type SynopsisSlide = {
   title: string;
   bullets: string[];
@@ -104,6 +111,12 @@ export type Tender = {
   submissionChecklist?: SubmissionItem[];
   risks?: string[];
   synopsisSlides?: SynopsisSlide[];
+  /** Shape version of the stored analysis, absent on tenders never analysed. */
+  schemaVersion?: string;
+  /** The stored analysis predates the current shape; offer a re-analysis. */
+  analysisOutdated?: boolean;
+  /** Saved answers whose question the latest analysis no longer contains. */
+  orphanedAnswers?: OrphanedAnswer[];
 };
 
 export type EvidenceItem = {

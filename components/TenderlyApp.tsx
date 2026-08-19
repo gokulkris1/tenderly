@@ -696,6 +696,17 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
         </div>
       </section>
 
+      {tender.analysisOutdated && (
+        <section className="panel attention-card" data-testid="analysis-outdated">
+          <span>!</span>
+          <div>
+            <strong>Analysis is from an earlier version — re-analyse to update</strong>
+            <p>This tender was analysed under an older shape. Everything below still renders; re-running qualification brings it up to date.</p>
+          </div>
+          <button className="quiet-btn" onClick={runAnalysis} disabled={Boolean(loading)}>{loading === "analyse" ? "Re-analysing…" : "Re-analyse"}</button>
+        </section>
+      )}
+
       <nav className="stage-tabs" aria-label="Bid workflow">
         {stages.map((item, index) => <button key={item} className={stage === item ? "active" : ""} onClick={() => setStage(item)}><span>{index + 1}</span>{item}{item === "Qualify" && reviewed > 0 && <i>{reviewed}</i>}</button>)}
       </nav>
@@ -768,6 +779,15 @@ function Respond({ tender, draftAnswer, markAnswerReady, uploadTenderFile, loadi
         <div><p className="eyebrow">RESPONSE PLAN</p><h3>{tender.questions.length} scored sections</h3><small>80% of quality marks mapped</small></div>
         {tender.questions.map((question, index) => <button key={question.id} className={active.id === question.id ? "active" : ""} onClick={() => setActiveId(question.id)}><span className="q-index">{String(index + 1).padStart(2, '0')}</span><span><strong>{question.title}</strong><small>{question.weight}% · max {question.maxWords} words</small></span><i className={`q-state ${question.status}`} /></button>)}
         <div className="response-key"><p><i className="q-state ready" /> Ready</p><p><i className="q-state draft" /> Draft</p><p><i className="q-state needs-input" /> Needs input</p></div>
+        {(tender.orphanedAnswers?.length ?? 0) > 0 && (
+          <div className="orphaned-answers" data-testid="orphaned-answers">
+            <p className="eyebrow">NO LONGER IN THE TENDER</p>
+            <small>{tender.orphanedAnswers!.length} saved answer{tender.orphanedAnswers!.length > 1 ? "s" : ""} whose question the latest analysis does not contain. Kept so nothing written by a person is lost.</small>
+            {tender.orphanedAnswers!.map((orphan) => (
+              <details key={orphan.questionId}><summary>{orphan.status} · {orphan.questionId}</summary><p>{orphan.response}</p></details>
+            ))}
+          </div>
+        )}
       </aside>
       <section className="answer-editor">
         <div className="answer-head"><div><p className="eyebrow">SCORED QUESTION · {active.weight}%</p><h2>{active.title}</h2><p>{active.prompt}</p></div><div className="mark-badge"><strong>{active.weight}</strong><small>marks</small></div></div>

@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { withStableIds } from "./analysis-schema.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, TenderAnalysis, TenderRecord } from "./types.js";
 
 const apiKey = process.env.OPENAI_API_KEY?.trim();
@@ -90,7 +91,7 @@ function sourceFallback(tender: TenderRecord, company: CompanyProfile): TenderAn
   const establishment = /establish|establishment/i.test(`${tender.title} ${tender.description}`);
   const bidType = framework && establishment ? "FRAMEWORK_ESTABLISHMENT" : isOpen ? "OPEN_CONTRACT" : "UNKNOWN";
   const evidence = { sourceDocument: "eTenders notice", quote: tender.procedure ? `Procedure: ${tender.procedure}` : "", confidence: tender.procedure ? "MEDIUM" as const : "LOW" as const };
-  return {
+  return withStableIds({
     headline: "Full AI qualification needs an OpenAI API key",
     executiveSummary: tender.description || "The opportunity was imported. Configure OPENAI_API_KEY to analyse the complete tender pack.",
     bidType,
@@ -109,7 +110,7 @@ function sourceFallback(tender: TenderRecord, company: CompanyProfile): TenderAn
     evaluationCriteria: [], questions: [], roles: [], clarificationQuestions: [], risks: ["Full tender-document qualification has not run"],
     submissionMethod: "Verify in tender documents", submissionChecklist: [],
     synopsisSlides: [{ title: "Opportunity", bullets: [tender.title, tender.authority, `Deadline: ${tender.deadline || "not found"}`] }],
-  };
+  });
 }
 
 export async function analyseTender(tender: TenderRecord, company: CompanyProfile, sourceText: string, bidderContext: { people?: PersonRecord[]; evidence?: EvidenceRecord[] } = {}): Promise<TenderAnalysis> {
@@ -157,7 +158,8 @@ This is decision support. Be concise, conservative and evidence-grounded.`;
     text: { format: { type: "json_schema", name: "tender_analysis", strict: true, schema: analysisSchema } },
   });
   if (!response.output_text) throw new Error("AI analysis returned no structured output");
-  return JSON.parse(response.output_text) as TenderAnalysis;
+  // The model invents ids; replace them with ones derived from the questions themselves.
+  return withStableIds(JSON.parse(response.output_text) as TenderAnalysis);
 }
 
 export async function draftBidAnswer(args: {
