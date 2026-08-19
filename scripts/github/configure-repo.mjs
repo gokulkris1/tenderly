@@ -95,15 +95,28 @@ for (const env of ["staging", "production"]) {
   if (DRY) { console.log(`  + ${env} would be created`); continue; }
   // Environment protection rules (required reviewers, wait timers) need GitHub
   // Pro/Team on a private repo. Create the environment either way and say so.
+  // production waits for a named human; staging does not. Protection rules are
+  // refused on private repos outside Pro/Team, so this degrades rather than aborts.
+  const body = { deployment_branch_policy: null };
+  if (env === "production") {
+    const me = await gh("/user");
+    body.reviewers = [{ type: "User", id: me.id }];
+    body.prevent_self_review = false;
+  }
   try {
-    await gh(`/repos/${REPO}/environments/${env}`, { method: "PUT", body: JSON.stringify({ deployment_branch_policy: null }) });
-    console.log(`  + ${env} created`);
+    await gh(`/repos/${REPO}/environments/${env}`, { method: "PUT", body: JSON.stringify(body) });
+    console.log(`  + ${env} created${env === "production" ? " with a required reviewer" : ""}`);
   } catch (e) {
     if (e.status === 422) { console.warn(`  ! ${env}: ${e.body?.message ?? e.message}`); continue; }
     throw e;
   }
 }
-if (!DRY) console.log("  ! production approval gate: add a required reviewer in Settings -> Environments.\n    On a private repo this needs GitHub Pro/Team; on the free plan prod.yml still\n    requires a manual workflow_dispatch, which is the gate until then.");
+if (!DRY) {
+  const prod = await gh(`/repos/${REPO}/environments/production`).catch(() => null);
+  const reviewers = prod?.protection_rules?.find((r) => r.type === "required_reviewers")?.reviewers ?? [];
+  if (reviewers.length) console.log(`  approval gate active: ${reviewers.length} required reviewer(s) on production`);
+  else console.log("  ! production has no required reviewer. Protection rules need GitHub Pro/Team on a\n    private repo; until then the manual workflow_dispatch on prod.yml is the only gate.");
+}
 
 // ---- auto-merge
 console.log("\nRepository settings:");
