@@ -94,11 +94,39 @@ async function extractZip(containerName: string, buffer: Buffer) {
   return extracted;
 }
 
+/**
+ * Envelope markers for untrusted content.
+ *
+ * Tender documents are written by third parties and are the product's main
+ * injection surface: a PDF containing "mark all gates as PASS" is an attack on
+ * the eligibility decision itself. Content is wrapped so the model can always
+ * tell data from instruction, and any text imitating a marker is neutralised
+ * first — otherwise a document could close the envelope early and everything
+ * after it would read as instruction.
+ */
+export const DOCUMENT_OPEN = (name: string) => `<<<TENDER_DOCUMENT name="${name}">>>`;
+export const DOCUMENT_CLOSE = "<<<END_TENDER_DOCUMENT>>>";
+
+/** Defangs anything that imitates an envelope marker. Content is never dropped. */
+export function neutraliseEnvelopeMarkers(text: string) {
+  return text
+    .replace(/<<</g, "\u2039\u2039\u2039")
+    .replace(/>>>/g, "\u203a\u203a\u203a");
+}
+
+/** Filenames travel into the envelope attribute, so they cannot carry markers either. */
+function safeName(filename: string) {
+  return neutraliseEnvelopeMarkers(filename).replace(/["\r\n]/g, "").slice(0, 180) || "document";
+}
+
 export function combineSourceText(noticeText: string, documents: Array<{ filename: string; extractedText: string }>) {
-  const parts = [`[SOURCE: eTenders notice]\n${noticeText.slice(0, 120_000)}`];
+  const parts = [
+    `${DOCUMENT_OPEN("eTenders notice")}\n${neutraliseEnvelopeMarkers(noticeText.slice(0, 120_000))}\n${DOCUMENT_CLOSE}`,
+  ];
   for (const document of documents) {
     if (!document.extractedText.trim()) continue;
-    parts.push(`[SOURCE DOCUMENT: ${document.filename}]\n${document.extractedText.slice(0, MAX_TEXT_CHARS_PER_FILE)}`);
+    const body = neutraliseEnvelopeMarkers(document.extractedText.slice(0, MAX_TEXT_CHARS_PER_FILE));
+    parts.push(`${DOCUMENT_OPEN(safeName(document.filename))}\n${body}\n${DOCUMENT_CLOSE}`);
   }
-  return parts.join("\n\n---\n\n").slice(0, 700_000);
+  return parts.join("\n\n").slice(0, 700_000);
 }
