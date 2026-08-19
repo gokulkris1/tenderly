@@ -14,6 +14,7 @@
     "job:discover": "node dist/src/job.js"
   },
   "dependencies": {
+    "@tenderly/shared": "file:../packages/shared",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",
     "cors": "^2.8.6",

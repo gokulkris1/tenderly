@@ -10,7 +10,7 @@
     "build": "vite build --config vite.netlify.config.ts",
     "build:netlify": "npm run build",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
+    "typecheck": "node scripts/typecheck.mjs"
   },
   "dependencies": {
     "react": "19.2.6",
@@ -19,6 +19,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.62.1",
+    "@tenderly/shared": "file:./packages/shared",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

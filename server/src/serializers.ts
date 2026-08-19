@@ -1,3 +1,4 @@
+import type { Tender } from "@tenderly/shared";
 import type { BidAnswer, PublicTender, TenderRecord } from "./types.js";
 
 function accessLabel(access: TenderRecord["analysis"] extends infer _T ? string : never) {
@@ -17,7 +18,7 @@ function bidTypeLabel(type: string) {
   return labels[type] ?? "Needs source review";
 }
 
-export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = []) {
+export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = []): Tender {
   const analysis = tender.analysis;
   const answerMap = new Map(answers.map((answer) => [answer.questionId, answer]));
   const checklistOverrides = (tender.metadata.checklistOverrides ?? {}) as Record<string, "READY" | "ACTION" | "VERIFY">;
@@ -31,7 +32,7 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [])
     deadline: analysis?.deadline || tender.deadline || "Verify deadline",
     value: analysis?.contractValue || tender.estimatedValue || "Not stated",
     match: analysis?.fitScore ?? 0,
-    decision: analysis?.decision === "NO_GO" ? "NO-GO" : analysis?.decision ?? "REVIEW",
+    decision: analysis?.decision ?? "REVIEW",
     access: accessLabel(analysis?.access ?? "UNKNOWN"),
     summary: analysis?.executiveSummary || tender.description || "Imported opportunity — run qualification after the full tender pack is available.",
     sourceUrl: tender.sourceUrl,
@@ -84,7 +85,7 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [])
   };
 }
 
-export function serializePublicTender(tender: PublicTender, matchScore: number) {
+export function serializePublicTender(tender: PublicTender, matchScore: number): Tender {
   return {
     id: `public-${tender.externalId}`,
     resourceId: tender.externalId,
