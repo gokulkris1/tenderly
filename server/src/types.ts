@@ -59,6 +59,8 @@ export type SubmissionChecklistItem = {
 export type TenderAnalysis = {
   /** Shape version of this payload — see server/src/analysis-schema.ts. */
   schemaVersion?: string;
+  /** Which versioned system prompt produced this analysis. */
+  promptVersion?: string;
   headline: string;
   executiveSummary: string;
   bidType: "OPEN_CONTRACT" | "FRAMEWORK_ESTABLISHMENT" | "FRAMEWORK_MINI_COMPETITION" | "DPS" | "RESTRICTED" | "NEGOTIATED" | "UNKNOWN";
