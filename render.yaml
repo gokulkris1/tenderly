@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: tenderly-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5.6
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://tenderly.netlify.app
+      - key: ETENDERS_MAX_PAGES
+        value: "3"
+      - key: ETENDERS_REQUEST_DELAY_MS
+        value: "850"
+      - key: TENDERLY_DISCOVERY_MIN_SCORE
+        value: "45"
+      - key: CRON_SECRET
+        generateValue: true
+
+  - type: cron
+    name: tenderly-discovery
+    runtime: node
+    plan: starter
+    rootDir: server
+    schedule: "15 7 * * *"
+    buildCommand: npm ci && npm run build
+    startCommand: npm run job:discover
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: ETENDERS_MAX_PAGES
+        value: "3"
+      - key: ETENDERS_REQUEST_DELAY_MS
+        value: "850"
+      - key: TENDERLY_DISCOVERY_MIN_SCORE
+        value: "45"
