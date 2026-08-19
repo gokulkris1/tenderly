@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ hashFiles('package-lock.json') != '' && 'npm' || '' }}
 
       # Which stories does this push carry? Everything downstream reports against these.
       - name: Collect Jira keys from the pushed commits
