@@ -63,7 +63,13 @@ if (key && !noJira) {
   }
 }
 
-if (!title) { console.error("No Jira story found and no --title given."); process.exit(2); }
+// A branch with no matching Jira story (the bootstrap branch, a spike) still
+// deserves a PR — fall back to its latest commit subject.
+if (!title) {
+  const subject = execSync(`git log -1 --format=%s ${branch}`).toString().trim();
+  title = subject || `${branch}: changes`;
+  console.warn(`! no Jira story for this branch — titling the PR from its latest commit`);
+}
 
 const bodyParts = [];
 if (storyUrl) bodyParts.push(`Story: [${key}](${storyUrl})`);
