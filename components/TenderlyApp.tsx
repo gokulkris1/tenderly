@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ApiError, createApiClient } from "../web/src/api/client";
 import "./tenderly.css";
 
 import type {
@@ -24,6 +25,11 @@ type BidStage = "Qualify" | "Synopsis" | "Respond" | "Assemble" | "Submit";
 const decisionSlug = (decision: Decision) => decision.toLowerCase().replace(/_/g, "-");
 
 const API_BASE = process.env.VITE_API_URL ?? "";
+
+// One client for the whole app. The token lives in component state, so it is read
+// through a holder rather than captured — a screen must never see a stale token.
+let currentToken = "";
+const apiClient = createApiClient({ baseUrl: API_BASE, getToken: () => currentToken });
 
 const demoTenders: Tender[] = [
   {
@@ -215,8 +221,11 @@ export default function TenderlyApp() {
   const [notifications, setNotifications] = useState<NotificationItem[]>(API_BASE ? [] : demoNotifications);
   const [token, setToken] = useState<string>("");
   const [authReady, setAuthReady] = useState(!API_BASE);
+  // The authoritative blocker list the API returns when it refuses a final pack.
+  const [blockers, setBlockers] = useState<string[]>([]);
 
   const isDemo = !API_BASE;
+  currentToken = token;
   const selected = tenders.find((item) => item.id === selectedId) ?? tenders[0];
   const companyInitials = company.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "CO";
   const profileValues = [company.name, company.registration, company.turnover, company.employees, company.services, company.cpv, company.certifications, company.insurance];
@@ -238,18 +247,11 @@ export default function TenderlyApp() {
   useEffect(() => {
     if (!API_BASE || !token) return;
     let active = true;
-    const headers = { Authorization: `Bearer ${token}` };
-    async function getJson(path: string) {
-      const response = await fetch(`${API_BASE}${path}`, { headers });
-      if (response.status === 401) throw new Error("SESSION_EXPIRED");
-      if (!response.ok) throw new Error(`Workspace request failed (${response.status})`);
-      return response.json();
-    }
     async function loadWorkspace() {
       setLoading("initial");
       try {
         const [bidsData, companyData, evidenceData, peopleData, notificationsData] = await Promise.all([
-          getJson("/api/tenders"), getJson("/api/company"), getJson("/api/evidence"), getJson("/api/people"), getJson("/api/notifications"),
+          apiClient.listTenders(), apiClient.getCompany(), apiClient.listEvidence(), apiClient.listPeople(), apiClient.listNotifications(),
         ]);
         if (!active) return;
         setTenders(bidsData.items ?? []);
@@ -260,19 +262,20 @@ export default function TenderlyApp() {
         if (bidsData.items?.[0]) setSelectedId(bidsData.items[0].id);
 
         try {
-          const discoveryData = await getJson("/api/tenders/discover");
+          const discoveryData = await apiClient.discover();
           if (active) setDiscoveries(discoveryData.items ?? []);
         } catch (error) {
-          if (active) setToast(error instanceof Error && error.message === "SESSION_EXPIRED" ? "Session expired — sign in again" : "Workspace loaded · live eTenders feed is temporarily unavailable");
+          if (active) setToast(error instanceof ApiError && error.isSessionExpired ? "Session expired — sign in again" : "Workspace loaded · live eTenders feed is temporarily unavailable");
         }
       } catch (error) {
         if (!active) return;
-        if (error instanceof Error && error.message === "SESSION_EXPIRED") {
+        if (error instanceof ApiError && error.isSessionExpired) {
           window.localStorage.removeItem("tenderly_token");
           setToken("");
+          setToast("Session expired — sign in again");
           return;
         }
-        setToast(error instanceof Error ? error.message : "Could not load workspace");
+        setToast(error instanceof ApiError ? `${error.action}: ${error.message}` : "Could not load workspace");
       } finally {
         if (active) setLoading("");
       }
@@ -287,22 +290,6 @@ export default function TenderlyApp() {
     return discoveries.filter((tender) => `${tender.title} ${tender.authority} ${tender.category}`.toLowerCase().includes(needle));
   }, [query, discoveries]);
 
-  async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await fetch(`${API_BASE}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(init.headers ?? {}),
-      },
-    });
-    if (!response.ok) {
-      const detail = await response.json().catch(() => ({ error: "Request failed" }));
-      throw new Error(detail.error ?? detail.detail ?? `Request failed (${response.status})`);
-    }
-    return response.json() as Promise<T>;
-  }
-
   async function refreshDiscovery() {
     if (isDemo) {
       setToast("Demo feed refreshed · connect the Render API for live eTenders data");
@@ -310,7 +297,7 @@ export default function TenderlyApp() {
     }
     try {
       setLoading("feed");
-      const data = await api<{ items: Tender[] }>(`/api/tenders/discover?query=${encodeURIComponent(query)}`);
+      const data = await apiClient.discover(query);
       setDiscoveries(data.items);
       setToast(`${data.items.length} opportunities checked`);
     } catch (error) {
@@ -350,7 +337,7 @@ export default function TenderlyApp() {
     }
     try {
       setLoading("import");
-      const data = await api<{ tender: Tender }>("/api/tenders/import", { method: "POST", body: JSON.stringify({ url: importUrl.trim() }) });
+      const data = await apiClient.importTender(importUrl.trim());
       setTenders((items) => [data.tender, ...items.filter((item) => item.id !== data.tender.id)]);
       setSelectedId(data.tender.id);
       setStage("Qualify");
@@ -377,7 +364,7 @@ export default function TenderlyApp() {
     if (!opportunity) return;
     try {
       setLoading(`import-${id}`);
-      const data = await api<{ tender: Tender }>("/api/tenders/import", { method: "POST", body: JSON.stringify({ url: opportunity.sourceUrl }) });
+      const data = await apiClient.importTender(opportunity.sourceUrl);
       setTenders((items) => [data.tender, ...items.filter((item) => item.id !== data.tender.id)]);
       setSelectedId(data.tender.id);
       setStage("Qualify");
@@ -402,7 +389,7 @@ export default function TenderlyApp() {
     }
     try {
       setLoading("analyse");
-      const data = await api<{ tender: Tender }>(`/api/tenders/${selected.id}/analyse`, { method: "POST", body: "{}" });
+      const data = await apiClient.analyse(selected.id);
       setTenders((items) => items.map((item) => item.id === data.tender.id ? data.tender : item));
       setToast("Eligibility and bid fit re-analysed from source evidence");
     } catch (error) {
@@ -428,7 +415,7 @@ export default function TenderlyApp() {
     }
     try {
       setLoading(questionId);
-      const data = await api<{ answer: string; status: string; missingInputs: string[] }>(`/api/tenders/${selected.id}/answers/${questionId}/draft`, { method: "POST", body: "{}" });
+      const data = await apiClient.draftAnswer(selected.id, questionId);
       setTenders((items) => items.map((item) => item.id !== selected.id ? item : {
         ...item,
         questions: item.questions.map((q) => q.id !== questionId ? q : { ...q, answer: data.answer, status: data.missingInputs.length ? "needs-input" : "draft" }),
@@ -452,7 +439,7 @@ export default function TenderlyApp() {
     }
     try {
       setLoading(`ready-${questionId}`);
-      await api(`/api/tenders/${selected.id}/answers/${questionId}`, { method: "PUT", body: JSON.stringify({ response: question.answer, status: "ready" }) });
+      await apiClient.saveAnswer(selected.id, questionId, question.answer, "ready");
       setTenders((items) => items.map((item) => item.id !== selected.id ? item : { ...item, questions: item.questions.map((q) => q.id === questionId ? { ...q, status: "ready" } : q) }));
       setToast("Response marked ready");
     } catch (error) { setToast(error instanceof Error ? error.message : "Could not save response"); } finally { setLoading(""); }
@@ -463,12 +450,7 @@ export default function TenderlyApp() {
     if (isDemo) { setToast(`${file.name} selected · live upload is available when the Render API is connected`); return; }
     try {
       setLoading("upload");
-      const body = new FormData();
-      body.append("file", file);
-      body.append("role", role);
-      const response = await fetch(`${API_BASE}/api/tenders/${selected.id}/documents`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error ?? "Upload failed");
+      await apiClient.uploadTenderDocument(selected.id, file, role);
       setToast(role === "source" ? `${file.name} added to the tender source · re-run qualification` : `${file.name} added to the submission pack`);
     } catch (error) { setToast(error instanceof Error ? error.message : "Upload failed"); } finally { setLoading(""); }
   }
@@ -477,13 +459,7 @@ export default function TenderlyApp() {
     if (isDemo) { setEvidence((items) => [{ id: `demo-${Date.now()}`, kind: "Document", name: file.name, content: "Demo upload", tags: [], verified: false }, ...items]); setToast(`${file.name} added · verify it before Tenderly uses its claims`); return; }
     try {
       setLoading("evidence-upload");
-      const body = new FormData();
-      body.append("file", file);
-      body.append("kind", "Document");
-      body.append("verified", "false");
-      const response = await fetch(`${API_BASE}/api/evidence/upload`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error ?? "Evidence upload failed");
+      const data = await apiClient.uploadEvidenceFile(file);
       setEvidence((items) => [data.item, ...items]);
       setToast(`${file.name} extracted · review and verify it before AI drafting`);
     } catch (error) { setToast(error instanceof Error ? error.message : "Evidence upload failed"); } finally { setLoading(""); }
@@ -493,11 +469,7 @@ export default function TenderlyApp() {
     if (isDemo) { setPeople((items) => [{ id: `demo-${Date.now()}`, name: file.name.replace(/\.[^.]+$/, ""), title: "CV uploaded", cvText: "Demo CV", skills: [] }, ...items]); setToast(`${file.name} added to the demo CV library`); return; }
     try {
       setLoading("cv-upload");
-      const body = new FormData();
-      body.append("file", file);
-      const response = await fetch(`${API_BASE}/api/people/upload`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error ?? "CV upload failed");
+      const data = await apiClient.uploadCv(file);
       setPeople((items) => [data.person, ...items]);
       setToast(`${file.name} extracted · re-run a tender check to match this CV to required roles`);
     } catch (error) { setToast(error instanceof Error ? error.message : "CV upload failed"); } finally { setLoading(""); }
@@ -507,7 +479,7 @@ export default function TenderlyApp() {
     if (isDemo) { setEvidence((items) => items.map((item) => item.id === itemId ? { ...item, verified } : item)); setToast(verified ? "Evidence approved for bid drafting" : "Evidence returned to review"); return; }
     try {
       setLoading(`evidence-${itemId}`);
-      const data = await api<{ item: EvidenceItem }>(`/api/evidence/${itemId}/verification`, { method: "PUT", body: JSON.stringify({ verified }) });
+      const data = await apiClient.setEvidenceVerified(itemId, verified);
       setEvidence((items) => items.map((item) => item.id === itemId ? data.item : item));
       setToast(verified ? "Evidence approved for bid drafting" : "Evidence returned to review");
     } catch (error) { setToast(error instanceof Error ? error.message : "Could not update evidence"); } finally { setLoading(""); }
@@ -518,7 +490,7 @@ export default function TenderlyApp() {
     if (isDemo) { setToast("Checklist confirmation recorded in the live workflow when the API is connected"); return; }
     try {
       setLoading(`check-${itemId}`);
-      await api(`/api/tenders/${selected.id}/checklist/${itemId}`, { method: "POST", body: JSON.stringify({ status: "READY" }) });
+      await apiClient.setChecklistStatus(selected.id, itemId, "READY");
       setTenders((items) => items.map((item) => item.id !== selected.id ? item : { ...item, submissionChecklist: item.submissionChecklist?.map((entry) => entry.id === itemId ? { ...entry, status: "READY" as const } : entry) }));
       setToast("Submission item confirmed ready");
     } catch (error) { setToast(error instanceof Error ? error.message : "Could not update checklist"); } finally { setLoading(""); }
@@ -532,15 +504,8 @@ export default function TenderlyApp() {
     }
     try {
       setLoading(kind);
-      const response = await fetch(`${API_BASE}/api/tenders/${selected.id}/${kind}${kind === "pack" ? `?draft=${draft}` : ""}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!response.ok) {
-        const detail = await response.json().catch(() => ({ error: "Generation failed" }));
-        const blockerText = Array.isArray(detail.blockers) && detail.blockers.length ? ` · ${detail.blockers[0]}${detail.blockers.length > 1 ? ` (+${detail.blockers.length - 1} more)` : ""}` : "";
-        throw new Error(`${detail.error ?? "Generation failed"}${blockerText}`);
-      }
-      const blob = await response.blob();
-      const disposition = response.headers.get("content-disposition") ?? "";
-      const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? (kind === "deck" ? "Tenderly-Synopsis.pptx" : "Tenderly-Submission.zip");
+      const { blob, filename } = await apiClient.download(selected.id, kind, draft);
+      setBlockers([]);
       const href = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = href;
@@ -549,7 +514,13 @@ export default function TenderlyApp() {
       URL.revokeObjectURL(href);
       setToast(kind === "deck" ? "Synopsis deck downloaded" : "Submission pack downloaded");
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "Generation failed");
+      if (error instanceof ApiError && error.blockers.length) {
+        setBlockers(error.blockers);
+        const extra = error.blockers.length > 1 ? ` (+${error.blockers.length - 1} more)` : "";
+        setToast(`${error.message} · ${error.blockers[0]}${extra}`);
+      } else {
+        setToast(error instanceof Error ? error.message : "Generation failed");
+      }
     } finally {
       setLoading("");
     }
@@ -636,13 +607,14 @@ export default function TenderlyApp() {
               uploadTenderFile={uploadTenderFile}
               downloadAsset={downloadAsset}
               markChecklistReady={markChecklistReady}
+              blockers={blockers}
               updateQuestion={(questionId, answer) => setTenders((items) => items.map((item) => item.id !== selected.id ? item : { ...item, questions: item.questions.map((q) => q.id === questionId ? { ...q, answer, status: "draft" } : q) }))}
             />
           )}
           {section === "My bids" && !selected && <div className="no-questions panel"><span>▱</span><h2>No active bids yet</h2><p>Open a recommended opportunity or paste an eTenders link. Tenderly will import it into this workspace before qualification begins.</p><button className="continue-btn" onClick={() => setSection("Discover")}>Discover opportunities →</button></div>}
           {section === "Company" && <CompanyView company={company} setCompany={setCompany} onSave={async () => {
             if (isDemo) { setToast("Company profile saved for this demo session"); return; }
-            try { await api("/api/company", { method: "PUT", body: JSON.stringify(company) }); setToast("Company profile saved"); } catch (error) { setToast(error instanceof Error ? error.message : "Could not save profile"); }
+            try { await apiClient.saveCompany(company); setToast("Company profile saved"); } catch (error) { setToast(error instanceof Error ? error.message : "Could not save profile"); }
           }} />}
           {section === "Evidence" && <EvidenceView tab={evidenceTab} setTab={setEvidenceTab} evidence={evidence} people={people} onUploadEvidence={uploadEvidenceFile} onUploadCv={uploadCvFile} onVerify={setEvidenceVerification} loading={loading} />}
           {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} loading={loading === "cv-upload"} />}
@@ -708,8 +680,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void;
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -766,8 +738,8 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
 
       {stage === "Synopsis" && <Synopsis tender={tender} onDownload={() => downloadAsset("deck")} onContinue={() => setStage("Respond")} loading={loading === "deck"} />}
       {stage === "Respond" && <Respond tender={tender} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
-      {stage === "Assemble" && <Assemble tender={tender} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
-      {stage === "Submit" && <Submit tender={tender} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
+      {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
+      {stage === "Submit" && <Submit tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
     </div>
   );
 }
@@ -810,7 +782,7 @@ function Respond({ tender, draftAnswer, markAnswerReady, uploadTenderFile, loadi
   );
 }
 
-function Assemble({ tender, onDraft, uploadTenderFile, onMarkReady, onContinue, loading }: { tender: Tender; onDraft: () => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; onMarkReady: (id: string) => void; onContinue: () => void; loading: string }) {
+function Assemble({ tender, onDraft, uploadTenderFile, onMarkReady, onContinue, loading, blockers }: { tender: Tender; onDraft: () => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; onMarkReady: (id: string) => void; onContinue: () => void; loading: string; blockers: string[] }) {
   const fallbackRows: SubmissionItem[] = [
     { id: "demo-response", label: "Tender response", required: true, kind: "RESPONSE", status: tender.questions.length && tender.questions.every((question) => question.status === "ready") ? "READY" : "ACTION", source: "Scored response workspace" },
     { id: "demo-cv", label: "Personnel CVs", required: true, kind: "CV", status: "VERIFY", source: "Tender pack · role requirements" },
@@ -822,6 +794,15 @@ function Assemble({ tender, onDraft, uploadTenderFile, onMarkReady, onContinue, 
   const readiness = Math.round(((rows.length - unresolved) / Math.max(1, rows.length)) * 100);
   return (
     <div className="assemble-page">
+      {blockers.length > 0 && (
+        <section className="panel attention-card" data-testid="blockers">
+          <span>!</span>
+          <div>
+            <strong>Final pack blocked — {blockers.length} item{blockers.length > 1 ? "s" : ""} unresolved</strong>
+            <ul>{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
+          </div>
+        </section>
+      )}
       <div className="section-intro"><div><p className="eyebrow">SUBMISSION ASSEMBLY</p><h2>One controlled pack. Nothing forgotten.</h2><p>Tenderly keeps mandatory buyer templates separate from generated response material and will not call a pack “final” while blockers remain.</p></div><div className="section-actions"><FileButton label={loading === "upload" ? "Uploading…" : "＋ Add completed buyer file"} accept=".pdf,.docx,.xlsx,.xls,.zip" onFile={(file) => uploadTenderFile(file, "submission")} /><button className="outline-primary" onClick={onDraft}>{loading === "pack" ? "Building…" : "⇩ Build draft ZIP"}</button></div></div>
       <div className="assemble-grid">
         <section className="panel manifest"><div className="panel-heading"><div><h3>Submission manifest</h3><p>Extracted from the tender pack; verify each buyer-controlled file after completion.</p></div><span className="manifest-status">{unresolved ? `${unresolved} need attention` : "Checklist clear"}</span></div>{rows.map((item, index) => <div className="manifest-row" key={item.id}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{item.label}</strong><small>{item.kind.replace("_", " ")} · {item.source}</small></p><GatePill state={item.status === "READY" ? "pass" : "review"} />{item.status === "READY" ? <button className="manifest-done" disabled>✓</button> : <button className="manifest-ready" onClick={() => onMarkReady(item.id)} disabled={loading === `check-${item.id}`} title="Confirm only after you have checked/completed this item">Ready</button>}</div>)}</section>
@@ -835,7 +816,7 @@ function FileButton({ label, accept, onFile }: { label: string; accept: string; 
   return <label className="file-action">{label}<input type="file" accept={accept} onChange={(event) => { const file = event.target.files?.[0]; if (file) onFile(file); event.currentTarget.value = ""; }} /></label>;
 }
 
-function Submit({ tender, onDownload, onReview, loading }: { tender: Tender; onDownload: () => void; onReview: () => void; loading: boolean }) {
+function Submit({ tender, onDownload, onReview, loading, blockers }: { tender: Tender; onDownload: () => void; onReview: () => void; loading: boolean; blockers: string[] }) {
   const eligibilityReady = tender.eligibility ? tender.eligibility === "PASS" : tender.gates.every((gate) => gate.state === "pass");
   const requiredQuestions = tender.questions.filter((question) => question.required !== false);
   const responsesReady = requiredQuestions.length === 0 || requiredQuestions.every((question) => question.status === "ready" && question.answer.trim());
@@ -850,7 +831,7 @@ function Submit({ tender, onDownload, onReview, loading }: { tender: Tender; onD
   return (
     <div className="submit-page">
       <section className="submit-hero"><span className="lock-orb">✓</span><p className="eyebrow">HUMAN-CONTROLLED SUBMISSION</p><h2>Ready means actually ready.</h2><p>Tenderly can build the final ZIP, but it never presses the buyer portal’s final submit button for you. You keep the last check and submission control.</p></section>
-      <div className="submit-grid"><section className="panel final-checks"><h3>Final verification</h3>{checks.map(([label, ok, detail]) => <div key={label}><span className={ok ? "check-ok" : "check-wait"}>{ok ? "✓" : "!"}</span><p><strong>{label}</strong><small>{detail}</small></p>{label === "Deadline re-check" ? <a href={tender.sourceUrl} target="_blank" rel="noreferrer">Open ↗</a> : <button onClick={onReview}>{ok ? "View" : "Review"}</button>}</div>)}</section><aside className="panel submit-card"><p className="eyebrow">SUBMISSION</p><h3>{tender.deadline}</h3><p>Official deadline shown from the source notice. Re-check eTenders immediately before upload.</p><button className="continue-btn" onClick={onDownload} disabled={loading}>{loading ? "Checking pack…" : "⇩ Download final ZIP"}</button><a href={tender.sourceUrl} target="_blank" rel="noreferrer">Open eTenders submission page ↗</a><small>The API performs the authoritative blocker check when you request the final ZIP.</small></aside></div>
+      <div className="submit-grid"><section className="panel final-checks"><h3>Final verification</h3>{checks.map(([label, ok, detail]) => <div key={label}><span className={ok ? "check-ok" : "check-wait"}>{ok ? "✓" : "!"}</span><p><strong>{label}</strong><small>{detail}</small></p>{label === "Deadline re-check" ? <a href={tender.sourceUrl} target="_blank" rel="noreferrer">Open ↗</a> : <button onClick={onReview}>{ok ? "View" : "Review"}</button>}</div>)}</section><aside className="panel submit-card"><p className="eyebrow">SUBMISSION</p><h3>{tender.deadline}</h3><p>Official deadline shown from the source notice. Re-check eTenders immediately before upload.</p><button className="continue-btn" onClick={onDownload} disabled={loading}>{loading ? "Checking pack…" : "⇩ Download final ZIP"}</button><a href={tender.sourceUrl} target="_blank" rel="noreferrer">Open eTenders submission page ↗</a><small>The API performs the authoritative blocker check when you request the final ZIP.</small>{blockers.length > 0 && <ul className="blocker-list" data-testid="blockers">{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>}</aside></div>
     </div>
   );
 }
@@ -896,9 +877,9 @@ function AuthScreen({ onToken }: { onToken: (token: string) => void }) {
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const response = await fetch(`${API_BASE}/api/auth/${mode}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, companyName: company }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Sign in failed");
+      const data = mode === "login"
+        ? await apiClient.signIn(email, password)
+        : await apiClient.register(email, password, company);
       onToken(data.token);
     } catch (err) { setError(err instanceof Error ? err.message : "Sign in failed"); } finally { setBusy(false); }
   }
