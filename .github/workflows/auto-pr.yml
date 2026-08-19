@@ -1,0 +1,39 @@
+name: Auto PR
+
+# Pushing a story branch opens its pull request, with the story's acceptance
+# criteria as a tick-box checklist, and moves the story to In Review.
+# Writing the code is the only part of the loop a human (or agent) does.
+
+on:
+  push:
+    branches:
+      - 'TLY-*'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-pr:
+    name: open-pr
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # A push that already has an open PR just refreshes it, so this is safe to re-run.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Open or refresh the pull request
+        env:
+          # PR_TOKEN is a personal access token. Prefer it: pull requests opened with
+          # the built-in GITHUB_TOKEN do not trigger further workflow runs, so `ci-pr`
+          # would not start until the next push to the branch.
+          GITHUB_TOKEN: ${{ secrets.PR_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          JIRA_SITE: ${{ secrets.JIRA_SITE }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
+        run: node scripts/github/open-pr.mjs --branch "${GITHUB_REF_NAME}" --base main

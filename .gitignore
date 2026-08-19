@@ -1,0 +1,19 @@
+node_modules/
+dist/
+dist-netlify/
+build/
+.next/
+coverage/
+
+# secrets never enter the repo — credentials live in ~/.tenderly/secrets.env
+.env
+.env.*
+!.env.example
+
+# test output
+playwright-report/
+test-results/
+*.log
+
+.DS_Store
+.wrangler/

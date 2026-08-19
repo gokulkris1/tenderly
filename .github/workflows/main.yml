@@ -1,0 +1,129 @@
+name: Main
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: main
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    name: deploy-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+
+    env:
+      JIRA_SITE: ${{ secrets.JIRA_SITE }}
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
+      STAGING_URL: ${{ secrets.STAGING_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ${{ hashFiles('package-lock.json') != '' && 'npm' || '' }}
+
+      # Which stories does this push carry? Everything downstream reports against these.
+      - name: Collect Jira keys from the pushed commits
+        id: keys
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            RANGE="${{ github.sha }} -1"
+            KEYS=$(git log --format=%s -1 ${{ github.sha }} | grep -oE 'TLY-[0-9]+' | sort -u | tr '\n' ',' || true)
+          else
+            KEYS=$(git log --format=%s "$BEFORE..${{ github.sha }}" | grep -oE 'TLY-[0-9]+' | sort -u | tr '\n' ',' || true)
+          fi
+          KEYS="${KEYS%,}"
+          echo "keys=$KEYS" >> "$GITHUB_OUTPUT"
+          echo "Jira keys in this push: ${KEYS:-none}"
+
+      - name: Install
+        if: hashFiles('package.json') != ''
+        run: npm ci
+
+      - name: Build
+        if: hashFiles('package.json') != ''
+        run: npm run build:netlify
+
+      - name: Deploy API to staging (Render)
+        if: env.RENDER_HOOK != ''
+        env:
+          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}
+        run: curl -fsSL -X POST "$RENDER_HOOK" -o /dev/null -w 'render deploy triggered %{http_code}\n'
+
+      - name: Deploy web to staging (Netlify)
+        if: env.NETLIFY_HOOK != ''
+        env:
+          NETLIFY_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK_STAGING }}
+        run: curl -fsSL -X POST -d '{}' "$NETLIFY_HOOK" -o /dev/null -w 'netlify build triggered %{http_code}\n'
+
+      - name: Wait for staging health
+        if: env.STAGING_URL != ''
+        run: |
+          for i in $(seq 1 60); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' "$STAGING_URL/health" || true)
+            echo "attempt $i: $CODE"
+            if [ "$CODE" = "200" ]; then echo "staging healthy"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::staging /health never returned 200 at $STAGING_URL"
+          exit 1
+
+      - name: Install Playwright
+        if: hashFiles('e2e/**/*.spec.ts') != '' && env.STAGING_URL != ''
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: E2E against staging
+        id: e2e
+        if: hashFiles('e2e/**/*.spec.ts') != '' && env.STAGING_URL != ''
+        continue-on-error: true
+        run: npx playwright test --grep-invert @quarantine
+
+      - name: Upload Playwright report
+        if: always() && hashFiles('playwright-report/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 14
+
+      # Pass -> Test tickets to Done (and the Story with them).
+      # Fail -> a Bug is filed against each story and added to the active sprint.
+      - name: Report result to Jira
+        if: steps.keys.outputs.keys != ''
+        run: |
+          RESULT=pass
+          if [ "${{ steps.e2e.outcome }}" = "failure" ]; then RESULT=fail; fi
+          node scripts/jira/report-e2e.mjs \
+            --keys "${{ steps.keys.outputs.keys }}" \
+            --tier e2e \
+            --result "$RESULT" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      # Optional: kept for compatibility if a Jira automation webhook is ever configured.
+      - name: Mirror result to Jira automation webhook
+        if: steps.keys.outputs.keys != '' && env.HOOK != ''
+        env:
+          HOOK: ${{ secrets.JIRA_AUTOMATION_WEBHOOK }}
+        run: |
+          RESULT=pass
+          if [ "${{ steps.e2e.outcome }}" = "failure" ]; then RESULT=fail; fi
+          ISSUES=$(printf '%s' "${{ steps.keys.outputs.keys }}" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
+          curl -fsS -X POST "$HOOK" -H 'Content-Type: application/json' \
+            -d "{\"issues\":[$ISSUES],\"data\":{\"tier\":\"e2e\",\"result\":\"$RESULT\",\"runUrl\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}}"
+
+      - name: Fail the run if e2e failed
+        if: steps.e2e.outcome == 'failure'
+        run: exit 1
