@@ -183,6 +183,7 @@ export async function updateTenderMetadata(accountId: string, tenderId: string, 
   return mapTenderRow(result.rows[0]);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(TLY-26): pg returns untyped rows; row typing lands with the strict-TypeScript story.
 function mapTenderRow(row: Record<string, any>): TenderRecord {
   return {
     id: row.id,

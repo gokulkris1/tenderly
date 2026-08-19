@@ -293,6 +293,7 @@ export default function TenderlyApp() {
   useEffect(() => {
     if (!API_BASE) return;
     const saved = window.localStorage.getItem("tenderly_token") ?? "";
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO(TLY-22): hydrating the stored token on mount predates the typed API client; the auth bootstrap moves out of this component there.
     setToken(saved);
     setAuthReady(true);
   }, []);

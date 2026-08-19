@@ -70,6 +70,7 @@ async function makeCv(person: PersonRecord) {
   return Packer.toBuffer(new Document({ sections: [{ properties: {}, children }] }));
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(TLY-26): pptxgenjs does not export a usable Slide type here; typed with the strict-TypeScript story.
 function addSlideHeader(slide: any, label: string, number: number) {
   slide.background = { color: "FFFFFF" };
   slide.addText("tenderly", { x: .55, y: .35, w: 1.3, h: .3, fontFace: "Aptos", fontSize: 15, bold: true, color: INK, margin: 0 });
@@ -79,6 +80,7 @@ function addSlideHeader(slide: any, label: string, number: number) {
 }
 
 export async function createSynopsisDeck(tender: TenderRecord, analysis: TenderAnalysis, company: CompanyProfile) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(TLY-26): pptxgenjs ships an awkward constructor type; typed with the strict-TypeScript story.
   const PptxConstructor = PptxGenJS as unknown as new () => any;
   const pptx = new PptxConstructor();
   pptx.layout = "LAYOUT_WIDE";

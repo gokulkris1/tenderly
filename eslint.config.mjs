@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Build output is not source. Without these, eslint lints server/dist and
+    // reports every compiled artefact twice.
+    "**/dist/**",
+    "**/dist-netlify/**",
+    "**/node_modules/**",
   ]),
 ]);
 
