@@ -1,9 +1,19 @@
 import { test, expect } from "@playwright/test";
+
+/**
+ * QUARANTINED (TLY-102): these journeys are specifications, not passing tests.
+ * They assert on data-testid hooks that arrive with the screen split (TLY-24,
+ * TLY-25) and on seeded staging data that arrives with TLY-104. Running them
+ * now would fail for reasons unrelated to the story being merged and file
+ * misattributed Bugs. Remove the @quarantine tags in TLY-103, which makes them
+ * real. Quarantined 2026-08-19.
+ */
+
 import { signIn } from "../support/app";
 
 /** Journey 2 — the company profile round-trips. Everything downstream cites it. */
 test.describe("company profile", () => {
-  test("@smoke profile values survive a save and reload", async ({ page }) => {
+  test("@quarantine @smoke profile values survive a save and reload", async ({ page }) => {
     await signIn(page);
     await page.goto("/company");
 
@@ -16,7 +26,7 @@ test.describe("company profile", () => {
     await expect(page.getByLabel("Annual turnover")).toHaveValue(turnover);
   });
 
-  test("an unknown fact renders as INPUT NEEDED rather than an invented value", async ({ page }) => {
+  test("@quarantine an unknown fact renders as INPUT NEEDED rather than an invented value", async ({ page }) => {
     await signIn(page);
     await page.goto("/company");
 

@@ -1,4 +1,14 @@
 import { test, expect } from "@playwright/test";
+
+/**
+ * QUARANTINED (TLY-102): these journeys are specifications, not passing tests.
+ * They assert on data-testid hooks that arrive with the screen split (TLY-24,
+ * TLY-25) and on seeded staging data that arrives with TLY-104. Running them
+ * now would fail for reasons unrelated to the story being merged and file
+ * misattributed Bugs. Remove the @quarantine tags in TLY-103, which makes them
+ * real. Quarantined 2026-08-19.
+ */
+
 import { signIn, importFixtureTender } from "../support/app";
 
 /**
@@ -6,7 +16,7 @@ import { signIn, importFixtureTender } from "../support/app";
  * This is the product's spine: if this breaks, nothing else matters.
  */
 test.describe("import and analyse", () => {
-  test("@smoke a signed-in user imports a tender and sees its analysis", async ({ page }) => {
+  test("@quarantine @smoke a signed-in user imports a tender and sees its analysis", async ({ page }) => {
     await signIn(page);
 
     const tender = await importFixtureTender(page);
@@ -18,7 +28,7 @@ test.describe("import and analyse", () => {
     await expect(page.getByTestId("eligibility-gates").getByRole("listitem")).not.toHaveCount(0);
   });
 
-  test("a requirement with no supporting evidence shows Review, never a green tick", async ({ page }) => {
+  test("@quarantine a requirement with no supporting evidence shows Review, never a green tick", async ({ page }) => {
     await signIn(page);
     await importFixtureTender(page);
     await page.getByRole("button", { name: "Qualify" }).click();

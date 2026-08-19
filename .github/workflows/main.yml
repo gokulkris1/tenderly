@@ -8,6 +8,10 @@ concurrency:
   group: main
   cancel-in-progress: false
 
+permissions:
+  # Advancing the `staging` branch is how the web app deploys to staging.
+  contents: write
+
 jobs:
   deploy-staging:
     name: deploy-staging
@@ -20,6 +24,7 @@ jobs:
       JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
+      # Trailing slashes are easy to paste in and produce "//health", which 404s.
       STAGING_URL: ${{ secrets.STAGING_URL }}
 
     steps:
@@ -61,11 +66,16 @@ jobs:
           RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}
         run: curl -fsSL -X POST "$RENDER_HOOK" -o /dev/null -w 'render deploy triggered %{http_code}\n'
 
-      - name: Deploy web to staging (Netlify)
-        if: env.NETLIFY_HOOK != ''
-        env:
-          NETLIFY_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK_STAGING }}
-        run: curl -fsSL -X POST -d '{}' "$NETLIFY_HOOK" -o /dev/null -w 'netlify build triggered %{http_code}\n'
+      # Netlify branch-deploys `staging` from this same repository, so advancing the
+      # branch is the deploy. The build hook remains for manual re-triggers.
+      - name: Deploy web to staging (advance the staging branch)
+        run: |
+          git push origin "${{ github.sha }}:refs/heads/staging" --force-with-lease
+          echo "staging branch now at ${{ github.sha }}"
+
+      - name: Normalise the staging URL
+        if: env.STAGING_URL != ''
+        run: echo "STAGING_URL=${STAGING_URL%/}" >> "$GITHUB_ENV"
 
       - name: Wait for staging health
         if: env.STAGING_URL != ''
@@ -85,9 +95,19 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      - name: Count runnable e2e journeys
+        id: runnable
+        if: hashFiles('e2e/**/*.spec.ts') != '' && env.STAGING_URL != ''
+        run: |
+          COUNT=$(npx playwright test --list --grep-invert @quarantine 2>/dev/null | grep -cE '^\s+\S+.*›' || true)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "runnable journeys: $COUNT"
+
+      # Skipped when every journey is quarantined. The report step treats a skip as
+      # "not verified", never as a pass, so a story cannot reach Done unverified.
       - name: E2E against staging
         id: e2e
-        if: hashFiles('e2e/**/*.spec.ts') != '' && env.STAGING_URL != ''
+        if: steps.runnable.outputs.count != '' && steps.runnable.outputs.count != '0'
         continue-on-error: true
         run: npx playwright test --grep-invert @quarantine
 
