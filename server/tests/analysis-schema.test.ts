@@ -8,7 +8,7 @@ import {
   remapLegacyAnalysis,
   withStableIds,
 } from "../src/analysis-schema.js";
-import { createUser, listAnswers, migrateAnalysisSchema, saveAnswer, saveTenderAnalysis, upsertTender } from "../src/db.js";
+import { createUser, initializeDatabase, listAnswers, migrateAnalysisSchema, saveAnswer, saveTenderAnalysis, upsertTender } from "../src/db.js";
 import { serializeTender } from "../src/serializers.js";
 import type { TenderRecord } from "../src/types.js";
 import type { BidAnswer, TenderAnalysis } from "../src/types.js";
@@ -86,6 +86,9 @@ test("TLY-40 AC4: a legacy analysis remaps its answers onto stable identifiers",
 });
 
 test("TLY-40 AC1 and AC4: migration keeps a ready answer attached to its question", async () => {
+  // This test touches the data layer, so it must own its schema: in CI DATABASE_URL
+  // points at a Postgres service container that no earlier step has migrated.
+  await initializeDatabase();
   const user = await createUser(`tly40-${Date.now()}@example.test`, "hash", "Migration Ltd");
   const tender = await upsertTender(user.id, {
     source: "etenders", externalId: `tly40-${Date.now()}`, title: "Stage 0 Energy Audit", authority: "Sample Authority",
