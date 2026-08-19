@@ -1,0 +1,98 @@
+name: Production
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  deploy-production:
+    name: deploy-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The manual approval gate is configured on this environment in GitHub settings.
+    environment: production
+
+    env:
+      JIRA_SITE: ${{ secrets.JIRA_SITE }}
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
+      PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Collect Jira keys since the previous tag
+        id: keys
+        run: |
+          PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="HEAD~20..HEAD"; fi
+          KEYS=$(git log --format=%s $RANGE | grep -oE 'TLY-[0-9]+' | sort -u | tr '\n' ',' || true)
+          KEYS="${KEYS%,}"
+          echo "keys=$KEYS" >> "$GITHUB_OUTPUT"
+          echo "range $RANGE -> ${KEYS:-none}"
+
+      - name: Install
+        if: hashFiles('package.json') != ''
+        run: npm ci
+
+      - name: Build
+        if: hashFiles('package.json') != ''
+        run: npm run build:netlify
+
+      - name: Deploy API to production (Render)
+        if: env.RENDER_HOOK != ''
+        env:
+          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_PRODUCTION }}
+        run: curl -fsSL -X POST "$RENDER_HOOK" -o /dev/null -w 'render deploy triggered %{http_code}\n'
+
+      - name: Deploy web to production (Netlify)
+        if: env.NETLIFY_HOOK != ''
+        env:
+          NETLIFY_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK_PRODUCTION }}
+        run: curl -fsSL -X POST -d '{}' "$NETLIFY_HOOK" -o /dev/null -w 'netlify build triggered %{http_code}\n'
+
+      - name: Wait for production health
+        if: env.PRODUCTION_URL != ''
+        run: |
+          for i in $(seq 1 60); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' "$PRODUCTION_URL/health" || true)
+            echo "attempt $i: $CODE"
+            if [ "$CODE" = "200" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::production /health never returned 200"
+          exit 1
+
+      - name: Smoke suite against production
+        id: smoke
+        if: hashFiles('e2e/**/*.spec.ts') != '' && env.PRODUCTION_URL != ''
+        continue-on-error: true
+        env:
+          STAGING_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test --grep @smoke
+
+      - name: Report prod smoke to Jira
+        if: steps.keys.outputs.keys != ''
+        run: |
+          RESULT=pass
+          if [ "${{ steps.smoke.outcome }}" = "failure" ]; then RESULT=fail; fi
+          node scripts/jira/report-e2e.mjs \
+            --keys "${{ steps.keys.outputs.keys }}" \
+            --tier prod-smoke \
+            --result "$RESULT" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Fail the run if smoke failed
+        if: steps.smoke.outcome == 'failure'
+        run: exit 1

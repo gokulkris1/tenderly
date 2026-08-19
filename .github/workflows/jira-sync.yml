@@ -1,0 +1,46 @@
+name: Jira sync
+
+# Repo-owned replacement for the Jira automation rules described in the master
+# prompt: team-managed projects cannot have those rules provisioned by API, so
+# the state machine lives here in version control instead. See docs/AUTOMATION.md.
+
+on:
+  create:
+  pull_request:
+    types: [opened, reopened, ready_for_review, converted_to_draft, closed]
+
+jobs:
+  sync:
+    name: sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Branch creation for tags, and PRs with no Jira key, are not errors — just no-ops.
+    if: github.event_name != 'create' || github.event.ref_type == 'branch'
+
+    env:
+      JIRA_SITE: ${{ secrets.JIRA_SITE }}
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Branch created -> In Progress
+        if: github.event_name == 'create'
+        run: node scripts/jira/transition.mjs --from-text "${{ github.event.ref }}" --to "In Progress"
+
+      - name: PR opened -> In Review
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.action != 'converted_to_draft'
+        run: node scripts/jira/transition.mjs --from-text "${{ github.event.pull_request.title }} ${{ github.event.pull_request.head.ref }}" --to "In Review"
+
+      - name: PR merged -> In Test
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        run: node scripts/jira/transition.mjs --from-text "${{ github.event.pull_request.title }} ${{ github.event.pull_request.head.ref }}" --to "In Test"
+
+      - name: PR closed unmerged -> back to To Do
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == false
+        run: node scripts/jira/transition.mjs --from-text "${{ github.event.pull_request.title }} ${{ github.event.pull_request.head.ref }}" --to "To Do"

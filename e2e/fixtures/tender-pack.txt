@@ -1,0 +1,23 @@
+INVITATION TO TENDER — Stage 0 Energy Audit Services
+Contracting Authority: Sample Health Authority
+CPV: 71314000 Energy and related services
+
+1. ELIGIBILITY
+1.1 Tenderers shall hold a current Tax Clearance Certificate.
+1.2 Tenderers shall hold Employers Liability Insurance of at least EUR 6,500,000.
+1.3 Tenderers shall have an average annual turnover of at least EUR 2,000,000
+    over the last three financial years.
+
+2. AWARD CRITERIA
+    Quality ......... 60%
+    Price ........... 40%
+
+3. SUBMISSION FORMALITIES
+3.1 Responses shall be submitted through the eTenders portal.
+3.2 The quality submission shall not exceed 10 pages.
+3.3 Each document shall be named <Tenderer>_<DocumentType>.pdf
+
+4. QUESTIONS
+4.1 Describe your quality management system.
+4.2 Describe your approach to energy auditing in live healthcare settings.
+4.3 Provide CVs for the proposed project team.

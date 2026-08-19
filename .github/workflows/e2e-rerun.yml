@@ -1,0 +1,67 @@
+name: E2E rerun
+
+# Called after a Bug fix merges, to re-run the suite and unblock the Test ticket
+# that is holding its Story out of Done.
+
+on:
+  workflow_dispatch:
+    inputs:
+      issueKeys:
+        description: Comma-separated Jira keys to report against, e.g. TLY-42,TLY-43
+        required: true
+        type: string
+
+jobs:
+  rerun:
+    name: rerun
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+
+    env:
+      JIRA_SITE: ${{ secrets.JIRA_SITE }}
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
+      STAGING_URL: ${{ secrets.STAGING_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        if: hashFiles('package.json') != ''
+        run: npm ci
+
+      - name: E2E against staging
+        id: e2e
+        if: hashFiles('e2e/**/*.spec.ts') != ''
+        continue-on-error: true
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test --grep-invert @quarantine
+
+      - name: Upload Playwright report
+        if: always() && hashFiles('playwright-report/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-rerun
+          path: playwright-report
+          retention-days: 14
+
+      - name: Report result to Jira
+        run: |
+          RESULT=pass
+          if [ "${{ steps.e2e.outcome }}" = "failure" ]; then RESULT=fail; fi
+          node scripts/jira/report-e2e.mjs \
+            --keys "${{ inputs.issueKeys }}" \
+            --tier e2e \
+            --result "$RESULT" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Fail the run if e2e failed
+        if: steps.e2e.outcome == 'failure'
+        run: exit 1

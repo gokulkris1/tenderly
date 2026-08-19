@@ -1,0 +1,124 @@
+name: PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # This job name is the required status check configured on `main`. Do not rename it.
+  ci-pr:
+    name: ci-pr
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: tenderly
+          POSTGRES_PASSWORD: tenderly
+          POSTGRES_DB: tenderly_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tenderly"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://tenderly:tenderly@localhost:5432/tenderly_test
+      # Analysis and drafting must never reach a live model in CI.
+      ANTHROPIC_API_KEY: ""
+      JWT_SECRET: ci-only-secret-value-at-least-32-characters-long
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Until TLY-19 commits the v1 source, these paths do not exist yet and the
+      # steps skip rather than fail. They activate automatically once it lands.
+      - name: Install (root)
+        if: hashFiles('package.json') != ''
+        run: npm ci
+
+      - name: Install (server)
+        if: hashFiles('server/package.json') != ''
+        run: npm ci --prefix server
+
+      - name: Lint
+        if: hashFiles('package.json') != ''
+        run: npm run lint
+
+      - name: Typecheck
+        if: hashFiles('package.json') != ''
+        run: npm run typecheck
+
+      - name: Unit tests (server)
+        if: hashFiles('server/package.json') != ''
+        run: npm test --prefix server
+
+      - name: Unit tests (web)
+        if: hashFiles('package.json') != ''
+        run: npm run test:web --if-present
+
+      - name: Build (web)
+        if: hashFiles('package.json') != ''
+        run: npm run build:netlify
+
+      - name: Build (server)
+        if: hashFiles('server/package.json') != ''
+        run: npm run build --prefix server
+
+      - name: Apply migrations
+        if: hashFiles('server/migrations/*.sql') != ''
+        run: |
+          for f in server/migrations/*.sql; do
+            echo "applying $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Integration tests
+        if: hashFiles('server/package.json') != ''
+        run: npm run test:integration --prefix server --if-present
+
+      # Backlog is data the Phase 2 importer depends on — keep it valid on every PR.
+      - name: Validate backlog
+        run: node scripts/backlog-lint.mjs --no-csv
+
+  # Enforces the branch/commit/PR conventions from the delivery model.
+  pr-conventions:
+    name: pr-conventions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: PR title must start with a Jira key
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          echo "PR title: $TITLE"
+          if ! printf '%s' "$TITLE" | grep -qE '^TLY-[0-9]+: .+'; then
+            echo "::error::PR title must be 'TLY-<n>: <summary>' — got '$TITLE'"
+            exit 1
+          fi
+
+      - name: Branch name must carry the same Jira key
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          KEY=$(printf '%s' "${{ github.event.pull_request.title }}" | grep -oE '^TLY-[0-9]+')
+          echo "branch: $BRANCH   key: $KEY"
+          if ! printf '%s' "$BRANCH" | grep -qE "^${KEY}(-|$)"; then
+            echo "::error::Branch '$BRANCH' does not start with '$KEY'"
+            exit 1
+          fi
