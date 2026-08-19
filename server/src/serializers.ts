@@ -84,6 +84,7 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [])
     risks: analysis?.risks ?? [],
     synopsisSlides: analysis?.synopsisSlides ?? [],
     schemaVersion: analysis?.schemaVersion,
+    promptVersion: analysis?.promptVersion,
     analysisOutdated: Boolean(analysis) && analysis?.schemaVersion !== ANALYSIS_SCHEMA_VERSION,
     orphanedAnswers: orphanedAnswers(analysis ?? null, answers),
   };

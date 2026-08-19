@@ -113,6 +113,8 @@ export type Tender = {
   synopsisSlides?: SynopsisSlide[];
   /** Shape version of the stored analysis, absent on tenders never analysed. */
   schemaVersion?: string;
+  /** Which versioned system prompt produced the analysis. Absent on the no-key fallback. */
+  promptVersion?: string;
   /** The stored analysis predates the current shape; offer a re-analysis. */
   analysisOutdated?: boolean;
   /** Saved answers whose question the latest analysis no longer contains. */
