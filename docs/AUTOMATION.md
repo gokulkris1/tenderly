@@ -98,12 +98,14 @@ run green while an environment is still being stood up rather than failing on ab
   `ci-pr`'s install, lint, typecheck, build and test steps skip themselves via
   `hashFiles(...)` guards, and only the backlog validation runs. That story must also
   add `@playwright/test` to the root dev dependencies, or the e2e steps stay skipped.
-- **The Playwright journeys are specifications, not passing tests.** They reference
-  `data-testid` hooks that arrive with the frontend split (E1-06, E1-07) and seeded
-  staging data (E13-04), so they are tagged `@quarantine` and do not run. When every
-  journey is quarantined the suite has nothing to execute, and `main.yml` skips the
-  step rather than reporting an empty run as a pass — stories stay In Test until
-  E13-03 makes the journeys real. This is deliberate: a green tick with no test
-  behind it is the exact failure TLY-117 was filed for.
+- **The Playwright journeys are real and unquarantined** as of TLY-103. Six journeys
+  run against staging from the seeded state TLY-104 creates, covering both product
+  rules: an answer missing a fact carries `[INPUT NEEDED]` and reads `needs-input`,
+  and the final ZIP is refused with the API's blocker list while the draft pack stays
+  available. The empty-suite guard in `main.yml` stays — if every journey were ever
+  quarantined again, the run would be reported as "did not run", never as a pass.
+- **Journeys can only reach the selected tender** until TLY-118 is fixed: there is no
+  UI to switch between saved bids, so the seed writes the blocked tender last to make
+  the selection deterministic.
 - **Sprints require the board feature.** `start-sprint.mjs` fails with a clear message
   if the TLY board has no scrum/sprint support enabled.
