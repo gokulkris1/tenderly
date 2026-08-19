@@ -93,14 +93,17 @@ for (const name of SECRET_NAMES) {
 console.log("\nEnvironments:");
 for (const env of ["staging", "production"]) {
   if (DRY) { console.log(`  + ${env} would be created`); continue; }
-  // production waits for a human; staging does not.
-  const body = env === "production"
-    ? { wait_timer: 0, prevent_self_review: false, deployment_branch_policy: null }
-    : { deployment_branch_policy: null };
-  await gh(`/repos/${REPO}/environments/${env}`, { method: "PUT", body: JSON.stringify(body) });
-  console.log(`  + ${env} created`);
+  // Environment protection rules (required reviewers, wait timers) need GitHub
+  // Pro/Team on a private repo. Create the environment either way and say so.
+  try {
+    await gh(`/repos/${REPO}/environments/${env}`, { method: "PUT", body: JSON.stringify({ deployment_branch_policy: null }) });
+    console.log(`  + ${env} created`);
+  } catch (e) {
+    if (e.status === 422) { console.warn(`  ! ${env}: ${e.body?.message ?? e.message}`); continue; }
+    throw e;
+  }
 }
-if (!DRY) console.log("  ! add a required reviewer to `production` in Settings → Environments — a token cannot grant that reliably");
+if (!DRY) console.log("  ! production approval gate: add a required reviewer in Settings -> Environments.\n    On a private repo this needs GitHub Pro/Team; on the free plan prod.yml still\n    requires a manual workflow_dispatch, which is the gate until then.");
 
 // ---- auto-merge
 console.log("\nRepository settings:");
