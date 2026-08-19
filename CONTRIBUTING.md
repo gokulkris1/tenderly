@@ -60,7 +60,10 @@ the same as verified.
 
 `ci-pr` is the required check: lint, typecheck, unit tests, both builds, and
 integration tests against a Postgres service container running `server/migrations`.
-**Never merge a red PR.** Enable auto-merge and let the check gate it.
+**Never merge a red PR, and never merge a pending one.** Branch protection includes
+administrators, so an owner token cannot merge past an unfinished check either —
+that bypass happened once, on TLY-66, and closing it is what TLY-101 delivered.
+Enable auto-merge and let the check gate it rather than merging by hand.
 
 E2E journeys live in `e2e/journeys/` and run against staging. They use the recorded
 fixtures in `e2e/fixtures/` — **a journey that reaches `etenders.gov.ie` in CI is a

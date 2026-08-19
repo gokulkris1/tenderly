@@ -130,7 +130,10 @@ else {
 console.log("\nBranch protection on main:");
 const protection = {
   required_status_checks: { strict: true, contexts: ["ci-pr", "pr-conventions"] },
-  enforce_admins: false,
+  // Admins included. With this false, an owner token merges straight past a
+  // required check that has not finished — which happened once on TLY-66 and is
+  // precisely the "merged but unverified" failure this pipeline exists to stop.
+  enforce_admins: true,
   required_pull_request_reviews: null, // solo repo: the required check is the gate
   restrictions: null,
   allow_force_pushes: false,
@@ -140,7 +143,7 @@ if (DRY) console.log(`  + would require ${protection.required_status_checks.cont
 else {
   try {
     await gh(`/repos/${REPO}/branches/main/protection`, { method: "PUT", body: JSON.stringify(protection) });
-    console.log(`  + main requires ${protection.required_status_checks.contexts.join(", ")}, force-push and deletion blocked`);
+    console.log(`  + main requires ${protection.required_status_checks.contexts.join(", ")}, force-push and deletion blocked, admins included`);
   } catch (e) {
     console.error(`  x ${e.message}`);
     if (e.status === 403) console.error("    (branch protection needs a token with admin rights on the repo)");
