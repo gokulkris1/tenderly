@@ -156,3 +156,12 @@ export type EvidenceRecord = {
   tags: string[];
   verified: boolean;
 };
+
+/** What a company wants to see in Discover. Sector presets expand to the rest. */
+export type DiscoveryPreferences = {
+  sectors: string[];
+  keywords: string[];
+  cpvCodes: string[];
+  valueMin: number | null;
+  valueMax: number | null;
+};

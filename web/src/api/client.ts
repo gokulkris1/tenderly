@@ -8,6 +8,8 @@
  */
 import type {
   CompanyProfile,
+  DiscoveryPreferences,
+  SectorPreset,
   EvidenceItem,
   NotificationItem,
   PersonItem,
@@ -111,6 +113,16 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
     listPeople: () => request<{ items: PersonItem[] }>("/api/people", "Load team"),
     listNotifications: () =>
       request<{ items: NotificationItem[] }>("/api/notifications", "Load notifications"),
+
+    // --- discovery preferences ------------------------------------------
+    listSectors: () => request<{ items: SectorPreset[] }>("/api/sectors", "Load sectors"),
+    getPreferences: () =>
+      request<{ preferences: DiscoveryPreferences }>("/api/preferences", "Load discovery preferences"),
+    savePreferences: (preferences: DiscoveryPreferences) =>
+      request<{ preferences: DiscoveryPreferences }>("/api/preferences", "Save discovery preferences", {
+        method: "PUT",
+        body: JSON.stringify(preferences),
+      }),
 
     // --- discovery and import --------------------------------------------
     discover: (query = "") =>

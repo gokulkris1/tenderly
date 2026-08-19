@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import pg from "pg";
 import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
-import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
+import type {
+  DiscoveryPreferences, BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -26,6 +27,7 @@ const memory = {
   tenders: new Map<string, TenderRecord>(),
   documents: new Map<string, StoredDocument>(),
   answers: new Map<string, BidAnswer>(),
+  preferences: new Map<string, DiscoveryPreferences>(),
   evidence: new Map<string, EvidenceRecord>(),
   people: new Map<string, PersonRecord>(),
   notifications: new Map<string, NotificationRow>(),
@@ -33,8 +35,13 @@ const memory = {
 
 export async function initializeDatabase() {
   if (!pool) return;
-  const sql = await readFile(path.resolve(process.cwd(), "migrations/001_init.sql"), "utf8");
-  await pool.query(sql);
+  // Every migration, in filename order. Each is written to be idempotent, so a
+  // restart re-applies them harmlessly — and CI applies the same set with psql.
+  const dir = path.resolve(process.cwd(), "migrations");
+  const files = (await readdir(dir)).filter((name) => name.endsWith(".sql")).sort();
+  for (const file of files) {
+    await pool.query(await readFile(path.join(dir, file), "utf8"));
+  }
 }
 
 export async function closeDatabase() {
@@ -385,4 +392,34 @@ export async function migrateAnalysisSchema(): Promise<{ tenders: number; answer
     counts.tenders++;
   }
   return counts;
+}
+
+const EMPTY_PREFERENCES: DiscoveryPreferences = { sectors: [], keywords: [], cpvCodes: [], valueMin: null, valueMax: null };
+
+export async function getPreferences(accountId: string): Promise<DiscoveryPreferences> {
+  if (!pool) return memory.preferences.get(accountId) ?? { ...EMPTY_PREFERENCES };
+  const result = await pool.query("SELECT * FROM discovery_preferences WHERE account_id=$1", [accountId]);
+  const row = result.rows[0];
+  if (!row) return { ...EMPTY_PREFERENCES };
+  return {
+    sectors: row.sectors ?? [],
+    keywords: row.keywords ?? [],
+    cpvCodes: row.cpv_codes ?? [],
+    valueMin: row.value_min === null ? null : Number(row.value_min),
+    valueMax: row.value_max === null ? null : Number(row.value_max),
+  };
+}
+
+export async function savePreferences(accountId: string, preferences: DiscoveryPreferences): Promise<DiscoveryPreferences> {
+  if (!pool) {
+    memory.preferences.set(accountId, preferences);
+    return preferences;
+  }
+  await pool.query(
+    `INSERT INTO discovery_preferences(account_id,sectors,keywords,cpv_codes,value_min,value_max,updated_at)
+     VALUES($1,$2,$3,$4,$5,$6,now())
+     ON CONFLICT (account_id) DO UPDATE SET sectors=$2, keywords=$3, cpv_codes=$4, value_min=$5, value_max=$6, updated_at=now()`,
+    [accountId, JSON.stringify(preferences.sectors), JSON.stringify(preferences.keywords), JSON.stringify(preferences.cpvCodes), preferences.valueMin, preferences.valueMax],
+  );
+  return preferences;
 }
