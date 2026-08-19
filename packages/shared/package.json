@@ -1,0 +1,14 @@
+{
+  "name": "@tenderly/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Wire types shared by the web app and the API. Types only — nothing here is emitted or imported at runtime.",
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

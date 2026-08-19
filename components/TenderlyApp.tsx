@@ -3,93 +3,25 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import "./tenderly.css";
 
-type Decision = "GO" | "PARTNER" | "REVIEW" | "NO-GO";
-type GateState = "pass" | "review" | "fail";
+import type {
+  BidQuestion,
+  CompanyProfile,
+  Decision,
+  EvidenceItem,
+  Gate,
+  GateState,
+  NotificationItem,
+  PersonItem,
+  SubmissionItem,
+  Tender,
+} from "@tenderly/shared";
+
+// Screen navigation is local to the app, not part of the wire contract.
 type AppSection = "Discover" | "My bids" | "Evidence" | "Team" | "Company" | "Settings";
 type BidStage = "Qualify" | "Synopsis" | "Respond" | "Assemble" | "Submit";
 
-type Gate = {
-  label: string;
-  state: GateState;
-  bidder: string;
-  requirement: string;
-  source: string;
-};
-
-type BidQuestion = {
-  id: string;
-  title: string;
-  weight: number;
-  maxWords: number;
-  required?: boolean;
-  status: "ready" | "draft" | "needs-input";
-  prompt: string;
-  answer: string;
-  evidence: string[];
-};
-
-type BidRole = {
-  role: string;
-  quantity: number;
-  experience: string;
-  qualifications: string;
-  cvRequired: boolean;
-  bidderMatch: string;
-  status: "PASS" | "REVIEW" | "FAIL";
-  action: string;
-  source: string;
-};
-
-type SubmissionItem = {
-  id: string;
-  label: string;
-  required: boolean;
-  kind: "RESPONSE" | "BUYER_TEMPLATE" | "SIGNATURE" | "PRICING" | "CV" | "OTHER";
-  status: "READY" | "ACTION" | "VERIFY";
-  source: string;
-};
-
-type EvidenceItem = { id: string; kind: string; name: string; content: string; tags: string[]; verified: boolean };
-type PersonItem = { id: string; name: string; title: string; cvText: string; skills: string[] };
-type NotificationItem = { id: string; title: string; sourceUrl: string; matchScore: number; createdAt?: string };
-
-type Tender = {
-  id: string;
-  resourceId: string;
-  title: string;
-  authority: string;
-  category: string;
-  procedure: string;
-  deadline: string;
-  deadlineIso?: string;
-  value: string;
-  match: number;
-  decision: Decision;
-  access: string;
-  summary: string;
-  sourceUrl: string;
-  published: string;
-  framework: string;
-  partnerNote?: string;
-  gates: Gate[];
-  questions: BidQuestion[];
-  eligibility?: "PASS" | "REVIEW" | "FAIL";
-  roles?: BidRole[];
-  submissionChecklist?: SubmissionItem[];
-  risks?: string[];
-  synopsisSlides?: Array<{ title: string; bullets: string[] }>;
-};
-
-type CompanyProfile = {
-  name: string;
-  registration: string;
-  turnover: string;
-  employees: string;
-  services: string;
-  cpv: string;
-  certifications: string;
-  insurance: string;
-};
+// The CSS keys off hyphenated slugs; the wire enum is underscored.
+const decisionSlug = (decision: Decision) => decision.toLowerCase().replace(/_/g, "-");
 
 const API_BASE = process.env.VITE_API_URL ?? "";
 
@@ -186,7 +118,7 @@ const demoTenders: Tender[] = [
     deadline: "4 Sep · 12:00",
     value: "Not stated",
     match: 28,
-    decision: "NO-GO",
+    decision: "NO_GO",
     access: "Framework establishment — open competition",
     summary:
       "This is the competition to establish a multi-party framework, not a mini-competition restricted to existing members. Access is open, but the specialist flood-risk capability is outside the current company profile.",
@@ -246,7 +178,7 @@ function scoreTone(score: number) {
 
 function decisionLabel(decision: Decision) {
   if (decision === "PARTNER") return "Partner & bid";
-  if (decision === "NO-GO") return "No-go";
+  if (decision === "NO_GO") return "No-go";
   if (decision === "REVIEW") return "Review";
   return "Go";
 }
@@ -763,7 +695,7 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
               <div className="tender-facts"><span><small>Deadline</small><strong>{tender.deadline}</strong></span><span><small>Value</small><strong>{tender.value}</strong></span><span><small>Access</small><strong>{tender.access}</strong></span></div>
             </div>
             <div className="tender-decision">
-              <span className={`decision-pill decision-${tender.decision.toLowerCase()}`}>{tender.decision === "GO" ? "✓" : tender.decision === "PARTNER" ? "↔" : tender.decision === "NO-GO" ? "×" : "!"} {decisionLabel(tender.decision)}</span>
+              <span className={`decision-pill decision-${decisionSlug(tender.decision)}`}>{tender.decision === "GO" ? "✓" : tender.decision === "PARTNER" ? "↔" : tender.decision === "NO_GO" ? "×" : "!"} {decisionLabel(tender.decision)}</span>
               <button aria-label={`Review ${tender.title}`}>Review <span>→</span></button>
             </div>
           </article>
@@ -799,10 +731,10 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
       {stage === "Qualify" && (
         <div className="bid-grid">
           <div className="bid-primary">
-            <section className={`decision-hero ${tender.decision.toLowerCase()}`}>
+            <section className={`decision-hero ${decisionSlug(tender.decision)}`}>
               <div className="decision-score"><strong>{tender.match}</strong><span>/100</span><small>bid fit</small></div>
-              <div><p className="eyebrow">TENDERLY RECOMMENDATION</p><h2>{tender.decision === "GO" ? "Go for it." : tender.decision === "PARTNER" ? "Bid with a partner." : tender.decision === "NO-GO" ? "Save your bid effort." : "Review before committing."}</h2><p>{tender.partnerNote ?? tender.summary}</p></div>
-              <span className={`hero-decision decision-${tender.decision.toLowerCase()}`}>{decisionLabel(tender.decision)}</span>
+              <div><p className="eyebrow">TENDERLY RECOMMENDATION</p><h2>{tender.decision === "GO" ? "Go for it." : tender.decision === "PARTNER" ? "Bid with a partner." : tender.decision === "NO_GO" ? "Save your bid effort." : "Review before committing."}</h2><p>{tender.partnerNote ?? tender.summary}</p></div>
+              <span className={`hero-decision decision-${decisionSlug(tender.decision)}`}>{decisionLabel(tender.decision)}</span>
             </section>
 
             <section className="panel gate-panel">
@@ -846,7 +778,7 @@ function Synopsis({ tender, onDownload, onContinue, loading }: { tender: Tender;
       <div className="section-intro"><div><p className="eyebrow">3-SLIDE BID BRIEF</p><h2>Understand the tender in five minutes.</h2><p>Generated from the notice and tender pack. Critical facts stay attached to source evidence.</p></div><button className="outline-primary" onClick={onDownload}>{loading ? "Building…" : "⇩ Download .pptx"}</button></div>
       <div className="slide-stack">
         <article className="brief-slide slide-one"><div className="slide-number">01</div><div className="slide-brand"><Logo /></div><p className="slide-kicker">THE OPPORTUNITY</p><h3>{tender.title}</h3><p>{tender.summary}</p><div className="slide-metrics"><span><small>Buyer</small><strong>{tender.authority}</strong></span><span><small>Value</small><strong>{tender.value}</strong></span><span><small>Deadline</small><strong>{tender.deadline}</strong></span></div></article>
-        <article className="brief-slide"><div className="slide-number">02</div><p className="slide-kicker">CAN WE BID?</p><div className="slide-two-grid"><div><h3><b>{tender.match}</b><span>/100 fit</span></h3><p>{tender.access}</p><span className={`decision-pill decision-${tender.decision.toLowerCase()}`}>{decisionLabel(tender.decision)}</span></div><div className="slide-gates">{tender.gates.slice(0, 4).map((gate) => <p key={gate.label}><GatePill state={gate.state} /><span><strong>{gate.label}</strong><small>{gate.bidder}</small></span></p>)}</div></div></article>
+        <article className="brief-slide"><div className="slide-number">02</div><p className="slide-kicker">CAN WE BID?</p><div className="slide-two-grid"><div><h3><b>{tender.match}</b><span>/100 fit</span></h3><p>{tender.access}</p><span className={`decision-pill decision-${decisionSlug(tender.decision)}`}>{decisionLabel(tender.decision)}</span></div><div className="slide-gates">{tender.gates.slice(0, 4).map((gate) => <p key={gate.label}><GatePill state={gate.state} /><span><strong>{gate.label}</strong><small>{gate.bidder}</small></span></p>)}</div></div></article>
         <article className="brief-slide"><div className="slide-number">03</div><p className="slide-kicker">HOW TO WIN</p><h3>Win themes & bid plan</h3><div className="win-grid"><div><b>01</b><strong>Lead with relevant outcomes</strong><p>Use named evidence, measurable delivery controls and buyer-language.</p></div><div><b>02</b><strong>Close evidence gaps early</strong><p>Resolve CV / credential inputs before drafting scored sections.</p></div><div><b>03</b><strong>Write to the marks</strong><p>Allocate response effort to weight, word limit and minimum scores.</p></div><div><b>04</b><strong>Red-team before pack</strong><p>Verify every claim, attachment and mandatory declaration.</p></div></div></article>
       </div>
       <div className="bottom-action"><span><strong>Ready to bid?</strong><small>Tenderly will turn evaluation criteria into a controlled response workspace.</small></span><button className="continue-btn" onClick={onContinue}>Let’s go <span>→</span></button></div>
