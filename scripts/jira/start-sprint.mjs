@@ -20,6 +20,8 @@ const DRY = has("--dry-run");
 const name = val("--name");
 const days = Number(val("--days") ?? 14);
 if (!name) { console.error("--name <sprint name> is required"); process.exit(2); }
+// Jira rejects sprint names of 30 characters or more — fail here, not mid-run.
+if (name.length >= 30) { console.error(`--name must be under 30 characters (got ${name.length}: "${name}")`); process.exit(2); }
 
 // ---- which issues go in the sprint
 let keys = parseKeys(val("--keys") ?? "");
@@ -43,11 +45,22 @@ console.log(`  ${keys.join(", ")}\n`);
 const board = await findBoard();
 if (!board) { console.error(`No board found for project ${PROJECT}. Enable the Backlog/Sprints feature on the project first.`); process.exit(3); }
 console.log(`Board: ${board.id} ${board.name} (${board.type})`);
-if (board.type !== "scrum") console.warn("! Board is not a scrum board — sprints require the Sprints feature enabled on the project.");
+// Team-managed boards report type "simple" and still support sprints — probe instead of guessing.
+const sprintProbe = await agile(`/board/${board.id}/sprint?maxResults=1`).catch(() => null);
+if (!sprintProbe) { console.error(`Board ${board.id} does not expose sprints. Enable the Backlog/Sprints feature on the project.`); process.exit(3); }
 
 // ---- sprint (reuse one of the same name if it exists)
 const existingSprints = await agile(`/board/${board.id}/sprint?state=future,active`).catch(() => ({ values: [] }));
-let sprint = (existingSprints.values ?? []).find((s) => s.name === name);
+let sprint = has("--use-active")
+  ? (existingSprints.values ?? []).find((s) => s.state === "active")
+  : (existingSprints.values ?? []).find((s) => s.name === name);
+
+// Reusing the active sprint but under the name we were asked for.
+if (sprint && has("--use-active") && sprint.name !== name && !DRY) {
+  await agile(`/sprint/${sprint.id}`, { method: "POST", body: JSON.stringify({ name }) });
+  console.log(`Renamed active sprint ${sprint.id} "${sprint.name}" -> "${name}"`);
+  sprint.name = name;
+}
 
 const startDate = new Date();
 const endDate = new Date(startDate.getTime() + days * 86400000);
