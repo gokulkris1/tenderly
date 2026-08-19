@@ -22,7 +22,7 @@ const tier = val("--tier") ?? "e2e";
 const runUrl = val("--run-url") ?? "";
 
 if (!keys.length) { console.log("No TLY keys supplied — nothing to report."); process.exit(0); }
-if (!["pass", "fail"].includes(result)) { console.error("--result must be pass or fail"); process.exit(2); }
+if (!["pass", "fail", "skipped"].includes(result)) { console.error("--result must be pass, fail or skipped"); process.exit(2); }
 
 console.log(`Reporting ${tier} ${result} for ${keys.join(", ")}`);
 
@@ -52,6 +52,14 @@ for (const key of keys) {
   try {
     const { issue, tests } = await testsFor(key);
     if (issue.fields.issuetype.name !== "Story") { console.log(`  - ${key} is a ${issue.fields.issuetype.name}, skipping`); continue; }
+
+    // The suite did not run. Say so on the Story and leave it In Test — an
+    // unrun suite is not evidence of anything.
+    if (result === "skipped") {
+      console.log(`  ~ ${key}: ${tier} did not run — leaving it In Test`);
+      await comment(key, `${tier} did not run for this merge, so this story is unverified and stays In Test. CI run: ${runUrl}`);
+      continue;
+    }
 
     if (result === "pass") {
       for (const t of tests) await transitionTo(t.key, "Done");

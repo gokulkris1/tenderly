@@ -101,8 +101,10 @@ jobs:
 
       # Pass -> Test tickets to Done (and the Story with them).
       # Fail -> a Bug is filed against each story and added to the active sprint.
+      # Only a suite that actually ran may close a story. A skipped e2e step is
+      # not a pass — reporting one would move the Story to Done unverified.
       - name: Report result to Jira
-        if: steps.keys.outputs.keys != ''
+        if: steps.keys.outputs.keys != '' && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure')
         run: |
           RESULT=pass
           if [ "${{ steps.e2e.outcome }}" = "failure" ]; then RESULT=fail; fi
@@ -112,9 +114,18 @@ jobs:
             --result "$RESULT" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
+      - name: Record that e2e did not run
+        if: steps.keys.outputs.keys != '' && steps.e2e.outcome != 'success' && steps.e2e.outcome != 'failure'
+        run: |
+          node scripts/jira/report-e2e.mjs \
+            --keys "${{ steps.keys.outputs.keys }}" \
+            --tier e2e \
+            --result skipped \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
       # Optional: kept for compatibility if a Jira automation webhook is ever configured.
       - name: Mirror result to Jira automation webhook
-        if: steps.keys.outputs.keys != '' && env.HOOK != ''
+        if: steps.keys.outputs.keys != '' && env.HOOK != '' && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure')
         env:
           HOOK: ${{ secrets.JIRA_AUTOMATION_WEBHOOK }}
         run: |
