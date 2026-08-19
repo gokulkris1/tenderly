@@ -26,6 +26,8 @@ jobs:
       JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
       # Trailing slashes are easy to paste in and produce "//health", which 404s.
       STAGING_URL: ${{ secrets.STAGING_URL }}
+      # The web app Playwright drives, as opposed to the API that gets health-checked.
+      STAGING_WEB_URL: ${{ secrets.STAGING_WEB_URL }}
 
     steps:
       - uses: actions/checkout@v4
@@ -94,6 +96,19 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
+
+      # Journeys assume the seeded demo account. Seeding is idempotent, so this
+      # makes every run start from the same state rather than from whatever the
+      # last manual test left behind.
+      - name: Seed staging
+        if: env.SEED_DB != '' && hashFiles('scripts/seed-staging.mjs') != ''
+        env:
+          SEED_DB: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          npm ci --prefix server
+          npm run build --prefix server
+          npm run seed:staging
 
       - name: Count runnable e2e journeys
         id: runnable

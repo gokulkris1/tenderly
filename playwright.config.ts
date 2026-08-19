@@ -17,7 +17,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? [["html", { open: "never" }], ["github"]] : [["list"]],
   use: {
-    baseURL: process.env.STAGING_URL ?? "http://localhost:5173",
+    // The web app, not the API. STAGING_URL points at the Express service, which
+    // main.yml health-checks; journeys drive the browser against the site.
+    baseURL: process.env.STAGING_WEB_URL ?? process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:5173",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",

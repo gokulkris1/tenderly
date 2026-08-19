@@ -24,6 +24,8 @@ jobs:
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       JIRA_PROJECT: ${{ secrets.JIRA_PROJECT }}
       STAGING_URL: ${{ secrets.STAGING_URL }}
+      # The web app Playwright drives, as opposed to the API that gets health-checked.
+      STAGING_WEB_URL: ${{ secrets.STAGING_WEB_URL }}
 
     steps:
       - uses: actions/checkout@v4
