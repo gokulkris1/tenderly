@@ -298,3 +298,13 @@ button:disabled { cursor: wait; opacity: .62; }
 .match-reasons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .match-reasons i { font-style: normal; font-size: 7px; background: var(--green-soft); color: var(--green-2); border-radius: 6px; padding: 2px 6px; }
 .muted { color: #64736e; font-size: 8px; }
+
+/* TLY-118 — every saved bid reachable, not just the most recent. */
+.bid-list { margin-bottom: 12px; }
+.bid-list .eyebrow { margin-bottom: 6px; }
+.bid-list-items { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.bid-list-item { flex: 0 0 auto; min-width: 220px; max-width: 300px; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; cursor: pointer; display: grid; gap: 3px; }
+.bid-list-item.active { border-color: var(--green-2); background: var(--green-soft); }
+.bid-list-item strong { font-size: 8.5px; line-height: 1.35; display: block; }
+.bid-list-item small { font-size: 7px; color: #64736e; }
+.bid-list-item .decision-pill { justify-self: start; margin-top: 2px; }
