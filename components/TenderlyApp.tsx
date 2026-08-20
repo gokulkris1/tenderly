@@ -619,6 +619,8 @@ export default function TenderlyApp() {
             />
           )}
           {section === "My bids" && selected && (
+            <>
+            <BidList tenders={tenders} selectedId={selected.id} onSelect={setSelectedId} />
             <BidWorkspace
               tender={selected}
               stage={stage}
@@ -633,6 +635,7 @@ export default function TenderlyApp() {
               blockers={blockers}
               updateQuestion={(questionId, answer) => setTenders((items) => items.map((item) => item.id !== selected.id ? item : { ...item, questions: item.questions.map((q) => q.id === questionId ? { ...q, answer, status: "draft" } : q) }))}
             />
+            </>
           )}
           {section === "My bids" && !selected && <div className="no-questions panel"><span>▱</span><h2>No active bids yet</h2><p>Open a recommended opportunity or paste an eTenders link. Tenderly will import it into this workspace before qualification begins.</p><button className="continue-btn" onClick={() => setSection("Discover")}>Discover opportunities →</button></div>}
           {section === "Company" && <CompanyView company={company} setCompany={setCompany} onSave={async () => {
@@ -648,6 +651,34 @@ export default function TenderlyApp() {
       {showImport && <ImportModal value={importUrl} setValue={setImportUrl} onClose={() => setShowImport(false)} onSubmit={importTender} loading={loading === "import"} />}
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
     </div>
+  );
+}
+
+/**
+ * Every saved bid, so a user can get back to one. Before TLY-118 the workspace
+ * showed tenders[0] and nothing else could be reached: openBid was wired only
+ * from Discover's public-opportunity cards.
+ */
+function BidList({ tenders, selectedId, onSelect }: { tenders: Tender[]; selectedId: string; onSelect: (id: string) => void }) {
+  if (tenders.length < 2) return null;
+  return (
+    <nav className="bid-list" aria-label="Your bids" data-testid="bid-list">
+      <p className="eyebrow">YOUR BIDS · {tenders.length}</p>
+      <div className="bid-list-items">
+        {tenders.map((tender) => (
+          <button
+            key={tender.id}
+            className={tender.id === selectedId ? "bid-list-item active" : "bid-list-item"}
+            aria-current={tender.id === selectedId ? "true" : undefined}
+            onClick={() => onSelect(tender.id)}
+          >
+            <strong>{tender.title}</strong>
+            <small>{tender.authority} · closes {tender.deadline}</small>
+            <span className={`decision-pill decision-${decisionSlug(tender.decision)}`}>{decisionLabel(tender.decision)}</span>
+          </button>
+        ))}
+      </div>
+    </nav>
   );
 }
 
