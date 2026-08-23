@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm ci)",
+      "Bash(npm ci --prefix server)",
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run build:netlify)",
+      "Bash(npm run build --prefix server)",
+      "Bash(npm test --prefix server)",
+      "Bash(node scripts/backlog-lint.mjs:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git fetch:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./server/.env)",
+      "Read(./server/.env.*)",
+      "Read(~/.tenderly/secrets.env)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)"
+    ]
+  }
+}
