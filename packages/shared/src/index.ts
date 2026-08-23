@@ -155,6 +155,8 @@ export type Tender = {
   orphanedAnswers?: OrphanedAnswer[];
   /** Which sector presets or keywords put this notice in the Discover list. */
   matchedBy?: MatchReason[];
+  /** Which feed the notice came from, so a user can tell TED from eTenders. */
+  noticeSource?: "eTenders" | "TED";
   /** Award criteria with weightings, empty when the pack states none. */
   awardCriteria?: AwardCriterion[];
   /** Set when the stated weightings do not add up, e.g. "Stated weightings sum to 90%". */

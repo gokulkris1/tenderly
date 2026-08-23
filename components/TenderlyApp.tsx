@@ -809,7 +809,7 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
           <article className="tender-card" key={tender.id} onClick={() => openBid(tender.id)}>
             <div className={`score-ring ${scoreTone(tender.match)}`}><strong>{tender.match}</strong><small>match</small></div>
             <div className="tender-main">
-              <div className="tender-meta"><span>{tender.category}</span><i>•</i><span>{tender.procedure}</span><i>•</i><span>Published {tender.published}</span></div>
+              <div className="tender-meta"><span className={`notice-source ${(tender.noticeSource ?? "eTenders") === "TED" ? "ted" : "etenders"}`}>{tender.noticeSource ?? "eTenders"}</span><i>•</i><span>{tender.category}</span><i>•</i><span>{tender.procedure}</span><i>•</i><span>Published {tender.published}</span></div>
               <h3>{tender.title}</h3>
               <p className="authority">{tender.authority}</p>
               <div className="tender-facts"><span><small>Deadline</small><strong>{tender.deadline}</strong></span><span><small>Value</small><strong>{tender.value}</strong></span><span><small>Access</small><strong>{tender.access}</strong></span></div>
