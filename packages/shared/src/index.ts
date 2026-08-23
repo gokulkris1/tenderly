@@ -90,6 +90,10 @@ export type AwardCriterion = {
   rawWeight: string;
   confidence: "HIGH" | "MEDIUM" | "LOW";
   /** Document name and the quoted sentence the weighting was read from. */
+  source: string;
+  quote: string;
+};
+
 /** A rule the buyer imposes on the submission itself. */
 export type Formality = {
   rule: string;

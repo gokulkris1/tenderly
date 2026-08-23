@@ -30,7 +30,7 @@ export function awardCriteriaWarning(criteria: { weight: number }[]): string | u
   return `Stated weightings sum to ${total}%`;
 }
 
-export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = []): Tender {
+/**
  * A required certificate counts as satisfied only when a VERIFIED evidence item
  * plausibly covers it. Unverified evidence never satisfies a requirement — that
  * is the same rule the drafting path follows.

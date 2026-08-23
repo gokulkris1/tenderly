@@ -221,6 +221,11 @@ function AwardCriteria({ criteria, warning }: { criteria: AwardCriterion[]; warn
             ))}
           </div>
         </>
+      )}
+    </section>
+  );
+}
+
 function Formalities({ formalities, certificates }: { formalities: Formality[]; certificates: RequiredCertificateStatus[] }) {
   return (
     <section className="panel gate-panel" data-testid="formalities">
