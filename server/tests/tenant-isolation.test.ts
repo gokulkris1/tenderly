@@ -28,6 +28,7 @@ const analysis = (): TenderAnalysis => withStableIds({
   fatalGates: [], evaluationCriteria: [],
   questions: [{ id: "seed", title: "Methodology", prompt: "Describe it.", weight: 40, maxWords: 500, required: true, evidenceNeeded: [], source: evidence }],
   roles: [], clarificationQuestions: [], risks: [], submissionMethod: "eTenders",
+  formalities: [], requiredCertificates: [],
   submissionChecklist: [{ id: "seed", label: "Tender response", required: true, kind: "RESPONSE", status: "ACTION", source: evidence }],
   synopsisSlides: [],
 });

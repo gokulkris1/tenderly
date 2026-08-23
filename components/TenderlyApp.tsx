@@ -7,6 +7,8 @@ import "./tenderly.css";
 import type {
   AwardCriterion,
   BidQuestion,
+  Formality,
+  RequiredCertificateStatus,
   CompanyProfile,
   DiscoveryPreferences,
   SectorPreset,
@@ -219,6 +221,50 @@ function AwardCriteria({ criteria, warning }: { criteria: AwardCriterion[]; warn
             ))}
           </div>
         </>
+function Formalities({ formalities, certificates }: { formalities: Formality[]; certificates: RequiredCertificateStatus[] }) {
+  return (
+    <section className="panel gate-panel" data-testid="formalities">
+      <div className="panel-heading">
+        <div>
+          <h3>Formalities and certificates</h3>
+          <p>Bids fail here more often than on quality. Every rule is quoted from the pack.</p>
+        </div>
+      </div>
+
+      <h4 className="sub-head">Required certificates</h4>
+      {certificates.length === 0 ? (
+        <p className="input-needed">[INPUT NEEDED: required certificates]</p>
+      ) : (
+        <div className="cert-rows" data-testid="required-certificates">
+          {certificates.map((certificate) => (
+            <div key={certificate.name} className={certificate.satisfied ? "cert-row ok" : "cert-row gap"}>
+              <span className="cert-mark">{certificate.satisfied ? "✓" : "!"}</span>
+              <div>
+                <strong>{certificate.name}</strong>
+                <small>
+                  {certificate.issuingBody ? `${certificate.issuingBody} · ` : ""}
+                  {certificate.mandatory ? "Mandatory" : "Requested"}
+                  {certificate.satisfied ? ` · evidenced by ${certificate.satisfiedBy}` : " · no verified evidence"}
+                </small>
+                <small title={certificate.quote}>{certificate.source}{certificate.quote ? ` · “${certificate.quote.slice(0, 66)}”` : ""}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h4 className="sub-head">Submission rules</h4>
+      {formalities.length === 0 ? (
+        <p className="input-needed">[INPUT NEEDED: submission formalities]</p>
+      ) : (
+        <ul className="formality-list" data-testid="formality-list">
+          {formalities.map((formality) => (
+            <li key={`${formality.appliesTo}-${formality.rule}`}>
+              <strong>{formality.rule}</strong>
+              <small>{formality.appliesTo}{formality.quote ? ` · “${formality.quote.slice(0, 66)}”` : ""}</small>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
@@ -823,6 +869,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
             </section>
 
             <AwardCriteria criteria={tender.awardCriteria ?? []} warning={tender.awardCriteriaWarning} />
+            <Formalities formalities={tender.formalities ?? []} certificates={tender.requiredCertificates ?? []} />
             <section className="panel gate-panel">
               <div className="panel-heading"><div><h2>Eligibility gates</h2><p>Hard requirements before quality scoring. Every conclusion points back to source evidence.</p></div><button className="text-action" onClick={runAnalysis}>{loading === "analyse" ? "Analysing…" : "↻ Re-run checks"}</button></div>
               <div className="gate-summary"><span className="sum-pass">✓ {passed} passed</span><span className="sum-review">! {reviewed} review</span>{failed > 0 && <span className="sum-fail">× {failed} failed</span>}<span className="source-guard">◇ Sourced, not guessed</span></div>

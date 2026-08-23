@@ -66,7 +66,9 @@ function routeParam(value: string | string[]) {
 }
 
 async function tenderWithAnswers(account: string, tender: TenderRecord) {
-  return serializeTender(tender, await listAnswers(tender.id));
+  // Evidence decides whether a required certificate is satisfied.
+  const [answers, evidence] = await Promise.all([listAnswers(tender.id), listEvidence(account)]);
+  return serializeTender(tender, answers, evidence);
 }
 
 async function analyseSavedTender(account: string, tenderId: string) {
@@ -312,7 +314,7 @@ app.get("/api/tenders/:id/red-team", async (req: AuthenticatedRequest, res) => {
     if (!tender) return res.status(404).json({ error: "Tender not found" });
     if (!tender.analysis) return res.status(409).json({ error: "Analyse the tender first" });
     const [answers, documents] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id)]);
-    const issues = submissionBlockers(tender, tender.analysis, answers, documents).map((message) => ({ severity: "BLOCKER", message }));
+    const issues = submissionBlockers(tender, tender.analysis, answers, documents, await listEvidence(account)).map((message) => ({ severity: "BLOCKER", message }));
     for (const question of tender.analysis.questions) {
       const answer = answers.find((item) => item.questionId === question.id);
       const words = answer?.response.trim() ? answer.response.trim().split(/\s+/).length : 0;

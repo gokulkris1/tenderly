@@ -62,6 +62,19 @@ export const requiredRoleSchema = z.object({
   evidence: sourceEvidenceSchema,
 });
 
+export const submissionFormalitySchema = z.object({
+  rule: z.string(),
+  appliesTo: z.string(),
+  evidence: sourceEvidenceSchema,
+});
+
+export const requiredCertificateSchema = z.object({
+  name: z.string(),
+  issuingBody: z.string(),
+  mandatory: z.boolean(),
+  evidence: sourceEvidenceSchema,
+});
+
 export const submissionChecklistItemSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -101,6 +114,8 @@ export const tenderAnalysisSchema = z.object({
   clarificationQuestions: z.array(z.string()),
   risks: z.array(z.string()),
   submissionMethod: z.string(),
+  formalities: z.array(submissionFormalitySchema),
+  requiredCertificates: z.array(requiredCertificateSchema),
   submissionChecklist: z.array(submissionChecklistItemSchema),
   synopsisSlides: z.array(z.object({ title: z.string(), bullets: z.array(z.string()) })),
 });

@@ -360,3 +360,18 @@ button:disabled { cursor: wait; opacity: .62; }
 .confidence.medium { color: #a66312; }
 .confidence.high { color: var(--green-2); }
 .input-needed { margin: 0; color: #8d641f; font-size: 13px; }
+/* TLY-43 — formalities and required certificates. */
+.sub-head { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.cert-rows { display: grid; gap: 6px; }
+.cert-row { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line-soft); }
+.cert-row.ok { background: var(--green-soft); border-color: #cde8dc; }
+.cert-row.gap { background: #faeceb; border-color: #f0d6d4; }
+.cert-row .cert-mark { font-weight: 700; }
+.cert-row.ok .cert-mark { color: var(--green-2); }
+.cert-row.gap .cert-mark { color: var(--red); }
+.cert-row strong { display: block; font-size: 13px; }
+.cert-row small { display: block; font-size: 11px; color: var(--muted); }
+.formality-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.formality-list li { padding: 7px 0; border-top: 1px solid var(--line-soft); }
+.formality-list strong { display: block; font-size: 13px; }
+.formality-list small { display: block; font-size: 11px; color: var(--muted); }

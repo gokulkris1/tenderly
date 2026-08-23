@@ -72,7 +72,7 @@ function sourceFallback(tender: TenderRecord, company: CompanyProfile): TenderAn
     lots: [],
     fatalGates: [{ id: "source-review", requirement: "Complete qualification review", bidderEvidence: company.services ? "Company profile loaded" : "Company profile incomplete", status: "REVIEW", action: "Configure ANTHROPIC_API_KEY and re-run analysis", evidence }],
     evaluationCriteria: [], questions: [], roles: [], clarificationQuestions: [], risks: ["Full tender-document qualification has not run"],
-    submissionMethod: "Verify in tender documents", submissionChecklist: [],
+    submissionMethod: "Verify in tender documents", formalities: [], requiredCertificates: [], submissionChecklist: [],
     synopsisSlides: [{ title: "Opportunity", bullets: [tender.title, tender.authority, `Deadline: ${tender.deadline || "not found"}`] }],
   });
 }

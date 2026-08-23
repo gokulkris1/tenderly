@@ -1,6 +1,6 @@
 import type { Tender } from "@tenderly/shared";
 import { ANALYSIS_SCHEMA_VERSION, orphanedAnswers } from "./analysis-schema.js";
-import type { BidAnswer, PublicTender, TenderRecord } from "./types.js";
+import type { BidAnswer, EvidenceRecord, PublicTender, RequiredCertificate, TenderRecord } from "./types.js";
 
 function accessLabel(access: TenderRecord["analysis"] extends infer _T ? string : never) {
   return access === "OPEN_TO_QUALIFIED_BIDDERS" ? "Open to qualified bidders" : access === "FRAMEWORK_MEMBERS_ONLY" ? "Framework members only" : access === "INVITED_ONLY" ? "Invited bidders only" : "Needs source review";
@@ -31,6 +31,33 @@ export function awardCriteriaWarning(criteria: { weight: number }[]): string | u
 }
 
 export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = []): Tender {
+ * A required certificate counts as satisfied only when a VERIFIED evidence item
+ * plausibly covers it. Unverified evidence never satisfies a requirement — that
+ * is the same rule the drafting path follows.
+ */
+export function certificateStatus(certificates: RequiredCertificate[], evidence: EvidenceRecord[] = []) {
+  const verified = evidence.filter((item) => item.verified);
+  const words = (value: string) => new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3));
+  return certificates.map((certificate) => {
+    const needle = words(certificate.name);
+    const match = verified.find((item) => {
+      const haystack = words(`${item.name} ${item.kind}`);
+      const overlap = [...needle].filter((w) => haystack.has(w)).length;
+      return needle.size > 0 && overlap >= Math.min(2, needle.size);
+    });
+    return {
+      name: certificate.name,
+      issuingBody: certificate.issuingBody,
+      mandatory: certificate.mandatory,
+      satisfied: Boolean(match),
+      satisfiedBy: match?.name,
+      source: certificate.evidence.sourceDocument,
+      quote: certificate.evidence.quote,
+    };
+  });
+}
+
+export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [], evidence: EvidenceRecord[] = []): Tender {
   const analysis = tender.analysis;
   const answerMap = new Map(answers.map((answer) => [answer.questionId, answer]));
   const checklistOverrides = (tender.metadata.checklistOverrides ?? {}) as Record<string, "READY" | "ACTION" | "VERIFY">;
@@ -107,6 +134,13 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [])
       quote: criterion.evidence.quote,
     })),
     awardCriteriaWarning: awardCriteriaWarning(analysis?.evaluationCriteria ?? []),
+    formalities: (analysis?.formalities ?? []).map((formality) => ({
+      rule: formality.rule,
+      appliesTo: formality.appliesTo,
+      source: formality.evidence.sourceDocument,
+      quote: formality.evidence.quote,
+    })),
+    requiredCertificates: certificateStatus(analysis?.requiredCertificates ?? [], evidence),
   };
 }
 

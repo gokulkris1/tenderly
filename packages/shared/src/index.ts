@@ -90,6 +90,23 @@ export type AwardCriterion = {
   rawWeight: string;
   confidence: "HIGH" | "MEDIUM" | "LOW";
   /** Document name and the quoted sentence the weighting was read from. */
+/** A rule the buyer imposes on the submission itself. */
+export type Formality = {
+  rule: string;
+  appliesTo: string;
+  source: string;
+  quote: string;
+};
+
+/** A certificate the tender requires, and whether the company can evidence it. */
+export type RequiredCertificateStatus = {
+  name: string;
+  issuingBody: string;
+  mandatory: boolean;
+  /** True when a verified evidence item covers it. */
+  satisfied: boolean;
+  /** The evidence item cited, when satisfied. */
+  satisfiedBy?: string;
   source: string;
   quote: string;
 };
@@ -138,6 +155,10 @@ export type Tender = {
   awardCriteria?: AwardCriterion[];
   /** Set when the stated weightings do not add up, e.g. "Stated weightings sum to 90%". */
   awardCriteriaWarning?: string;
+  /** Submission rules extracted from the pack: naming, limits, channel, signatures. */
+  formalities?: Formality[];
+  /** Certificates the tender requires, each with whether the company evidences it. */
+  requiredCertificates?: RequiredCertificateStatus[];
 };
 
 export type EvidenceItem = {
