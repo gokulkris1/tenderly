@@ -266,7 +266,8 @@ app.post("/api/tenders/:id/answers/:questionId/draft", async (req: Authenticated
   try {
     const account = accountId(req);
     const tender = await getTender(account, routeParam(req.params.id));
-    if (!tender?.analysis) return res.status(409).json({ error: "Run tender analysis before drafting responses" });
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    if (!tender.analysis) return res.status(409).json({ error: "Run tender analysis before drafting responses" });
     const questionId = routeParam(req.params.questionId);
     const question = tender.analysis.questions.find((item) => item.id === questionId);
     if (!question) return res.status(404).json({ error: "Scored question not found" });
@@ -308,7 +309,8 @@ app.get("/api/tenders/:id/red-team", async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
     const tender = await getTender(account, routeParam(req.params.id));
-    if (!tender?.analysis) return res.status(409).json({ error: "Analyse the tender first" });
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    if (!tender.analysis) return res.status(409).json({ error: "Analyse the tender first" });
     const [answers, documents] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id)]);
     const issues = submissionBlockers(tender, tender.analysis, answers, documents).map((message) => ({ severity: "BLOCKER", message }));
     for (const question of tender.analysis.questions) {
@@ -325,7 +327,8 @@ app.get("/api/tenders/:id/deck", async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
     const tender = await getTender(account, routeParam(req.params.id));
-    if (!tender?.analysis) return res.status(409).json({ error: "Analyse the tender before generating a synopsis deck" });
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    if (!tender.analysis) return res.status(409).json({ error: "Analyse the tender before generating a synopsis deck" });
     const deck = await createSynopsisDeck(tender, tender.analysis, await getCompany(account));
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
     res.setHeader("Content-Disposition", `attachment; filename="Tenderly_${tender.externalId || "Bid"}_Synopsis.pptx"`);
@@ -337,7 +340,8 @@ app.get("/api/tenders/:id/pack", async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
     const tender = await getTender(account, routeParam(req.params.id));
-    if (!tender?.analysis) return res.status(409).json({ error: "Analyse the tender before building a pack" });
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    if (!tender.analysis) return res.status(409).json({ error: "Analyse the tender before building a pack" });
     const draft = String(req.query.draft).toLowerCase() === "true";
     const [answers, documents, company, people, evidence] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id), getCompany(account), listPeople(account), listEvidence(account)]);
     const result = await createSubmissionPack({ tender, analysis: tender.analysis, answers, documents, company, people, evidence, draft });
@@ -417,10 +421,19 @@ app.use((error: unknown, _req: Request, res: Response, _next: unknown) => {
   res.status(mapped.status).json({ error: mapped.message });
 });
 
-await initializeDatabase();
-// Re-key analyses written before stable question ids existed (TLY-40). Idempotent.
-const migrated = await migrateAnalysisSchema();
-if (migrated.tenders) console.log(`analysis schema migration · tenders=${migrated.tenders} answers=${migrated.answers} checklistOverrides=${migrated.overrides}`);
-app.listen(port, "0.0.0.0", () => {
-  console.log(`Tenderly API listening on port ${port} · database=${persistentDatabase ? "postgres" : "memory"} · ai=${aiConfigured() ? "configured" : "not-configured"}`);
-});
+/**
+ * Exported so tests can mount the real app on an ephemeral port. Importing this
+ * module must not start a server or touch the database, which is what
+ * TENDERLY_NO_LISTEN guards — see server/tests/tenant-isolation.test.ts.
+ */
+export { app };
+
+if (process.env.TENDERLY_NO_LISTEN !== "1") {
+  await initializeDatabase();
+  // Re-key analyses written before stable question ids existed (TLY-40). Idempotent.
+  const migrated = await migrateAnalysisSchema();
+  if (migrated.tenders) console.log(`analysis schema migration · tenders=${migrated.tenders} answers=${migrated.answers} checklistOverrides=${migrated.overrides}`);
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Tenderly API listening on port ${port} · database=${persistentDatabase ? "postgres" : "memory"} · ai=${aiConfigured() ? "configured" : "not-configured"}`);
+  });
+}
