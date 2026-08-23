@@ -114,6 +114,7 @@ function analysisFor({ decision, eligibility, gates, checklist }) {
     questions: [question("Quality management system", "Describe your quality management system and how it is audited."),
                 question("Test approach", "Describe your approach to software testing and quality assurance.")],
     roles: [], clarificationQuestions: [], risks: [], submissionMethod: "eTenders portal",
+    formalities: [], requiredCertificates: [],
     submissionChecklist: checklist, synopsisSlides: [{ title: "The opportunity", bullets: ["Open competition", "EUR 450,000", "Closes 26 March"] }],
   });
 }

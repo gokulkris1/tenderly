@@ -21,7 +21,7 @@ function analysisWith(questions: TenderAnalysis["questions"]): TenderAnalysis {
     eligibility: "REVIEW", fitScore: 60, decision: "REVIEW", partnerNeeded: false, partnerGaps: [],
     deadline: "26/03/2026 12:00", clarificationDeadline: "", contractValue: "", duration: "", lots: [],
     fatalGates: [], evaluationCriteria: [], questions, roles: [], clarificationQuestions: [], risks: [],
-    submissionMethod: "eTenders", submissionChecklist: [], synopsisSlides: [],
+    submissionMethod: "eTenders", formalities: [], requiredCertificates: [], submissionChecklist: [], synopsisSlides: [],
   };
 }
 

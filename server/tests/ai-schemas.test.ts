@@ -11,7 +11,7 @@ const validAnalysis = {
   contractValue: "EUR 450,000", duration: "", lots: [],
   fatalGates: [{ id: "tax", requirement: "Tax clearance", bidderEvidence: "None recorded", status: "REVIEW", action: "Upload certificate", evidence }],
   evaluationCriteria: [], questions: [], roles: [], clarificationQuestions: [], risks: [],
-  submissionMethod: "eTenders", submissionChecklist: [], synopsisSlides: [],
+  submissionMethod: "eTenders", formalities: [], requiredCertificates: [], submissionChecklist: [], synopsisSlides: [],
 };
 
 test("TLY-64: a well-formed analysis validates", () => {

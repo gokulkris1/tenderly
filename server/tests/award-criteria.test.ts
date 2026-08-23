@@ -18,7 +18,7 @@ const analysisWith = (criteria: TenderAnalysis["evaluationCriteria"]): TenderAna
   eligibility: "REVIEW", fitScore: 50, decision: "REVIEW", partnerNeeded: false, partnerGaps: [],
   deadline: "", clarificationDeadline: "", contractValue: "", duration: "", lots: [], fatalGates: [],
   evaluationCriteria: criteria, questions: [], roles: [], clarificationQuestions: [], risks: [],
-  submissionMethod: "", submissionChecklist: [], synopsisSlides: [],
+  submissionMethod: "", formalities: [], requiredCertificates: [], submissionChecklist: [], synopsisSlides: [],
 });
 
 test("TLY-42 AC1: criteria reach the wire with their weight and source quote", () => {

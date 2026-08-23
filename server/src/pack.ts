@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import PptxGenJS from "pptxgenjs";
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
+import { certificateStatus } from "./serializers.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
 
 const INK = "17332B";
@@ -127,8 +128,13 @@ export async function createSynopsisDeck(tender: TenderRecord, analysis: TenderA
   return Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer);
 }
 
-export function submissionBlockers(tender: TenderRecord, analysis: TenderAnalysis, answers: BidAnswer[], documents: StoredDocument[]) {
+export function submissionBlockers(tender: TenderRecord, analysis: TenderAnalysis, answers: BidAnswer[], documents: StoredDocument[], evidence: EvidenceRecord[] = []) {
   const blockers: string[] = [];
+  // A certificate the tender makes a condition of participation, with nothing
+  // verified to show for it, is a hard blocker (TLY-43).
+  for (const certificate of certificateStatus(analysis.requiredCertificates ?? [], evidence)) {
+    if (certificate.mandatory && !certificate.satisfied) blockers.push(`${certificate.name} — missing`);
+  }
   if (analysis.eligibility !== "PASS") blockers.push(`Eligibility is ${analysis.eligibility}; resolve all mandatory gates before final pack`);
   analysis.fatalGates.filter((gate) => gate.status === "FAIL" || gate.status === "REVIEW").forEach((gate) => blockers.push(`${gate.requirement}: ${gate.status.toLowerCase()}`));
   const answerMap = new Map(answers.map((answer) => [answer.questionId, answer]));
@@ -144,7 +150,7 @@ export function submissionBlockers(tender: TenderRecord, analysis: TenderAnalysi
 }
 
 export async function createSubmissionPack(args: { tender: TenderRecord; analysis: TenderAnalysis; answers: BidAnswer[]; documents: StoredDocument[]; company: CompanyProfile; people: PersonRecord[]; evidence: EvidenceRecord[]; draft: boolean }) {
-  const blockers = submissionBlockers(args.tender, args.analysis, args.answers, args.documents);
+  const blockers = submissionBlockers(args.tender, args.analysis, args.answers, args.documents, args.evidence);
   if (!args.draft && blockers.length) return { blockers, buffer: null as Buffer | null };
   const zip = new JSZip();
   const prefix = args.draft ? "DRAFT_" : "";

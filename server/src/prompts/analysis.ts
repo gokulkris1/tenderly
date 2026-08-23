@@ -12,7 +12,7 @@
  * always be traced to the exact instructions that produced it.
  */
 
-export const ANALYSIS_PROMPT_VERSION = "analysis-2026-08-23.1";
+export const ANALYSIS_PROMPT_VERSION = "analysis-2026-08-23.2";
 
 export const ANALYSIS_PROMPT = `You are Tenderly's public-procurement bid qualification analyst. Your job is to decide what the supplied sources actually establish, not what is plausible.
 
@@ -46,6 +46,11 @@ AWARD CRITERIA
 - Do NOT rescale stated weightings so that they add up to 100. If they do not add up, report them as stated and set confidence to LOW.
 - confidence is HIGH when the weighting is stated plainly, MEDIUM when it had to be derived, LOW when the weightings are inconsistent or the figure is uncertain.
 - If the pack states no award criteria at all, return an empty list. Never invent a weighting.
+SUBMISSION FORMALITIES AND CERTIFICATES
+- Extract the rules the buyer imposes on the submission itself: file formats, naming conventions, page or word limits, signature requirements and the submission channel. Each carries the quoted sentence it came from and what it applies to.
+- Extract every certificate the tender requires the bidder to hold, with the issuing body when stated. mandatory is true only when the pack makes holding it a condition of participation.
+- Bids fail on formalities more often than on quality, so do not summarise these: record each rule separately and exactly.
+- State nothing the pack does not. If no page limit is given, return no page-limit rule; do not supply a default.
 
 RESPONSE / PACK
 - Extract actual weighted criteria, marked questions, word/page limits, mandatory CV roles, pricing/declaration/template requirements and clarification deadline when present. Unknown numeric weights/limits must be 0, not guessed.

@@ -11,7 +11,7 @@ const analysis: TenderAnalysis = {
   fatalGates: [{ id: "access", requirement: "Competition access", bidderEvidence: "Open procedure", status: "PASS", action: "None", evidence }],
   evaluationCriteria: [{ name: "Methodology", weight: 60, rawWeight: "60%", minimumScore: 0, strategy: "Answer with delivery controls", confidence: "HIGH", evidence }],
   questions: [{ id: "q1", title: "Methodology", prompt: "Describe your methodology", weight: 60, maxWords: 700, required: true, evidenceNeeded: ["Delivery case study"], source: evidence }],
-  roles: [], clarificationQuestions: [], risks: [], submissionMethod: "eTenders ZIP upload", submissionChecklist: [], synopsisSlides: [{ title: "The opportunity", bullets: ["Open competition", "€49,000", "Closes 27 August"] }, { title: "Can we bid?", bullets: ["Access gate passed", "Strong capability fit"] }],
+  roles: [], clarificationQuestions: [], risks: [], submissionMethod: "eTenders ZIP upload", formalities: [], requiredCertificates: [], submissionChecklist: [], synopsisSlides: [{ title: "The opportunity", bullets: ["Open competition", "€49,000", "Closes 27 August"] }, { title: "Can we bid?", bullets: ["Access gate passed", "Strong capability fit"] }],
 };
 const tender: TenderRecord = { id: "t1", accountId: "a1", source: "etenders", externalId: "8796138", title: "PMP Training", authority: "Buyer", description: "Training", published: "6 Aug", deadline: "27 Aug", procedure: "Open", status: "Tender Submission", estimatedValue: "49,000", sourceUrl: "https://www.etenders.gov.ie/", metadata: {}, analysis };
 const company: CompanyProfile = { name: "Example Consulting Ltd", registration: "123", turnover: "€1m", employees: "5", services: "Programme delivery", cpv: "", certifications: "PMP", insurance: "PI €2m" };

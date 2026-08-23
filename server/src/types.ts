@@ -51,6 +51,23 @@ export type RequiredRole = {
   evidence: SourceEvidence;
 };
 
+/** A rule the buyer imposes on the submission itself: naming, limits, channel. */
+export type SubmissionFormality = {
+  rule: string;
+  /** What the rule governs: "quality response", "all documents", "pricing". */
+  appliesTo: string;
+  evidence: SourceEvidence;
+};
+
+/** A certificate the tender requires the bidder to hold. */
+export type RequiredCertificate = {
+  name: string;
+  issuingBody: string;
+  /** True only when the pack makes it a condition of participation. */
+  mandatory: boolean;
+  evidence: SourceEvidence;
+};
+
 export type SubmissionChecklistItem = {
   id: string;
   label: string;
@@ -86,6 +103,8 @@ export type TenderAnalysis = {
   clarificationQuestions: string[];
   risks: string[];
   submissionMethod: string;
+  formalities: SubmissionFormality[];
+  requiredCertificates: RequiredCertificate[];
   submissionChecklist: SubmissionChecklistItem[];
   synopsisSlides: Array<{ title: string; bullets: string[] }>;
 };
