@@ -375,3 +375,8 @@ button:disabled { cursor: wait; opacity: .62; }
 .formality-list li { padding: 7px 0; border-top: 1px solid var(--line-soft); }
 .formality-list strong { display: block; font-size: 13px; }
 .formality-list small { display: block; font-size: 11px; color: var(--muted); }
+
+/* TLY-29 — which feed a notice came from. */
+.notice-source { font-weight: 600; border-radius: 5px; padding: 1px 6px; font-size: 11px; }
+.notice-source.etenders { background: var(--green-soft); color: var(--green-2); }
+.notice-source.ted { background: #e7eefb; color: #23477f; }

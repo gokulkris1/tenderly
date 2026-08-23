@@ -9,6 +9,7 @@ import { z } from "zod";
 import { accountId, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
 import { aiConfigured, aiModel, analyseTender, draftBidAnswer } from "./ai.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
+import { searchTed } from "./sources/ted.js";
 import { combineSourceText, extractDocumentText } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender, scoreTenderPreview } from "./etenders.js";
 import {
@@ -158,7 +159,20 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
     const account = accountId(req);
     const [company, preferences] = await Promise.all([getCompany(account), getPreferences(account)]);
     const query = z.string().max(200).catch("").parse(req.query.query);
-    const items = await discoverETenders(query);
+    // Two sources, so a portal redesign no longer takes discovery down entirely.
+    // TED failing must not cost the user their eTenders results, hence allSettled.
+    const [crawled, ted] = await Promise.allSettled([discoverETenders(query), searchTed({ limit: 40 })]);
+    const sourceWarnings: string[] = [];
+    if (crawled.status === "rejected") sourceWarnings.push("eTenders is unavailable — showing TED results only");
+    if (ted.status === "rejected") sourceWarnings.push("TED is unavailable — showing eTenders results only");
+    if (crawled.status === "rejected" && ted.status === "rejected") throw crawled.reason;
+    const tedResult = ted.status === "fulfilled" ? ted.value : { items: [], warnings: [] };
+    sourceWarnings.push(...tedResult.warnings.slice(0, 3));
+    const sourceOf = new Map<string, "eTenders" | "TED">();
+    const crawledItems = crawled.status === "fulfilled" ? crawled.value : [];
+    for (const item of crawledItems) sourceOf.set(item.externalId, "eTenders");
+    for (const item of tedResult.items) if (!sourceOf.has(item.externalId)) sourceOf.set(item.externalId, "TED");
+    const items = [...crawledItems, ...tedResult.items.filter((item) => sourceOf.get(item.externalId) === "TED")];
     const profileText = `${company.services} ${company.cpv} ${company.certifications}`;
 
     // The eTenders listing carries no CPV, so the list is filtered on sector
@@ -182,12 +196,17 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
     });
 
     const serialised = withinBand
-      .map(({ item, reasons }) => ({ ...serializePublicTender(item, scoreTenderPreview(item, profileText)), matchedBy: reasons }))
+      .map(({ item, reasons }) => ({
+        ...serializePublicTender(item, scoreTenderPreview(item, profileText)),
+        matchedBy: reasons,
+        noticeSource: sourceOf.get(item.externalId) ?? "eTenders",
+      }))
       .sort((a, b) => b.match - a.match)
       .slice(0, 50);
     res.json({
       items: serialised,
-      source: "eTenders public current opportunities",
+      source: "eTenders public current opportunities and TED",
+      warnings: sourceWarnings,
       filtered: keywords.length > 0,
       profileCpvCodes: profileCpvCodes(preferences.sectors, preferences.cpvCodes),
       checkedAt: new Date().toISOString(),
