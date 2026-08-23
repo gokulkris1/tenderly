@@ -100,7 +100,7 @@ export const EXPECTED_HEADERS = [
 
 /** A header without the columns we rely on means a different file. */
 export function assertHeaders(header: string[]) {
-  const seen = new Set(header.map((h) => h.replace(/^﻿/, "").trim()));
+  const seen = new Set(header.map((h) => h.replace(/^\uFEFF/, "").trim()));
   const missing = EXPECTED_HEADERS.filter((h) => !seen.has(h));
   if (missing.length) {
     throw new Error(`Unexpected OGP CSV header - missing column(s): ${missing.join(", ")}`);
@@ -109,7 +109,7 @@ export function assertHeaders(header: string[]) {
 
 export function rowToAward(header: string[], values: string[]): AwardRecord | null {
   const at = (name: string) => {
-    const index = header.findIndex((h) => h.replace(/^﻿/, "").trim() === name);
+    const index = header.findIndex((h) => h.replace(/^\uFEFF/, "").trim() === name);
     return index === -1 ? undefined : values[index];
   };
   const externalId = cell(at("Tender ID"));
