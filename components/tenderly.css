@@ -344,3 +344,19 @@ button:disabled { cursor: wait; opacity: .62; }
   h1 { font-size: 21px; }
   h2 { font-size: 18px; }
 }
+
+/* TLY-42 — award criteria: where the marks are. */
+.criteria-warning { margin: 0 0 8px; color: #8d641f; background: #f7efdc; border-radius: 6px; padding: 6px 9px; font-size: 12px; }
+.criteria-rows { display: grid; gap: 8px; }
+.criteria-row { display: grid; grid-template-columns: 60px 1fr auto auto auto; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line-soft); }
+.criteria-row strong { font-size: 13px; }
+.criteria-row b { font-size: 14px; }
+.criteria-row em { font-style: normal; font-size: 11px; color: var(--muted); }
+.criteria-row small { font-size: 11px; color: var(--muted); grid-column: 2 / -1; }
+.criteria-bar { display: block; width: 60px; height: 6px; background: #edf0ef; border-radius: 4px; overflow: hidden; }
+.criteria-bar i { display: block; height: 100%; background: var(--green-2); }
+.confidence { font-weight: 600; }
+.confidence.low { color: #b7443f; }
+.confidence.medium { color: #a66312; }
+.confidence.high { color: var(--green-2); }
+.input-needed { margin: 0; color: #8d641f; font-size: 13px; }
