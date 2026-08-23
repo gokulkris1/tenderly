@@ -81,6 +81,19 @@ export type OrphanedAnswer = {
   status: string;
 };
 
+/** An award criterion as the buyer states it, normalised for comparison. */
+export type AwardCriterion = {
+  name: string;
+  /** Percentage of the total award. 0 when the pack does not state one. */
+  weight: number;
+  /** The weighting verbatim from the pack: "600 points", "60%", or "". */
+  rawWeight: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  /** Document name and the quoted sentence the weighting was read from. */
+  source: string;
+  quote: string;
+};
+
 export type SynopsisSlide = {
   title: string;
   bullets: string[];
@@ -121,6 +134,10 @@ export type Tender = {
   orphanedAnswers?: OrphanedAnswer[];
   /** Which sector presets or keywords put this notice in the Discover list. */
   matchedBy?: MatchReason[];
+  /** Award criteria with weightings, empty when the pack states none. */
+  awardCriteria?: AwardCriterion[];
+  /** Set when the stated weightings do not add up, e.g. "Stated weightings sum to 90%". */
+  awardCriteriaWarning?: string;
 };
 
 export type EvidenceItem = {

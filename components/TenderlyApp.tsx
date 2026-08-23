@@ -5,6 +5,7 @@ import { ApiError, createApiClient } from "../web/src/api/client";
 import "./tenderly.css";
 
 import type {
+  AwardCriterion,
   BidQuestion,
   CompanyProfile,
   DiscoveryPreferences,
@@ -189,6 +190,38 @@ function decisionLabel(decision: Decision) {
   if (decision === "NO_GO") return "No-go";
   if (decision === "REVIEW") return "Review";
   return "Go";
+}
+
+function AwardCriteria({ criteria, warning }: { criteria: AwardCriterion[]; warning?: string }) {
+  return (
+    <section className="panel gate-panel" data-testid="award-criteria">
+      <div className="panel-heading">
+        <div>
+          <h3>Award criteria</h3>
+          <p>Where the marks are. Weightings are shown as the pack states them — never rescaled to look tidy.</p>
+        </div>
+      </div>
+      {criteria.length === 0 ? (
+        <p className="input-needed" data-testid="award-criteria-missing">[INPUT NEEDED: award criteria]</p>
+      ) : (
+        <>
+          {warning && <p className="criteria-warning" data-testid="award-criteria-warning">! {warning}</p>}
+          <div className="criteria-rows">
+            {criteria.map((criterion) => (
+              <div key={criterion.name} className="criteria-row">
+                <span className="criteria-bar"><i style={{ width: `${Math.min(100, criterion.weight)}%` }} /></span>
+                <strong>{criterion.name}</strong>
+                <b>{criterion.weight}%</b>
+                {criterion.rawWeight && criterion.rawWeight !== `${criterion.weight}%` && <em>{criterion.rawWeight}</em>}
+                <small className={`confidence ${criterion.confidence.toLowerCase()}`}>{criterion.confidence}</small>
+                <small title={criterion.quote}>{criterion.source}{criterion.quote ? ` · “${criterion.quote.slice(0, 70)}”` : ""}</small>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 function GatePill({ state }: { state: GateState }) {
@@ -789,6 +822,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
               <span className={`hero-decision decision-${decisionSlug(tender.decision)}`}>{decisionLabel(tender.decision)}</span>
             </section>
 
+            <AwardCriteria criteria={tender.awardCriteria ?? []} warning={tender.awardCriteriaWarning} />
             <section className="panel gate-panel">
               <div className="panel-heading"><div><h2>Eligibility gates</h2><p>Hard requirements before quality scoring. Every conclusion points back to source evidence.</p></div><button className="text-action" onClick={runAnalysis}>{loading === "analyse" ? "Analysing…" : "↻ Re-run checks"}</button></div>
               <div className="gate-summary"><span className="sum-pass">✓ {passed} passed</span><span className="sum-review">! {reviewed} review</span>{failed > 0 && <span className="sum-fail">× {failed} failed</span>}<span className="source-guard">◇ Sourced, not guessed</span></div>

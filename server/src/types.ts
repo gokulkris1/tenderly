@@ -18,9 +18,13 @@ export type EligibilityGate = {
 
 export type EvaluationCriterion = {
   name: string;
+  /** Normalised to a percentage of the total award. 0 when unstated. */
   weight: number;
+  /** The weighting as the pack expresses it, kept verbatim. */
+  rawWeight: string;
   minimumScore: number;
   strategy: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
   evidence: SourceEvidence;
 };
 

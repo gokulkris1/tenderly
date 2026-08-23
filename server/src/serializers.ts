@@ -19,6 +19,17 @@ function bidTypeLabel(type: string) {
   return labels[type] ?? "Needs source review";
 }
 
+/**
+ * Stated weightings that do not add up are reported as stated, never rescaled:
+ * silently normalising them would hide a defect in the buyer's own pack.
+ */
+export function awardCriteriaWarning(criteria: { weight: number }[]): string | undefined {
+  if (criteria.length === 0) return undefined;
+  const total = Math.round(criteria.reduce((sum, c) => sum + (c.weight || 0), 0));
+  if (total === 100) return undefined;
+  return `Stated weightings sum to ${total}%`;
+}
+
 export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = []): Tender {
   const analysis = tender.analysis;
   const answerMap = new Map(answers.map((answer) => [answer.questionId, answer]));
@@ -87,6 +98,15 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [])
     promptVersion: analysis?.promptVersion,
     analysisOutdated: Boolean(analysis) && analysis?.schemaVersion !== ANALYSIS_SCHEMA_VERSION,
     orphanedAnswers: orphanedAnswers(analysis ?? null, answers),
+    awardCriteria: (analysis?.evaluationCriteria ?? []).map((criterion) => ({
+      name: criterion.name,
+      weight: criterion.weight,
+      rawWeight: criterion.rawWeight,
+      confidence: criterion.confidence,
+      source: criterion.evidence.sourceDocument,
+      quote: criterion.evidence.quote,
+    })),
+    awardCriteriaWarning: awardCriteriaWarning(analysis?.evaluationCriteria ?? []),
   };
 }
 

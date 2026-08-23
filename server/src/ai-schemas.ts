@@ -28,9 +28,14 @@ export const eligibilityGateSchema = z.object({
 
 export const evaluationCriterionSchema = z.object({
   name: z.string(),
+  /** Normalised to a percentage of the total award. 0 when the pack does not say. */
   weight: z.number(),
+  /** The weighting exactly as the pack expresses it: "600 points", "60%", "". */
+  rawWeight: z.string(),
   minimumScore: z.number(),
   strategy: z.string(),
+  /** LOW when the stated weightings do not add up, or the figure was inferred. */
+  confidence: z.enum(["HIGH", "MEDIUM", "LOW"]),
   evidence: sourceEvidenceSchema,
 });
 

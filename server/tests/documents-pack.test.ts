@@ -9,7 +9,7 @@ const evidence = { sourceDocument: "RFT.docx", quote: "The competition is open t
 const analysis: TenderAnalysis = {
   headline: "Strong fit", executiveSummary: "Open consultancy opportunity with a strong delivery fit.", bidType: "OPEN_CONTRACT", access: "OPEN_TO_QUALIFIED_BIDDERS", eligibility: "PASS", fitScore: 84, decision: "GO", partnerNeeded: false, partnerGaps: [], deadline: "27/08/2026 12:00", clarificationDeadline: "20/08/2026 12:00", contractValue: "€49,000", duration: "12 months", lots: [],
   fatalGates: [{ id: "access", requirement: "Competition access", bidderEvidence: "Open procedure", status: "PASS", action: "None", evidence }],
-  evaluationCriteria: [{ name: "Methodology", weight: 60, minimumScore: 0, strategy: "Answer with delivery controls", evidence }],
+  evaluationCriteria: [{ name: "Methodology", weight: 60, rawWeight: "60%", minimumScore: 0, strategy: "Answer with delivery controls", confidence: "HIGH", evidence }],
   questions: [{ id: "q1", title: "Methodology", prompt: "Describe your methodology", weight: 60, maxWords: 700, required: true, evidenceNeeded: ["Delivery case study"], source: evidence }],
   roles: [], clarificationQuestions: [], risks: [], submissionMethod: "eTenders ZIP upload", submissionChecklist: [], synopsisSlides: [{ title: "The opportunity", bullets: ["Open competition", "€49,000", "Closes 27 August"] }, { title: "Can we bid?", bullets: ["Access gate passed", "Strong capability fit"] }],
 };

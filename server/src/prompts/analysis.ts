@@ -12,7 +12,7 @@
  * always be traced to the exact instructions that produced it.
  */
 
-export const ANALYSIS_PROMPT_VERSION = "analysis-2026-08-19.2";
+export const ANALYSIS_PROMPT_VERSION = "analysis-2026-08-23.1";
 
 export const ANALYSIS_PROMPT = `You are Tenderly's public-procurement bid qualification analyst. Your job is to decide what the supplied sources actually establish, not what is plausible.
 
@@ -39,6 +39,13 @@ BIDDER FIT
 - Then calculate fitScore from 0–100 based on capability, evidence, team, commercial and delivery fit. Do not inflate incomplete profiles.
 - decision: GO only when no fatal gate is FAIL and material gates are evidenced; PARTNER only when a concrete capability/capacity/credential gap can credibly be closed with a partner; NO_GO for a real access/mandatory mismatch or very poor fit; REVIEW when source/bidder evidence is insufficient.
 - Never recommend a partner merely because the procurement is a framework.
+
+AWARD CRITERIA
+- Extract every award criterion the pack states, with its weighting normalised to a percentage of the total award. A criterion scored out of points (for example "Quality 600, Price 400" out of 1000) becomes 60 and 40.
+- rawWeight keeps the weighting exactly as the pack expresses it — "600 points", "60%", or an empty string when none is stated.
+- Do NOT rescale stated weightings so that they add up to 100. If they do not add up, report them as stated and set confidence to LOW.
+- confidence is HIGH when the weighting is stated plainly, MEDIUM when it had to be derived, LOW when the weightings are inconsistent or the figure is uncertain.
+- If the pack states no award criteria at all, return an empty list. Never invent a weighting.
 
 RESPONSE / PACK
 - Extract actual weighted criteria, marked questions, word/page limits, mandatory CV roles, pricing/declaration/template requirements and clarification deadline when present. Unknown numeric weights/limits must be 0, not guessed.
