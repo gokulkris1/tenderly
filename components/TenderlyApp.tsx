@@ -14,6 +14,7 @@ import type {
   AwardCriterion,
   AwardIntelligence as AwardIntelligenceData,
   BidQuestion,
+  BidTask,
   Clarification,
   CompanyProfile,
   DeadlinePressure,
@@ -794,6 +795,7 @@ export default function TenderlyApp() {
   const [analysisChanges, setAnalysisChanges] = useState<AnalysisChanges | null>(null);
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
   const [openClarifications, setOpenClarifications] = useState(0);
+  const [tasks, setTasks] = useState<BidTask[]>([]);
   const [attestationState, setAttestationState] = useState<AttestationState | null>(null);
   const [tenders, setTenders] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [discoveries, setDiscoveries] = useState<Tender[]>(API_BASE ? [] : demoTenders);
@@ -906,6 +908,7 @@ export default function TenderlyApp() {
     void refreshPackQuestions(selectedId);
     void refreshAnalysisChanges(selectedId);
     void refreshClarifications(selectedId);
+    void refreshTasks(selectedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -1154,6 +1157,44 @@ export default function TenderlyApp() {
       setToast("Attestation recorded · the final pack is released");
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not record the attestation");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function refreshTasks(tenderId: string) {
+    if (isDemo || !API_BASE || !token) return;
+    try {
+      const { tasks: items } = await apiClient.tasks(tenderId);
+      setTasks(items);
+    } catch {
+      setTasks([]);
+    }
+  }
+
+  async function addTask(title: string, dueOn: string) {
+    if (!selected || isDemo) return;
+    try {
+      setLoading("tasks");
+      await apiClient.addTask(selected.id, title, "", dueOn);
+      await refreshTasks(selected.id);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not add that task");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function updateTask(taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) {
+    if (!selected || isDemo) return;
+    try {
+      setLoading("tasks");
+      await apiClient.updateTask(selected.id, taskId, patch);
+      await refreshTasks(selected.id);
+    } catch (error) {
+      // "This task completes when its blocker is resolved" is the server's
+      // wording and the honest explanation; do not paraphrase it.
+      setToast(error instanceof ApiError ? error.message : "Could not update that task");
     } finally {
       setLoading("");
     }
@@ -1914,6 +1955,9 @@ export default function TenderlyApp() {
               restoreVersion={restoreVersion}
               attestation={attestationState}
               onAttest={recordAttestation}
+              tasks={tasks}
+              addTask={addTask}
+              updateTask={updateTask}
               tender={selected}
               stage={stage}
               setStage={setStage}
@@ -2288,8 +2332,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; clarifications: Clarification[]; openClarifications: number; askClarification: (question: string) => void; answerClarification: (id: string, response: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, tasks, addTask, updateTask, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; clarifications: Clarification[]; openClarifications: number; askClarification: (question: string) => void; answerClarification: (id: string, response: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; tasks: BidTask[]; addTask: (title: string, dueOn: string) => void; updateTask: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -2369,7 +2413,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
 
       {stage === "Synopsis" && <Synopsis tender={tender} onDownload={() => downloadAsset("deck")} onContinue={() => setStage("Respond")} loading={loading === "deck"} />}
       {stage === "Respond" && <Respond tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} evaluation={evaluation} onRunEvaluation={runMockEvaluation} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
-      {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} attestation={attestation} onAttest={onAttest} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
+      {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} attestation={attestation} onAttest={onAttest} tasks={tasks} onAddTask={addTask} onUpdateTask={updateTask} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
       {stage === "Submit" && <Submit tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
     </div>
   );
@@ -2689,7 +2733,78 @@ function AttestationPanel({ state, onAttest, busy }: { state: AttestationState |
   );
 }
 
-function Assemble({ tender, onDraft, uploadTenderFile, onMarkReady, onContinue, loading, blockers, attestation, onAttest }: { tender: Tender; onDraft: () => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; onMarkReady: (id: string) => void; onContinue: () => void; loading: string; blockers: string[]; attestation: AttestationState | null; onAttest: () => void }) {
+/**
+ * The work on this bid: who is doing what, by when.
+ *
+ * Blockers appear here as tasks automatically, and complete when the blocker
+ * clears — a blocker task has no tick of its own, because a tick and a blocker
+ * disagreeing about the same fact helps nobody.
+ */
+function TaskList({ tasks, onAdd, onUpdate, busy }: {
+  tasks: BidTask[];
+  onAdd: (title: string, dueOn: string) => void;
+  onUpdate: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void;
+  busy: boolean;
+}) {
+  const [title, setTitle] = useState("");
+  const [dueOn, setDueOn] = useState("");
+  const open = tasks.filter((task) => !task.completedAt);
+  const done = tasks.filter((task) => task.completedAt);
+
+  const row = (task: BidTask) => (
+    <li key={task.id} className={task.overdue ? "overdue" : ""} data-testid={`task-${task.id}`}>
+      <div>
+        <strong>{task.title}</strong>
+        <small>
+          {task.origin === "blocker" ? "From a blocker" : "Added by hand"}
+          {task.owner ? ` · ${task.owner}` : ""}
+          {task.dueOn ? ` · due ${task.dueOn}` : ""}
+          {task.overdue ? " · Overdue" : ""}
+        </small>
+      </div>
+      <div className="task-actions">
+        <input
+          className="task-due"
+          type="date"
+          value={task.dueOn}
+          onChange={(event) => onUpdate(task.id, { dueOn: event.target.value })}
+          disabled={busy || Boolean(task.completedAt)}
+        />
+        {task.origin === "manual" && !task.completedAt && (
+          <button className="text-action" disabled={busy} onClick={() => onUpdate(task.id, { completed: true })}>Done</button>
+        )}
+      </div>
+    </li>
+  );
+
+  return (
+    <section className="panel task-list" data-testid="task-list">
+      <div className="panel-heading">
+        <div><h3>Tasks</h3><p>Blockers appear here automatically and clear themselves when resolved.</p></div>
+        {open.length > 0 && <span className="manifest-status">{open.length} open</span>}
+      </div>
+
+      <form
+        className="ask-form"
+        onSubmit={(event) => { event.preventDefault(); if (title.trim()) { onAdd(title.trim(), dueOn); setTitle(""); setDueOn(""); } }}
+      >
+        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Draft the method statement" disabled={busy} />
+        <input type="date" value={dueOn} onChange={(event) => setDueOn(event.target.value)} disabled={busy} />
+        <button className="quiet-btn" disabled={busy || !title.trim()}>Add</button>
+      </form>
+
+      {open.length > 0 && <ul className="tasks">{open.map(row)}</ul>}
+      {done.length > 0 && (
+        <details className="tasks-done">
+          <summary>{done.length} completed</summary>
+          <ul className="tasks">{done.map(row)}</ul>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function Assemble({ tender, onDraft, uploadTenderFile, onMarkReady, onContinue, loading, blockers, attestation, onAttest, tasks, onAddTask, onUpdateTask }: { tender: Tender; onDraft: () => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; onMarkReady: (id: string) => void; onContinue: () => void; loading: string; blockers: string[]; attestation: AttestationState | null; onAttest: () => void; tasks: BidTask[]; onAddTask: (title: string, dueOn: string) => void; onUpdateTask: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void }) {
   const fallbackRows: SubmissionItem[] = [
     { id: "demo-response", label: "Tender response", required: true, kind: "RESPONSE", status: tender.questions.length && tender.questions.every((question) => question.status === "ready") ? "READY" : "ACTION", source: "Scored response workspace" },
     { id: "demo-cv", label: "Personnel CVs", required: true, kind: "CV", status: "VERIFY", source: "Tender pack · role requirements" },
@@ -2713,7 +2828,7 @@ function Assemble({ tender, onDraft, uploadTenderFile, onMarkReady, onContinue, 
       <div className="section-intro"><div><p className="eyebrow">SUBMISSION ASSEMBLY</p><h2>One controlled pack. Nothing forgotten.</h2><p>Tenderly keeps mandatory buyer templates separate from generated response material and will not call a pack “final” while blockers remain.</p></div><div className="section-actions"><FileButton label={loading === "upload" ? "Uploading…" : "＋ Add completed buyer file"} accept=".pdf,.docx,.xlsx,.xls,.zip" onFile={(file) => uploadTenderFile(file, "submission")} /><button className="outline-primary" onClick={onDraft}>{loading === "pack" ? "Building…" : "⇩ Build draft ZIP"}</button></div></div>
       <div className="assemble-grid">
         <section className="panel manifest"><div className="panel-heading"><div><h3>Submission manifest</h3><p>Extracted from the tender pack; verify each buyer-controlled file after completion.</p></div><span className="manifest-status">{unresolved ? `${unresolved} need attention` : "Checklist clear"}</span></div>{rows.map((item, index) => <div className="manifest-row" key={item.id}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{item.label}</strong><small>{item.kind.replace("_", " ")} · {item.source}</small></p><GatePill state={item.status === "READY" ? "pass" : "review"} />{item.status === "READY" ? <button className="manifest-done" disabled>✓</button> : <button className="manifest-ready" onClick={() => onMarkReady(item.id)} disabled={loading === `check-${item.id}`} title="Confirm only after you have checked/completed this item">Ready</button>}</div>)}</section>
-        <aside className="assembly-aside"><AttestationPanel state={attestation} onAttest={onAttest} busy={loading === "attest"} /><section className="panel pack-score"><p className="eyebrow">PACK READINESS</p><div className="large-ring"><strong>{readiness}</strong><small>%</small></div><h3>{unresolved ? `${unresolved} thing${unresolved > 1 ? "s" : ""} left` : "Automated gates clear"}</h3><p>{unresolved ? "Resolve each required item, upload completed buyer files, then explicitly confirm it ready." : "Build the final checks view; human submission control still remains."}</p></section><section className="panel integrity-card"><strong>Submission guardrails</strong><p>✓ Eligibility checked before final pack</p><p>✓ Answer ready-state enforced</p><p>✓ Word-limit red-team available</p><p className={unresolved ? "warn" : ""}>{unresolved ? "!" : "✓"} Buyer checklist {unresolved ? "still open" : "cleared"}</p><p>✓ Final portal submit stays human</p></section><button className="continue-btn" onClick={onContinue}>Final checks <span>→</span></button></aside>
+        <aside className="assembly-aside"><TaskList tasks={tasks} onAdd={onAddTask} onUpdate={onUpdateTask} busy={loading === "tasks"} /><AttestationPanel state={attestation} onAttest={onAttest} busy={loading === "attest"} /><section className="panel pack-score"><p className="eyebrow">PACK READINESS</p><div className="large-ring"><strong>{readiness}</strong><small>%</small></div><h3>{unresolved ? `${unresolved} thing${unresolved > 1 ? "s" : ""} left` : "Automated gates clear"}</h3><p>{unresolved ? "Resolve each required item, upload completed buyer files, then explicitly confirm it ready." : "Build the final checks view; human submission control still remains."}</p></section><section className="panel integrity-card"><strong>Submission guardrails</strong><p>✓ Eligibility checked before final pack</p><p>✓ Answer ready-state enforced</p><p>✓ Word-limit red-team available</p><p className={unresolved ? "warn" : ""}>{unresolved ? "!" : "✓"} Buyer checklist {unresolved ? "still open" : "cleared"}</p><p>✓ Final portal submit stays human</p></section><button className="continue-btn" onClick={onContinue}>Final checks <span>→</span></button></aside>
       </div>
     </div>
   );

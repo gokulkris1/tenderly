@@ -51,6 +51,23 @@ export type Gate = {
 /** How much of a response section a machine produced. */
 export type ProvenanceClass = "ai-generated" | "ai-assisted" | "human";
 
+/**
+ * One piece of work on a bid. A blocker task completes when its blocker clears,
+ * never by hand — otherwise the tick and the blocker disagree.
+ */
+export type BidTask = {
+  id: string;
+  tenderId: string;
+  title: string;
+  origin: "blocker" | "manual";
+  owner: string;
+  dueOn: string;
+  completedAt?: string;
+  /** Derived on read, never stored: a stored flag goes stale overnight. */
+  overdue: boolean;
+  createdAt: string;
+};
+
 /** A clarification exchange with the buyer. */
 export type Clarification = {
   id: string;

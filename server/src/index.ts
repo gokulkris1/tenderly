@@ -57,6 +57,7 @@ import {
   listBidDecisions,
   listWatchlist,
   listDeclarationAnswers,
+  listBidTasks,
   listClarifications,
   listDocuments,
   listEvidence,
@@ -67,6 +68,7 @@ import {
   listPeople,
   listSavedSearches,
   listProvenance,
+  listTasksForOwner,
   listTenders,
   backfillTenderCpv,
   migrateAnalysisSchema,
@@ -92,6 +94,8 @@ import {
   tenderProvenance,
   setPersonArchived,
   updateCompany,
+  syncBlockerTasks,
+  updateBidTask,
   updatePerson,
   updateTenderMetadata,
   confirmAllPersonFacts,
@@ -99,6 +103,7 @@ import {
   listPersonFacts,
   replacePersonFacts,
   updatePersonFact,
+  upsertBidTask,
   upsertTender,
 } from "./db.js";
 import { AUDIT_ACTIONS, audit } from "./audit.js";
@@ -1385,6 +1390,90 @@ app.put("/api/tenders/:id/clarifications/:clarificationId", async (req: Authenti
     }).catch(() => undefined);
 
     res.json({ clarification: { ...record, status: "Answered" }, reanalyseSuggested: true });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * The work on one bid: who is doing what, by when.
+ *
+ * Blockers generate tasks on every read, so a new blocker appears as work
+ * without anyone transcribing it, and a blocker that has cleared completes the
+ * task it created. The blocker list is the truth; the task follows it.
+ */
+app.get("/api/tenders/:id/tasks", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+
+    if (tender.analysis) {
+      const blockers = submissionBlockers(
+        tender, tender.analysis,
+        await listAnswers(tender.id), await listDocuments(tender.id), await listEvidence(account),
+        await unfillableRoles(account, tender),
+      );
+      for (const blocker of blockers) {
+        await upsertBidTask({ tenderId: tender.id, title: blocker, origin: "blocker", owner: "", dueOn: "" });
+      }
+      await syncBlockerTasks(tender.id, blockers);
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const tasks = (await listBidTasks(tender.id)).map((task) => ({
+      ...task,
+      // Overdue is derived, never stored: a stored flag goes stale overnight.
+      overdue: Boolean(task.dueOn) && !task.completedAt && task.dueOn < today,
+    }));
+    res.json({ tasks });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.post("/api/tenders/:id/tasks", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const input = z.object({
+      title: z.string().trim().min(1, "Task title is required").max(300),
+      owner: z.string().max(320).default(""),
+      dueOn: z.string().max(40).default(""),
+    }).parse(req.body);
+    res.status(201).json({ task: await upsertBidTask({ tenderId: tender.id, origin: "manual", ...input }) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.put("/api/tenders/:id/tasks/:taskId", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const input = z.object({
+      owner: z.string().max(320).optional(),
+      dueOn: z.string().max(40).optional(),
+      completed: z.boolean().optional(),
+    }).parse(req.body);
+
+    const existing = (await listBidTasks(tender.id)).find((task) => task.id === routeParam(req.params.taskId));
+    // A blocker task is completed by its blocker clearing. Letting a person tick
+    // it would leave the tick and the blocker disagreeing about the same fact.
+    if (existing?.origin === "blocker" && input.completed !== undefined) {
+      return res.status(409).json({ error: "This task completes when its blocker is resolved" });
+    }
+
+    const task = await updateBidTask(account, routeParam(req.params.taskId), input);
+    if (!task) return res.status(404).json({ error: "Task not found" });
+    res.json({ task });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** Open tasks owned by the signed-in user, across every bid on the account. */
+app.get("/api/my-tasks", async (req: AuthenticatedRequest, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const tasks = (await listTasksForOwner(accountId(req), actorEmail(req))).map((task) => ({
+      ...task, overdue: Boolean(task.dueOn) && task.dueOn < today,
+    }));
+    res.json({ tasks });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

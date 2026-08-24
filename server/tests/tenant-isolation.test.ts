@@ -103,6 +103,9 @@ function crossTenantCases(owner: Tenant) {
     { method: "GET", path: `/api/tenders/${owner.tenderId}/ask` },
     { method: "GET", path: `/api/tenders/${owner.tenderId}/analysis-versions` },
     { method: "GET", path: `/api/tenders/${owner.tenderId}/clarifications` },
+    { method: "GET", path: `/api/tenders/${owner.tenderId}/tasks` },
+    { method: "POST", path: `/api/tenders/${owner.tenderId}/tasks`, body: { title: "stolen" } },
+    { method: "PUT", path: `/api/tenders/${owner.tenderId}/tasks/00000000-0000-0000-0000-000000000000`, body: { owner: "stolen" } },
     { method: "POST", path: `/api/tenders/${owner.tenderId}/clarifications`, body: { question: "stolen" } },
     { method: "PUT", path: `/api/tenders/${owner.tenderId}/clarifications/00000000-0000-0000-0000-000000000000`, body: { response: "stolen" } },
     { method: "POST", path: `/api/tenders/${owner.tenderId}/ask`, body: { question: "What insurance is required?" } },
@@ -166,7 +169,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
   // Routes that carry no tenant-owned resource: they read or write only the caller's own scope.
   const ownScopeOnly = [
     "GET /api/me", "GET /api/company", "PUT /api/company", "GET /api/sectors",
-    "GET /api/preferences", "PUT /api/preferences", "GET /api/tenders", "GET /api/usage", "GET /api/audit",
+    "GET /api/preferences", "PUT /api/preferences", "GET /api/tenders", "GET /api/usage", "GET /api/audit", "GET /api/my-tasks",
     "GET /api/skills-matrix",
     "GET /api/watchlist", "POST /api/watchlist", "DELETE /api/watchlist/:externalId", "GET /api/portfolio",
     "GET /api/vault/completeness",
@@ -192,6 +195,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     "GET /api/tenders/:id/mock-evaluation", "POST /api/tenders/:id/mock-evaluation",
     "GET /api/tenders/:id/ask", "POST /api/tenders/:id/ask", "GET /api/tenders/:id/analysis-versions",
     "GET /api/tenders/:id/clarifications", "POST /api/tenders/:id/clarifications", "PUT /api/tenders/:id/clarifications/:clarificationId",
+    "GET /api/tenders/:id/tasks", "POST /api/tenders/:id/tasks", "PUT /api/tenders/:id/tasks/:taskId",
     "GET /api/tenders/:id/deck", "GET /api/tenders/:id/pack",
     "PUT /api/evidence/:id/verification", "GET /api/evidence/:id/file",
     "PUT /api/people/:id", "POST /api/people/:id/archive",

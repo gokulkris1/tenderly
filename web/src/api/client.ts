@@ -15,6 +15,7 @@ import type {
   AttestationState,
   AuditEntry,
   BidDecisionRecord,
+  BidTask,
   Clarification,
   CompanyProfile,
   DeclarationAnswer,
@@ -124,6 +125,16 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       }),
 
     // --- workspace --------------------------------------------------------
+    tasks: (tenderId: string) => request<{ tasks: BidTask[] }>(`/api/tenders/${tenderId}/tasks`, "Load tasks"),
+    addTask: (tenderId: string, title: string, owner: string, dueOn: string) =>
+      request<{ task: BidTask }>(`/api/tenders/${tenderId}/tasks`, "Add task", {
+        method: "POST", body: JSON.stringify({ title, owner, dueOn }),
+      }),
+    updateTask: (tenderId: string, taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) =>
+      request<{ task: BidTask }>(`/api/tenders/${tenderId}/tasks/${taskId}`, "Update task", {
+        method: "PUT", body: JSON.stringify(patch),
+      }),
+    myTasks: () => request<{ tasks: (BidTask & { tenderTitle: string })[] }>("/api/my-tasks", "Load my tasks"),
     clarifications: (tenderId: string) =>
       request<{ items: Clarification[]; open: number }>(`/api/tenders/${tenderId}/clarifications`, "Load clarifications"),
     askClarification: (tenderId: string, question: string, askedOn: string) =>
