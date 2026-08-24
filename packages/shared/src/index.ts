@@ -209,6 +209,11 @@ export type Tender = {
   requiredCertificates?: RequiredCertificateStatus[];
   /** What the pack says about producing the response with AI. */
   aiUsePolicy?: AiUsePolicy;
+  /**
+   * Generation is disabled for this tender: no drafting, no refinement, no
+   * template auto-fill. Analysis, checklists, gap analysis and critique remain.
+   */
+  noAiMode?: boolean;
 };
 
 export type EvidenceItem = {
@@ -235,6 +240,15 @@ export type NotificationItem = {
   sourceUrl: string;
   matchScore: number;
   createdAt?: string;
+};
+
+/** An account's model usage for one calendar month. */
+export type UsageTotals = {
+  month: string;
+  actions: number;
+  inputTokens: number;
+  outputTokens: number;
+  byKind: { kind: string; actions: number; inputTokens: number; outputTokens: number }[];
 };
 
 export type CompanyProfile = {

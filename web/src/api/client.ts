@@ -15,6 +15,7 @@ import type {
   PersonItem,
   SectorPreset,
   Tender,
+  UsageTotals,
 } from "@tenderly/shared";
 
 /** A failed API call, carrying enough for a screen to explain itself to a user. */
@@ -154,11 +155,22 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         method: "PUT",
         body: JSON.stringify({ response, status }),
       }),
+    setNoAiMode: (tenderId: string, enabled: boolean) =>
+      request<{ noAiMode: boolean; aiWrittenAnswers: string[] }>(`/api/tenders/${tenderId}/no-ai-mode`, "Set no-AI mode", {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      }),
+    critiqueAnswer: (tenderId: string, questionId: string) =>
+      request<{ strengths: string[]; gaps: string[]; missingEvidence: string[] }>(`/api/tenders/${tenderId}/answers/${questionId}/critique`, "Critique answer", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
     acknowledgeAiPolicy: (tenderId: string, action: "confirmed" | "dismissed") =>
       request<{ acknowledgement: AiPolicyAcknowledgement }>(`/api/tenders/${tenderId}/ai-policy/acknowledge`, "Acknowledge AI policy", {
         method: "POST",
         body: JSON.stringify({ action }),
       }),
+    usage: () => request<{ usage: UsageTotals }>("/api/usage", "Load AI usage"),
     setChecklistStatus: (tenderId: string, itemId: string, status: string) =>
       request<unknown>(`/api/tenders/${tenderId}/checklist/${itemId}`, "Update checklist", {
         method: "POST",

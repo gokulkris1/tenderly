@@ -132,6 +132,17 @@ export const tenderAnalysisSchema = z.object({
   synopsisSlides: z.array(z.object({ title: z.string(), bullets: z.array(z.string()) })),
 });
 
+/**
+ * A critique of text a person wrote. There is deliberately no field for prose:
+ * no-AI mode allows assistance, not generation, so the shape itself makes a
+ * replacement answer impossible to return.
+ */
+export const answerCritiqueSchema = z.object({
+  strengths: z.array(z.string()),
+  gaps: z.array(z.string()),
+  missingEvidence: z.array(z.string()),
+});
+
 export const bidAnswerDraftSchema = z.object({
   status: z.enum(["DRAFTED", "NEEDS_INPUT"]),
   answer: z.string(),

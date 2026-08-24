@@ -24,6 +24,7 @@ import type {
   SectorPreset,
   SubmissionItem,
   Tender,
+  UsageTotals,
 } from "@tenderly/shared";
 
 // Screen navigation is local to the app, not part of the wire contract.
@@ -363,6 +364,8 @@ export default function TenderlyApp() {
   const selectedId = route.tenderId || fallbackId;
   const setStage = (next: BidStage) => openStage(selectedId, next);
   const setSelectedId = (id: string) => { setFallbackId(id); openStage(id, "Qualify"); };
+  // A critique judges what the user wrote; it never carries replacement prose.
+  const [critique, setCritique] = useState<AnswerCritique | null>(null);
   const [tenders, setTenders] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [discoveries, setDiscoveries] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [query, setQuery] = useState("");
@@ -380,6 +383,7 @@ export default function TenderlyApp() {
   const [authReady, setAuthReady] = useState(!API_BASE);
   // The authoritative blocker list the API returns when it refuses a final pack.
   const [blockers, setBlockers] = useState<string[]>([]);
+  const [usage, setUsage] = useState<UsageTotals | null>(null);
   const [sectors, setSectors] = useState<SectorPreset[]>([]);
   const [preferences, setPreferences] = useState<DiscoveryPreferences>({ sectors: [], keywords: [], cpvCodes: [], valueMin: null, valueMax: null });
 
@@ -398,6 +402,14 @@ export default function TenderlyApp() {
     setToken(saved);
     setAuthReady(true);
   }, []);
+
+  // Read on entering Settings rather than on every render: the figures move
+  // only when the account makes an AI call.
+  useEffect(() => {
+    if (section !== "Settings" || isDemo || !API_BASE || !token) return;
+    apiClient.usage().then(({ usage: totals }) => setUsage(totals)).catch(() => setUsage(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, token]);
 
   useEffect(() => {
     if (!toast) return;
@@ -569,6 +581,43 @@ export default function TenderlyApp() {
       setToast("Eligibility and bid fit re-analysed from source evidence");
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Analysis failed");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function critiqueAnswer(questionId: string) {
+    if (!selected) return;
+    try {
+      setLoading(`critique-${questionId}`);
+      const result = await apiClient.critiqueAnswer(selected.id, questionId);
+      setCritique({ questionId, ...result });
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not critique this answer");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function setNoAiMode(enabled: boolean) {
+    if (!selected) return;
+    if (isDemo) {
+      setToast(enabled ? "No-AI mode enabled · generation disabled for this tender" : "No-AI mode disabled");
+      return;
+    }
+    try {
+      setLoading("no-ai-mode");
+      const { aiWrittenAnswers } = await apiClient.setNoAiMode(selected.id, enabled);
+      setTenders((items) => items.map((item) => item.id !== selected.id ? item : { ...item, noAiMode: enabled }));
+      // Enabling the mode does not rewrite history: sections a model wrote keep
+      // their provenance, and the user is told which they are.
+      setToast(enabled
+        ? aiWrittenAnswers.length
+          ? `No-AI mode enabled · ${aiWrittenAnswers.length} existing section${aiWrittenAnswers.length > 1 ? "s were" : " was"} written with AI: ${aiWrittenAnswers.join(", ")}`
+          : "No-AI mode enabled · generation disabled for this tender"
+        : "No-AI mode disabled");
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not change no-AI mode");
     } finally {
       setLoading("");
     }
@@ -797,6 +846,9 @@ export default function TenderlyApp() {
             <BidList tenders={tenders} selectedId={selected.id} onSelect={setSelectedId} />
             <BidWorkspace
               acknowledgeAiPolicy={acknowledgeAiPolicy}
+              setNoAiMode={setNoAiMode}
+              critiqueAnswer={critiqueAnswer}
+              critique={critique}
               tender={selected}
               stage={stage}
               setStage={setStage}
@@ -827,7 +879,7 @@ export default function TenderlyApp() {
           }} />}
           {section === "Evidence" && <EvidenceView tab={evidenceTab} setTab={setEvidenceTab} evidence={evidence} people={people} onUploadEvidence={uploadEvidenceFile} onUploadCv={uploadCvFile} onVerify={setEvidenceVerification} loading={loading} />}
           {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} loading={loading === "cv-upload"} />}
-          {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} />}
+          {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} usage={usage} />}
         </div>
       </main>
 
@@ -932,8 +984,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, setNoAiMode, critiqueAnswer, critique, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -1003,7 +1055,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
       )}
 
       {stage === "Synopsis" && <Synopsis tender={tender} onDownload={() => downloadAsset("deck")} onContinue={() => setStage("Respond")} loading={loading === "deck"} />}
-      {stage === "Respond" && <Respond tender={tender} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
+      {stage === "Respond" && <Respond tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
       {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
       {stage === "Submit" && <Submit tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
     </div>
@@ -1021,6 +1073,27 @@ function Synopsis({ tender, onDownload, onContinue, loading }: { tender: Tender;
       </div>
       <div className="bottom-action"><span><strong>Ready to bid?</strong><small>Tenderly will turn evaluation criteria into a controlled response workspace.</small></span><button className="continue-btn" onClick={onContinue}>Let’s go <span>→</span></button></div>
     </div>
+  );
+}
+
+type AnswerCritique = { questionId: string; strengths: string[]; gaps: string[]; missingEvidence: string[] };
+
+/**
+ * A review of text the user wrote. Deliberately three lists and no prose: in a
+ * tender that prohibits AI-generated content, a "suggested rewrite" would be
+ * exactly the thing that is prohibited.
+ */
+function CritiquePanel({ critique }: { critique: AnswerCritique }) {
+  const section = (title: string, items: string[], tone: string) => items.length > 0 && (
+    <div className={`critique-group ${tone}`}><strong>{title}</strong><ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></div>
+  );
+  return (
+    <section className="panel critique-panel" data-testid="critique-panel">
+      <div className="panel-heading"><div><h2>Critique of your answer</h2><p>What this text does well and where it misses the requirement. No replacement wording is offered.</p></div></div>
+      {section("Strengths", critique.strengths, "pass")}
+      {section("Gaps against the requirement", critique.gaps, "review")}
+      {section("Missing evidence", critique.missingEvidence, "review")}
+    </section>
   );
 }
 
@@ -1046,7 +1119,7 @@ function ProvenanceBadge({ entry }: { entry?: ProvenanceEntry }) {
   );
 }
 
-function Respond({ tender, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue }: { tender: Tender; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
+function Respond({ tender, setNoAiMode, critiqueAnswer, critique, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue }: { tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
   const [activeId, setActiveId] = useState(tender.questions[0]?.id ?? "");
   const active = tender.questions.find((question) => question.id === activeId) ?? tender.questions[0];
   if (!active) return <div className="no-questions panel"><span>◇</span><h2>Import the full tender pack first</h2><p>The notice gives Tenderly the opportunity metadata. The RFT / RFQ documents are needed to extract scored questions, word limits, mandatory roles and response templates.</p><FileButton label={loading === "upload" ? "Uploading…" : "Upload tender documents"} accept=".pdf,.docx,.xlsx,.xls,.pptx,.zip,.txt,.xml" onFile={(file) => uploadTenderFile(file, "source")} /></div>;
@@ -1067,17 +1140,27 @@ function Respond({ tender, draftAnswer, markAnswerReady, uploadTenderFile, loadi
         )}
       </aside>
       <section className="answer-editor">
-        {tender.aiUsePolicy?.state === "prohibited" && (
+        {tender.noAiMode ? (
+          <div className="no-ai-banner" data-testid="no-ai-banner">
+            <strong>No-AI mode: generation disabled for this tender</strong>
+            <p>Analysis, the requirement checklist, gap analysis and critique of what you write all still work. Drafting does not.</p>
+            <button className="text-action" onClick={() => setNoAiMode(false)} disabled={loading === "no-ai-mode"}>Turn off</button>
+          </div>
+        ) : tender.aiUsePolicy?.state === "prohibited" && (
           <div className="ai-policy-prompt" data-testid="no-ai-prompt">
             <strong>This tender prohibits AI-generated content.</strong>
             <p>“{tender.aiUsePolicy.quote}” — {tender.aiUsePolicy.source || "tender pack"}. Enable no-AI mode for this tender before using any draft control.</p>
+            <button className="quiet-btn" onClick={() => setNoAiMode(true)} disabled={loading === "no-ai-mode"}>Enable no-AI mode</button>
           </div>
         )}
         <div className="answer-head"><div><p className="eyebrow">SCORED QUESTION · {active.weight}%</p><h2>{active.title}</h2><p>{active.prompt}</p><ProvenanceBadge entry={active.provenance} /></div><div className="mark-badge"><strong>{active.weight}</strong><small>marks</small></div></div>
         <div className="answer-brief"><div><span>✦</span><p><strong>Tenderly writing brief</strong><small>Answer the question directly, lead with the outcome, evidence every material claim, and reserve ~10% of words for measurable controls and assurance.</small></p></div><button>View scoring logic</button></div>
         <div className="editor-toolbar"><button><b>B</b></button><button><i>I</i></button><button>≡</button><button>• list</button><span /><button>Insert evidence ⌄</button></div>
         <textarea value={active.answer} onChange={(event) => updateQuestion(active.id, event.target.value)} placeholder="Draft your response here, or ask Tenderly to build a first draft from verified evidence…" />
-        <div className="editor-foot"><span>{active.answer.trim() ? active.answer.trim().split(/\s+/).length : 0} / {active.maxWords || "—"} words</span><div>{active.status === "ready" ? <button className="ready-button" disabled>✓ Reviewed & ready</button> : <button className="quiet-btn" onClick={() => markAnswerReady(active.id)} disabled={loading === `ready-${active.id}`}>{loading === `ready-${active.id}` ? "Saving…" : "Mark reviewed & ready"}</button>}<button className="ai-draft" onClick={() => draftAnswer(active.id)} disabled={loading === active.id}>{loading === active.id ? "Drafting…" : "✦ Draft from evidence"}</button></div></div>
+        <div className="editor-foot"><span>{active.answer.trim() ? active.answer.trim().split(/\s+/).length : 0} / {active.maxWords || "—"} words</span><div>{active.status === "ready" ? <button className="ready-button" disabled>✓ Reviewed & ready</button> : <button className="quiet-btn" onClick={() => markAnswerReady(active.id)} disabled={loading === `ready-${active.id}`}>{loading === `ready-${active.id}` ? "Saving…" : "Mark reviewed & ready"}</button>}{tender.noAiMode
+          ? <button className="quiet-btn" onClick={() => critiqueAnswer(active.id)} disabled={loading === `critique-${active.id}`}>{loading === `critique-${active.id}` ? "Reviewing…" : "◇ Critique what I wrote"}</button>
+          : <button className="ai-draft" onClick={() => draftAnswer(active.id)} disabled={loading === active.id}>{loading === active.id ? "Drafting…" : "✦ Draft from evidence"}</button>}</div></div>
+        {critique?.questionId === active.id && <CritiquePanel critique={critique} />}
         <section className="evidence-strip"><div className="evidence-title"><span>◇</span><p><strong>Evidence Tenderly will use</strong><small>Only approved library facts are passed into the draft.</small></p></div>{active.evidence.map((item) => <span className={item.toLowerCase().includes("needed") ? "missing" : ""} key={item}>{item.toLowerCase().includes("needed") ? "!" : "✓"} {item}</span>)}<button>＋ Attach evidence</button></section>
         <div className="response-next"><span><strong>Response readiness</strong><small>{tender.questions.filter((q) => q.status === "ready").length} of {tender.questions.length} sections ready</small></span><button className="continue-btn" onClick={onContinue}>Assemble pack <span>→</span></button></div>
       </section>
@@ -1162,7 +1245,36 @@ function TeamView({ people, onUploadCv, loading }: { people: PersonItem[]; onUpl
   return <div className="library-page"><div className="section-intro"><div><p className="eyebrow">TEAM & PARTNERS</p><h2>Know your bid shape before you write.</h2><p>Tenderly maps required roles to CV evidence and only flags a tie-up when a concrete capability, capacity or credential gap remains.</p></div><FileButton label={loading ? "Extracting…" : "＋ Add person / CV"} accept=".pdf,.docx,.txt" onFile={onUploadCv} /></div><div className="team-grid">{people.map((person) => <section className="panel team-card" key={person.id}><span className="cv-avatar">{person.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "CV"}</span><div><h3>{person.name}</h3><p>{person.title || "Parsed CV profile"}</p></div><strong>Available to match</strong><small>{person.skills.length ? person.skills.join(" · ") : "Tenderly will match requirements against the full extracted CV text."}</small></section>)}<section className="panel gap-card"><span>＋</span><h3>Build your partner bench</h3><p>Add trusted associates or partner CVs here. A tender analysis will identify exactly which required role or credential still lacks evidence.</p><FileButton label="Add partner CV" accept=".pdf,.docx,.txt" onFile={onUploadCv} /></section></div></div>;
 }
 
-function SettingsView({ isDemo, sectors, preferences, onSave, loading }: { isDemo: boolean; sectors: SectorPreset[]; preferences: DiscoveryPreferences; onSave: (preferences: DiscoveryPreferences) => void; loading: string }) {
+/**
+ * What this account has spent on model calls this month.
+ *
+ * The figures are the metered totals, not an estimate: every model call writes
+ * a row, and this reads them back. Only this account's rows are ever counted.
+ */
+function AiUsagePanel({ usage }: { usage: UsageTotals | null }) {
+  if (!usage) return null;
+  const label: Record<string, string> = { analysis: "Tender analyses", draft: "Answer drafts", critique: "Critiques" };
+  return (
+    <section className="panel settings-list" data-testid="ai-usage">
+      <div><span><strong>AI usage this month</strong><small>{usage.month} · what your account has used. Tokens are the unit AI is billed in.</small></span></div>
+      <div className="usage-totals">
+        <span><strong>{usage.actions}</strong><small>AI actions</small></span>
+        <span><strong>{usage.inputTokens.toLocaleString()}</strong><small>input tokens</small></span>
+        <span><strong>{usage.outputTokens.toLocaleString()}</strong><small>output tokens</small></span>
+      </div>
+      {usage.byKind.length > 0 && (
+        <ul className="usage-breakdown">
+          {usage.byKind.map((row) => (
+            <li key={row.kind}><strong>{label[row.kind] ?? row.kind}</strong><small>{row.actions} · {(row.inputTokens + row.outputTokens).toLocaleString()} tokens</small></li>
+          ))}
+        </ul>
+      )}
+      {usage.actions === 0 && <p className="usage-empty">No AI actions recorded this month.</p>}
+    </section>
+  );
+}
+
+function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage }: { isDemo: boolean; sectors: SectorPreset[]; preferences: DiscoveryPreferences; onSave: (preferences: DiscoveryPreferences) => void; loading: string; usage: UsageTotals | null }) {
   const [draft, setDraft] = useState<DiscoveryPreferences>(preferences);
   const [keywordText, setKeywordText] = useState(preferences.keywords.join(", "));
   const [cpvText, setCpvText] = useState(preferences.cpvCodes.join(", "));
@@ -1198,6 +1310,8 @@ function SettingsView({ isDemo, sectors, preferences, onSave, loading }: { isDem
 
   return <div className="settings-page">
     <div className="section-intro"><div><p className="eyebrow">SETTINGS</p><h2>What should Tenderly watch for?</h2><p>Pick the kind of work you bid for. Tenderly turns that into the CPV codes and keywords behind the scenes — you never have to go code-hunting on eTenders.</p></div></div>
+
+    <AiUsagePanel usage={usage} />
 
     <section className="panel settings-list" data-testid="discovery-preferences">
       <div><span><strong>Sectors you bid in</strong><small>Tick what applies. Discover shows only opportunities matching these.</small></span></div>

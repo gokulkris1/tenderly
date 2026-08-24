@@ -192,6 +192,28 @@ export type ProvenanceEntry = {
   createdAt: string;
 };
 
+/** One metered model call. See src/usage.ts. */
+export type UsageEvent = {
+  id: string;
+  accountId: string;
+  kind: "analysis" | "draft" | "critique";
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  requestId?: string;
+  tenderId?: string;
+  createdAt: string;
+};
+
+/** An account's model usage over one calendar month. */
+export type UsageTotals = {
+  month: string;
+  actions: number;
+  inputTokens: number;
+  outputTokens: number;
+  byKind: { kind: string; actions: number; inputTokens: number; outputTokens: number }[];
+};
+
 export type PersonRecord = {
   id: string;
   accountId: string;

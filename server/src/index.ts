@@ -7,8 +7,8 @@ import multer from "multer";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { accountId, actorEmail, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
-import { aiConfigured, aiModel, analyseTender, draftBidAnswer } from "./ai.js";
-import { classForHumanEdit } from "./provenance.js";
+import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer } from "./ai.js";
+import { badgeFor, classForHumanEdit } from "./provenance.js";
 import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
@@ -32,6 +32,7 @@ import {
   listProvenance,
   listTenders,
   migrateAnalysisSchema,
+  monthlyUsage,
   persistentDatabase,
   recordProvenance,
   saveAnswer,
@@ -316,6 +317,9 @@ app.post("/api/tenders/:id/answers/:questionId/draft", async (req: Authenticated
     const tender = await getTender(account, routeParam(req.params.id));
     if (!tender) return res.status(404).json({ error: "Tender not found" });
     if (!tender.analysis) return res.status(409).json({ error: "Run tender analysis before drafting responses" });
+    // Enforced here, not merely hidden in the UI: a valid token calling this
+    // route directly must be refused, and nothing may be created first.
+    if (noAiMode(tender)) return res.status(409).json({ error: NO_AI_REFUSAL });
     const questionId = routeParam(req.params.questionId);
     const question = tender.analysis.questions.find((item) => item.id === questionId);
     if (!question) return res.status(404).json({ error: "Scored question not found" });
@@ -383,6 +387,62 @@ app.post("/api/tenders/:id/checklist/:itemId", async (req: AuthenticatedRequest,
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
+/** True when this tender is in no-AI mode. Stored on the tender, not the account. */
+function noAiMode(tender: { metadata: Record<string, unknown> }) {
+  return tender.metadata.noAiMode === true;
+}
+
+const NO_AI_REFUSAL = "No-AI mode is enabled for this tender: generation is disabled";
+
+/**
+ * Turns no-AI mode on or off for one tender.
+ *
+ * Enabling it does not rewrite anything that already exists. Answers a model
+ * drafted keep their ai-generated provenance, and the response names them so
+ * the user can decide what to do about them rather than discovering it later.
+ */
+app.put("/api/tenders/:id/no-ai-mode", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
+    await updateTenderMetadata(account, tender.id, { noAiMode: enabled });
+
+    const answers = await listAnswers(tender.id);
+    const provenance = await tenderProvenance(tender.id);
+    const byAnswer = new Map<string, typeof provenance>();
+    for (const item of provenance) byAnswer.set(item.answerId, [...(byAnswer.get(item.answerId) ?? []), item]);
+    const titleFor = (questionId: string) =>
+      tender.analysis?.questions.find((question) => question.id === questionId)?.title ?? questionId;
+    const generated = enabled
+      ? answers.filter((answer) => badgeFor(byAnswer.get(answer.id) ?? [])?.class !== "human" && (byAnswer.get(answer.id) ?? []).length > 0)
+        .map((answer) => titleFor(answer.questionId))
+      : [];
+    res.json({ noAiMode: enabled, aiWrittenAnswers: generated });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Critiques an answer the user wrote. Available in no-AI mode: judging text is
+ * assistance, writing it is generation, and only the latter is disabled.
+ */
+app.post("/api/tenders/:id/answers/:questionId/critique", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender?.analysis) return res.status(404).json({ error: "Tender analysis not found" });
+    const questionId = routeParam(req.params.questionId);
+    const question = tender.analysis.questions.find((item) => item.id === questionId);
+    if (!question) return res.status(404).json({ error: "Scored question not found" });
+    const answers = await listAnswers(tender.id);
+    const answer = answers.find((item) => item.questionId === questionId);
+    if (!answer?.response.trim()) return res.status(409).json({ error: "Write an answer before asking for a critique" });
+    const critique = await critiqueBidAnswer({ tender, question, answer: answer.response, evidence: await listEvidence(account) });
+    res.json(critique);
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
 /**
  * Records that a person has seen the AI-use flag. Dismissing it does not change
  * what the pack says — the state and its quote stay exactly as extracted — it
@@ -397,6 +457,13 @@ app.post("/api/tenders/:id/ai-policy/acknowledge", async (req: AuthenticatedRequ
     const acknowledgement = { action, actor: actorEmail(req), at: new Date().toISOString() };
     await updateTenderMetadata(account, tender.id, { aiPolicyAcknowledgement: acknowledgement });
     res.json({ acknowledgement });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** This account's model usage for the current calendar month. */
+app.get("/api/usage", async (req: AuthenticatedRequest, res) => {
+  try {
+    res.json({ usage: await monthlyUsage(accountId(req)) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

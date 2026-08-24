@@ -1,10 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { bidAnswerDraftSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
-import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, DRAFTING_PROMPT } from "./prompts/index.js";
+import { answerCritiqueSchema, bidAnswerDraftSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
+import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, CRITIQUE_PROMPT, DRAFTING_PROMPT } from "./prompts/index.js";
 import { withStableIds } from "./analysis-schema.js";
 import { reconcileGates, rollUpEligibility } from "./eligibility.js";
-import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, TenderAnalysis, TenderRecord } from "./types.js";
+import { recordUsage } from "./db.js";
+import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, TenderAnalysis, TenderRecord, UsageEvent } from "./types.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
 /** Model is pinned by configuration, not by the caller. */
@@ -50,6 +51,41 @@ function parseToolResult<T>(response: Anthropic.Message, schema: z.ZodType<T>, w
   return result.data;
 }
 
+/**
+ * The one place a model call is made.
+ *
+ * Every capability goes through here so that no future call site can be added
+ * without being metered — the meter is a property of the wrapper, not of each
+ * caller remembering to write a row.
+ *
+ * Metering never blocks or fails the user's request: a lost row costs billing
+ * accuracy, a failed request costs the user their work. Failures are logged.
+ */
+async function callModel(args: {
+  kind: UsageEvent["kind"];
+  accountId?: string;
+  tenderId?: string;
+  request: Anthropic.MessageCreateParamsNonStreaming;
+}): Promise<Anthropic.Message> {
+  const response = await client!.messages.create(args.request);
+  if (args.accountId) {
+    try {
+      await recordUsage({
+        accountId: args.accountId,
+        kind: args.kind,
+        model: args.request.model,
+        inputTokens: response.usage?.input_tokens ?? 0,
+        outputTokens: response.usage?.output_tokens ?? 0,
+        requestId: response.id,
+        tenderId: args.tenderId,
+      });
+    } catch (error) {
+      console.error(`usage metering failed for ${args.kind}:`, error instanceof Error ? error.message : error);
+    }
+  }
+  return response;
+}
+
 function sourceFallback(tender: TenderRecord, company: CompanyProfile): TenderAnalysis {
   const isOpen = /^open\b/i.test(tender.procedure);
   const framework = /framework/i.test(`${tender.title} ${tender.description}`);
@@ -93,14 +129,17 @@ export async function analyseTender(tender: TenderRecord, company: CompanyProfil
   });
 
   const { tool, choice } = forcedTool("record_tender_analysis", "Record the complete qualification analysis of this tender.", tenderAnalysisSchema);
-  const response = await client.messages.create({
-    model,
-    max_tokens: ANALYSIS_MAX_TOKENS,
-    system: instructions,
-    messages: [{ role: "user", content: input }],
-    tools: [tool],
-    tool_choice: choice,
-    output_config: { effort: "high" },
+  const response = await callModel({
+    kind: "analysis", accountId: tender.accountId, tenderId: tender.id,
+    request: {
+      model,
+      max_tokens: ANALYSIS_MAX_TOKENS,
+      system: instructions,
+      messages: [{ role: "user", content: input }],
+      tools: [tool],
+      tool_choice: choice,
+      output_config: { effort: "high" },
+    },
   });
   // The model invents ids; replace them with ones derived from the questions themselves.
   const analysis = parseToolResult(response, tenderAnalysisSchema, "analysis") as TenderAnalysis;
@@ -139,16 +178,56 @@ export async function draftBidAnswer(args: {
     priorAnswers: args.existingAnswers.map((answer) => ({ questionId: answer.questionId, response: answer.response })),
   };
   const { tool, choice } = forcedTool("record_bid_answer", "Record the drafted answer to this scored question.", bidAnswerDraftSchema);
-  const response = await client.messages.create({
-    model,
-    max_tokens: DRAFT_MAX_TOKENS,
-    system: instructions,
-    messages: [{ role: "user", content: JSON.stringify(payload) }],
-    tools: [tool],
-    tool_choice: choice,
-    output_config: { effort: "high" },
+  const response = await callModel({
+    kind: "draft", accountId: args.tender.accountId, tenderId: args.tender.id,
+    request: {
+      model,
+      max_tokens: DRAFT_MAX_TOKENS,
+      system: instructions,
+      messages: [{ role: "user", content: JSON.stringify(payload) }],
+      tools: [tool],
+      tool_choice: choice,
+      output_config: { effort: "high" },
+    },
   });
   return parseToolResult(response, bidAnswerDraftSchema, "drafting") as BidAnswerDraft;
+}
+
+/**
+ * Critiques an answer a person wrote. This is the one model capability that
+ * survives no-AI mode: judging text is assistance, writing it is generation.
+ * The forced schema has no prose field, so a replacement answer cannot come back
+ * even if the model tried to offer one.
+ */
+export async function critiqueBidAnswer(args: {
+  tender: TenderRecord;
+  question: TenderAnalysis["questions"][number];
+  answer: string;
+  evidence: EvidenceRecord[];
+}) {
+  if (!client) {
+    return { strengths: [], gaps: ["Configure ANTHROPIC_API_KEY to critique this answer"], missingEvidence: [] };
+  }
+  const payload = {
+    question: args.question,
+    awardCriteria: args.tender.analysis?.evaluationCriteria ?? [],
+    answer: args.answer,
+    approvedEvidence: args.evidence.filter((item) => item.verified).map((item) => ({ name: item.name, kind: item.kind })),
+  };
+  const { tool, choice } = forcedTool("record_answer_critique", "Record a critique of the answer the bidder wrote. Never supply replacement prose.", answerCritiqueSchema);
+  const response = await callModel({
+    kind: "critique", accountId: args.tender.accountId, tenderId: args.tender.id,
+    request: {
+      model,
+      max_tokens: DRAFT_MAX_TOKENS,
+      system: CRITIQUE_PROMPT,
+      messages: [{ role: "user", content: JSON.stringify(payload) }],
+      tools: [tool],
+      tool_choice: choice,
+      output_config: { effort: "high" },
+    },
+  });
+  return parseToolResult(response, answerCritiqueSchema, "critique");
 }
 
 export function aiConfigured() { return Boolean(client); }

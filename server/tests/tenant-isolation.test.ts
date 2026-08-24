@@ -84,6 +84,8 @@ function crossTenantCases(owner: Tenant) {
     { method: "PUT", path: `/api/tenders/${owner.tenderId}/answers/${owner.questionId}`, body: { response: "stolen", status: "ready" } },
     { method: "GET", path: `/api/tenders/${owner.tenderId}/answers/${owner.questionId}/provenance` },
     { method: "POST", path: `/api/tenders/${owner.tenderId}/ai-policy/acknowledge`, body: { action: "dismissed" } },
+    { method: "PUT", path: `/api/tenders/${owner.tenderId}/no-ai-mode`, body: { enabled: true } },
+    { method: "POST", path: `/api/tenders/${owner.tenderId}/answers/${owner.questionId}/critique`, body: {} },
     { method: "POST", path: `/api/tenders/${owner.tenderId}/checklist/${owner.checklistId}`, body: { status: "READY" } },
     { method: "GET", path: `/api/tenders/${owner.tenderId}/red-team` },
     { method: "GET", path: `/api/tenders/${owner.tenderId}/deck` },
@@ -139,7 +141,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
   // Routes that carry no tenant-owned resource: they read or write only the caller's own scope.
   const ownScopeOnly = [
     "GET /api/me", "GET /api/company", "PUT /api/company", "GET /api/sectors",
-    "GET /api/preferences", "PUT /api/preferences", "GET /api/tenders",
+    "GET /api/preferences", "PUT /api/preferences", "GET /api/tenders", "GET /api/usage",
     "GET /api/tenders/discover", "POST /api/tenders/import", "GET /api/evidence",
     "POST /api/evidence", "POST /api/evidence/upload", "GET /api/people",
     "POST /api/people", "POST /api/people/upload", "GET /api/notifications",
@@ -150,7 +152,8 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     "GET /api/tenders/:id", "POST /api/tenders/:id/analyse",
     "POST /api/tenders/:id/answers/:questionId/draft", "PUT /api/tenders/:id/answers/:questionId",
     "GET /api/tenders/:id/answers/:questionId/provenance",
-    "POST /api/tenders/:id/ai-policy/acknowledge",
+    "POST /api/tenders/:id/ai-policy/acknowledge", "PUT /api/tenders/:id/no-ai-mode",
+    "POST /api/tenders/:id/answers/:questionId/critique",
     "POST /api/tenders/:id/checklist/:itemId", "GET /api/tenders/:id/red-team",
     "GET /api/tenders/:id/deck", "GET /api/tenders/:id/pack",
     "PUT /api/evidence/:id/verification",
