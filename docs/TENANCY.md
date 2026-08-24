@@ -332,5 +332,7 @@ Steps 1 to 4 and the application deploy shipped in TLY-86 as migrations
 `server/migrations/rollback/025_repoint_tenancy_down.sql`. The rollback file
 carries the two guards described above and refuses to run once they are false.
 
-Invitations are TLY-87 and role enforcement is TLY-88. Until TLY-87 ships, the
-window in which rollback is exact is still open.
+Invitations shipped in TLY-87, so **the window in which rollback is exact is
+closed**. From here on, a rollback is exact only for a database in which no
+invitation has yet been accepted — the guards in the rollback file check that
+and refuse when it is false. Role enforcement is TLY-88.
