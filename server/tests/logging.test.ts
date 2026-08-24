@@ -19,7 +19,7 @@ server.unref();
 
 const email = `log-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
 const user = await createUser(email, await bcrypt.hash("correct-horse-battery", 4), "Logging Ltd");
-const token = signToken({ id: user.id, email });
+const token = signToken({ id: user.id, organisationId: user.organisationId, email });
 
 /** Captures whatever the logger writes while `run` executes. */
 async function captureLogs(run: () => Promise<void>) {
@@ -49,7 +49,7 @@ test("TLY-94 AC1: a request writes one JSON line with route, status, duration an
   assert.ok(entry, `no JSON log line for the request; got: ${lines.join(" | ").slice(0, 300)}`);
   assert.equal(entry.status, 200);
   assert.equal(typeof entry.durationMs, "number");
-  assert.equal(entry.accountId, user.id);
+  assert.equal(entry.accountId, user.organisationId);
   assert.ok(entry.requestId, "the line carries the id a user can quote");
   assert.ok(Date.parse(entry.time) > 0);
 });

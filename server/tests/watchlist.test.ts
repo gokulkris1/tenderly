@@ -18,7 +18,7 @@ server.unref();
 async function makeAccount(label: string) {
   const email = `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   const user = await createUser(email, await bcrypt.hash("x", 4), `${label} Ltd`);
-  return { id: user.id, email, headers: { authorization: `Bearer ${signToken({ id: user.id, email })}`, "content-type": "application/json" } };
+  return { id: user.organisationId, email, headers: { authorization: `Bearer ${signToken({ id: user.id, organisationId: user.organisationId, email })}`, "content-type": "application/json" } };
 }
 
 const a = await makeAccount("watch-a");

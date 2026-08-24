@@ -12,9 +12,9 @@ Audit date: 2026-08-19 · Branch: `TLY-0-bootstrap` · Auditor: engineering agen
 
 ## 1. System overview
 
-Tenderly v1 is a single-tenant bidder workspace for Irish public tenders (eTenders). One user
-account owns exactly one company profile — `docs/TENANCY.md` records the agreed design for
-replacing that with organisations and memberships, and the migration path to it. The system discovers opportunities, imports a tender by
+Tenderly v1 is a bidder workspace for Irish public tenders (eTenders). The tenant is an
+organisation, and people join it through a membership that carries their role — `docs/TENANCY.md`
+records the model and the migration that introduced it. The system discovers opportunities, imports a tender by
 URL, extracts text from the tender pack, runs AI qualification and drafting, and assembles a
 gated submission ZIP. Final submission is always a human action on eTenders.
 
@@ -73,9 +73,12 @@ Express 5, TypeScript strict ESM, Node ≥ 22. Single process, ~1,700 LOC across
 ## 4. Data model (Neon Postgres, `migrations/001_init.sql`)
 
 ```
-users (id, email UNIQUE, password_hash)
-companies (account_id UNIQUE → users, 8 structured text cols + profile_json jsonb)   -- 1:1 user↔company
-tenders (account_id → users, UNIQUE(account_id, source, external_id),
+users (id, email UNIQUE, password_hash)                                               -- a person
+organisations (id, name)                                                              -- the tenant
+memberships (organisation_id →, user_id →, role owner|editor|viewer, accepted_at,
+             UNIQUE(organisation_id, user_id))
+companies (account_id UNIQUE → organisations, 8 structured text cols + profile_json jsonb)
+tenders (account_id → organisations, UNIQUE(account_id, source, external_id),
          metadata jsonb, analysis jsonb, status IMPORTED|ANALYSED)
 tender_documents (tender_id →, role source|submission|evidence, bytes bytea,
                   extracted_text, extraction_status)                                  -- files stored in-DB
@@ -86,7 +89,7 @@ people (account_id →, name, title, cv_text, skills jsonb)
 notifications (account_id →, UNIQUE(account_id, external_id), match_score, payload jsonb)
 ```
 
-Indexes: PKs, unique constraints, `tender_documents(tender_id)`, `notifications(account_id, created_at DESC)` only. Analysis and metadata are unversioned jsonb blobs; question IDs in `bid_answers` reference IDs inside the analysis blob (re-analysis can orphan answers). All deletes cascade from `users`. No migration framework — one idempotent file re-run at every boot.
+Indexes: PKs, unique constraints, `tender_documents(tender_id)`, `notifications(account_id, created_at DESC)` only. Analysis and metadata are unversioned jsonb blobs; question IDs in `bid_answers` reference IDs inside the analysis blob (re-analysis can orphan answers). All tenant deletes cascade from `organisations`; `account_id` is the organisation that owns the row (the name predates TLY-86 — see `docs/TENANCY.md`). No migration framework — one idempotent file re-run at every boot.
 
 ## 5. Web app
 

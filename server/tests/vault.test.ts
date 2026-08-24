@@ -17,7 +17,7 @@ server.unref();
 async function makeAccount(label: string) {
   const email = `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   const user = await createUser(email, await bcrypt.hash("x", 4), `${label} Ltd`);
-  return { id: user.id, email, token: signToken({ id: user.id, email }) };
+  return { id: user.organisationId, email, token: signToken({ id: user.id, organisationId: user.organisationId, email }) };
 }
 
 const a = await makeAccount("vault-a");

@@ -222,19 +222,21 @@ After:
 stops being the tenant key and becomes what it always should have been — who is
 acting — which is what `audit_log.actor` and `bid_tasks.owner` want.
 
-**A token issued before the cutover has no `org` claim.** It keeps working for
-the rest of its twelve hours, because `requireAuth` resolves a missing `org` as
-follows:
+**A token issued before the cutover has no `org` claim, and is refused with
+`401`.** The client clears it and shows the sign-in screen, which it already
+does for any expired session.
 
-1. Look up the user's accepted memberships.
-2. Exactly one → use it, with its role. This is every pre-cutover account, by
-   construction: the backfill gave each user exactly one owner membership.
-3. Zero or more than one → `401`, and the client signs in again. Zero cannot
-   happen for a pre-cutover user (step 3's verification proves it), and more
-   than one cannot happen before invitations exist (TLY-87).
+This spike originally proposed a fallback — resolve the missing claim to the
+user's single membership and let the token live out its twelve hours. TLY-86's
+acceptance criteria overrode it, and they were right to. The fallback is a code
+path whose whole job is to guess which organisation a token meant, in the one
+subsystem where a wrong guess hands one company another company's bids. It
+would be exercised for twelve hours, once, and then sit there for years. The
+cost of not having it is that everybody signs in again once, on the day of the
+cutover, which is a thing users do anyway.
 
-So nobody is signed out by the cutover, and the fallback becomes dead code the
-day invitations ship — at which point it is deleted rather than left to rot.
+Anything a request cannot prove, it does not get: no `org` claim is not a
+puzzle to solve, it is a session that predates the model.
 
 The `role` claim is a cache of the membership row, not the authority. Roles are
 re-read from `memberships` on any request that changes data, because a token
@@ -308,9 +310,9 @@ These must be **added before step 4** and pass against both schemas:
    the claim is checked against `memberships`, not trusted.
 3. **A revoked membership takes effect immediately.** Delete the membership,
    then reuse the still-unexpired token: writes are refused.
-4. **The legacy token path.** A token with no `org` claim resolves to the
-   user's single membership; a user with two accepted memberships and no claim
-   gets 401 rather than an arbitrary organisation.
+4. **The legacy token path.** A token with no `org` claim is refused with 401
+   and no data in the body, and a token whose `org` names a user id rather than
+   an organisation reaches nothing.
 5. **Role enforcement** (with TLY-88): a viewer cannot write, an editor cannot
    export or delete the account, an owner can.
 6. **Deletion under the new parent.** `DELETE FROM organisations WHERE id=$1`
@@ -323,6 +325,12 @@ Test 6 is the one that catches a foreign key repointed in the migration but
 forgotten in the table above: a missed table keeps its `users(id)` parent,
 survives the organisation delete, and shows up as rows that should not exist.
 
-## Timebox
+## Status
 
-Two days, spent. The implementation is TLY-86.
+Steps 1 to 4 and the application deploy shipped in TLY-86 as migrations
+`024_organisations.sql` and `025_repoint_tenancy.sql`, with the rollback in
+`server/migrations/rollback/025_repoint_tenancy_down.sql`. The rollback file
+carries the two guards described above and refuses to run once they are false.
+
+Invitations are TLY-87 and role enforcement is TLY-88. Until TLY-87 ships, the
+window in which rollback is exact is still open.

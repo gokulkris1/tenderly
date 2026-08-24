@@ -1,4 +1,4 @@
-import { getUserById } from "./db.js";
+import { membershipFor } from "./db.js";
 
 /**
  * Who may export or erase an organisation's account, and on what terms.
@@ -20,21 +20,17 @@ export const GRACE_DAYS = 7;
 /** The phrase the owner must type. Deliberately not "yes" and not the org name. */
 export const CONFIRMATION_PHRASE = "DELETE MY ACCOUNT";
 
-export type AccountRole = "owner" | "editor";
-
 /**
- * The acting user's role on this account.
+ * Whether this person owns this organisation.
  *
- * Today an account has exactly one sign-in — the address it was registered
- * with — so anyone else holding a token for it is an invited collaborator and
- * not the owner. When invitations land (TLY-88) this reads the membership row
- * instead; every caller already asks the question the right way round, so the
- * routes below do not change when it does.
+ * Read from the membership row rather than from the token's role claim: a token
+ * minted before somebody was demoted would otherwise still carry `owner` for
+ * the rest of its twelve hours, and these are the two operations where that
+ * matters most.
  */
-export async function roleFor(accountId: string, email: string): Promise<AccountRole> {
-  const user = await getUserById(accountId);
-  const registered = String(user?.email ?? "").trim().toLowerCase();
-  return registered && registered === email.trim().toLowerCase() ? "owner" : "editor";
+export async function isOwner(accountId: string, actingUserId: string) {
+  const membership = await membershipFor(accountId, actingUserId);
+  return membership?.role === "owner";
 }
 
 /** True when the typed text is the confirmation phrase. Case and padding are forgiven; wording is not. */

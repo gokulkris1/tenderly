@@ -37,15 +37,15 @@ server.unref();
 async function makeAccount(label: string) {
   const email = `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   const user = await createUser(email, await bcrypt.hash("x", 4), `${label} Ltd`);
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "seed", externalId: `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     title: `${label} tender`, authority: "Authority", procedure: "Open", deadline: "26/03/2026",
     estimatedValue: "", description: "", sourceUrl: "https://www.etenders.gov.ie/x", published: "",
     status: "ANALYSED", metadata: {},
   });
   const stored = analysis();
-  await saveTenderAnalysis(user.id, tender.id, stored);
-  return { id: user.id, token: signToken({ id: user.id, email }), tenderId: tender.id, questions: stored.questions };
+  await saveTenderAnalysis(user.organisationId, tender.id, stored);
+  return { id: user.organisationId, token: signToken({ id: user.id, organisationId: user.organisationId, email }), tenderId: tender.id, questions: stored.questions };
 }
 
 const headers = (token: string) => ({ authorization: `Bearer ${token}`, "content-type": "application/json" });

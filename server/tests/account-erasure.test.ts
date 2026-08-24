@@ -4,7 +4,7 @@ import JSZip from "jszip";
 import bcrypt from "bcryptjs";
 import { signToken } from "../src/auth.js";
 import {
-  addEvidence, addPerson, cancelAccountDeletion, createUser, deleteAccount, dueDeletions,
+  addEvidence, addMembership, addPerson, cancelAccountDeletion, createUser, deleteAccount, dueDeletions,
   findUserByEmail, initializeDatabase, listAnswers, listAudit, listEvidence, listPeople,
   listTenders, pendingDeletion,
   replacePersonFacts, requestAccountDeletion, saveAnswer, upsertTender,
@@ -28,21 +28,21 @@ const unique = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 async function populatedAccount(label: string) {
   const email = `${label}-${unique()}@example.test`;
   const user = await createUser(email, await bcrypt.hash("x", 4), `${label} Ltd`);
-  const headers = { authorization: `Bearer ${signToken({ id: user.id, email })}`, "content-type": "application/json" };
+  const headers = { authorization: `Bearer ${signToken({ id: user.id, organisationId: user.organisationId, email })}`, "content-type": "application/json" };
 
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "seed", externalId: `erasure-${unique()}`, title: `${label} tender`, authority: "Authority",
     procedure: "Open", deadline: "26/03/2027", estimatedValue: "", description: "",
     sourceUrl: "https://www.etenders.gov.ie/x", published: "", status: "ANALYSED", metadata: {},
   });
   await saveAnswer(tender.id, "seed", `${label} wrote this answer.`, "ready", []);
 
-  const evidence = await addEvidence(user.id, {
+  const evidence = await addEvidence(user.organisationId, {
     kind: "Tax clearance", name: "Tax clearance certificate", content: "Valid to 2027.", tags: [], verified: true,
     filename: "tax clearance.pdf", contentType: "application/pdf", sizeBytes: 12,
   }, Buffer.from("%PDF-1.4 tax"));
 
-  const person = await addPerson(user.id, {
+  const person = await addPerson(user.organisationId, {
     name: "Aoife Byrne", title: "Project Manager", cvText: "Fifteen years delivering public sector projects.", skills: ["PMP"],
   });
   await replacePersonFacts(person.id, [
@@ -59,7 +59,7 @@ const openExport = async (buffer: Buffer) => JSZip.loadAsync(buffer);
 
 test("TLY-97 AC1: the archive holds a JSON file per data type plus the original vault files", async () => {
   const account = await populatedAccount("export");
-  const archive = await buildAccountExport(account.user.id);
+  const archive = await buildAccountExport(account.user.organisationId);
   const zip = await openExport(archive.buffer);
 
   for (const name of ["account.json", "tenders.json", "people.json", "evidence.json", "declarations.json", "activity.json"]) {
@@ -78,7 +78,7 @@ test("TLY-97 AC1: the archive holds a JSON file per data type plus the original 
 
 test("TLY-97 AC2: the people file carries the CV text and the structured records", async () => {
   const account = await populatedAccount("people");
-  const zip = await openExport((await buildAccountExport(account.user.id)).buffer);
+  const zip = await openExport((await buildAccountExport(account.user.organisationId)).buffer);
 
   const people = JSON.parse(await zip.file("people.json")!.async("string")) as
     { name: string; cvText: string; records: { value: string }[] }[];
@@ -92,11 +92,11 @@ test("TLY-97: the archive holds this account's data and nobody else's", async ()
   const mine = await populatedAccount("mine");
   const theirs = await populatedAccount("theirs");
 
-  const zip = await openExport((await buildAccountExport(mine.user.id)).buffer);
+  const zip = await openExport((await buildAccountExport(mine.user.organisationId)).buffer);
   const text = await zip.file("tenders.json")!.async("string");
   assert.match(text, /mine tender/);
   assert.ok(!text.includes("theirs tender"), "an export that leaks is worse than no export");
-  assert.ok(!(await zip.file("people.json")!.async("string")).includes(theirs.user.id));
+  assert.ok(!(await zip.file("people.json")!.async("string")).includes(theirs.user.organisationId));
 });
 
 test("TLY-97 AC1: the owner can download the archive over the API", async () => {
@@ -112,9 +112,14 @@ test("TLY-97 AC1: the owner can download the archive over the API", async () => 
 
 test("TLY-97 AC3: an editor gets 403 for both the export and the deletion, and neither starts", async () => {
   const account = await populatedAccount("editor");
-  // A collaborator holds a token for the same account under their own address.
+  // A colleague with their own sign-in and an editor's place in the same
+  // organisation: not a different tenant, just somebody who may not do this.
+  const colleagueEmail = `editor-${unique()}@example.test`;
+  const colleague = await createUser(colleagueEmail, await bcrypt.hash("x", 4), "Ignored Ltd");
+  await addMembership(account.user.organisationId, colleague.id, "editor");
   const editor = {
-    authorization: `Bearer ${signToken({ id: account.user.id, email: `editor-${unique()}@example.test` })}`,
+    authorization: `Bearer ${signToken({ id: colleague.id, organisationId: account.user.organisationId, email: colleagueEmail, role: "editor",
+    })}`,
     "content-type": "application/json",
   };
 
@@ -126,7 +131,7 @@ test("TLY-97 AC3: an editor gets 403 for both the export and the deletion, and n
     method: "POST", headers: editor, body: JSON.stringify({ confirmation: CONFIRMATION_PHRASE }),
   });
   assert.equal(deletion.status, 403);
-  assert.equal(await pendingDeletion(account.user.id), null, "and nothing was scheduled");
+  assert.equal(await pendingDeletion(account.user.organisationId), null, "and nothing was scheduled");
 });
 
 test("TLY-97 AC4: the confirmation phrase has to be typed, or nothing is scheduled", async () => {
@@ -137,7 +142,7 @@ test("TLY-97 AC4: the confirmation phrase has to be typed, or nothing is schedul
   });
   assert.equal(wrong.status, 400);
   assert.match((await wrong.json() as { error: string }).error, new RegExp(CONFIRMATION_PHRASE));
-  assert.equal(await pendingDeletion(account.user.id), null);
+  assert.equal(await pendingDeletion(account.user.organisationId), null);
 
   assert.equal(confirmsDeletion("  delete my account  "), true, "padding and case are the user's typing, not their intent");
   assert.equal(confirmsDeletion("delete account"), false);
@@ -154,12 +159,12 @@ test("TLY-97 AC4: a confirmed request schedules a deletion and changes nothing y
   assert.equal(body.daysRemaining, GRACE_DAYS);
 
   // The point of a grace period is that the account still works during it.
-  assert.equal((await listTenders(account.user.id)).length, 1);
+  assert.equal((await listTenders(account.user.organisationId)).length, 1);
   assert.equal((await fetch(`${base}/api/account/deletion`, { headers: account.headers })).status, 200);
   assert.ok(await findUserByEmail(account.email));
 
   const due = await dueDeletions();
-  assert.ok(!due.some((entry) => entry.accountId === account.user.id), "it is not due for another week");
+  assert.ok(!due.some((entry) => entry.accountId === account.user.organisationId), "it is not due for another week");
 });
 
 test("TLY-97 AC5: cancelling inside the grace period leaves everything present", async () => {
@@ -173,12 +178,12 @@ test("TLY-97 AC5: cancelling inside the grace period leaves everything present",
 
   const state = await (await fetch(`${base}/api/account/deletion`, { headers: account.headers })).json() as { pending: unknown };
   assert.equal(state.pending, null);
-  assert.equal((await listTenders(account.user.id)).length, 1);
-  assert.equal((await listEvidence(account.user.id)).length, 1);
-  assert.equal((await listPeople(account.user.id)).length, 1);
+  assert.equal((await listTenders(account.user.organisationId)).length, 1);
+  assert.equal((await listEvidence(account.user.organisationId)).length, 1);
+  assert.equal((await listPeople(account.user.organisationId)).length, 1);
   assert.ok(await findUserByEmail(account.email), "and they can still sign in");
 
-  assert.ok(!(await dueDeletions()).some((entry) => entry.accountId === account.user.id));
+  assert.ok(!(await dueDeletions()).some((entry) => entry.accountId === account.user.organisationId));
 });
 
 test("TLY-97: cancelling when nothing is pending says so rather than reporting success", async () => {
@@ -192,32 +197,32 @@ test("TLY-97 AC4 and AC6: the due deletion removes this account and only this ac
   const bystander = await populatedAccount("bystander");
 
   // Requested with no grace period, which is what the job sees once one expires.
-  const request = await requestAccountDeletion(doomed.user.id, doomed.email, 0);
-  assert.ok((await dueDeletions()).some((entry) => entry.accountId === doomed.user.id));
+  const request = await requestAccountDeletion(doomed.user.organisationId, doomed.email, 0);
+  assert.ok((await dueDeletions()).some((entry) => entry.accountId === doomed.user.organisationId));
 
-  assert.equal(await deleteAccount(doomed.user.id, request.requestedBy, request.requestedAt), true);
+  assert.equal(await deleteAccount(doomed.user.organisationId, request.requestedBy, request.requestedAt), true);
 
   assert.equal(await findUserByEmail(doomed.email), null, "signing in with that account fails");
-  assert.deepEqual(await listTenders(doomed.user.id), []);
-  assert.deepEqual(await listEvidence(doomed.user.id), []);
-  assert.deepEqual(await listPeople(doomed.user.id, { includeArchived: true }), []);
+  assert.deepEqual(await listTenders(doomed.user.organisationId), []);
+  assert.deepEqual(await listEvidence(doomed.user.organisationId), []);
+  assert.deepEqual(await listPeople(doomed.user.organisationId, { includeArchived: true }), []);
   assert.deepEqual(await listAnswers(doomed.tenderId), [], "the answers went with the tender");
-  assert.deepEqual(await listAudit(doomed.user.id, {}), [], "and so did the account's own log");
+  assert.deepEqual(await listAudit(doomed.user.organisationId, {}), [], "and so did the account's own log");
 
   assert.ok(await findUserByEmail(bystander.email), "another organisation is not collateral");
-  assert.equal((await listTenders(bystander.user.id)).length, 1);
-  assert.equal((await listEvidence(bystander.user.id)).length, 1);
+  assert.equal((await listTenders(bystander.user.organisationId)).length, 1);
+  assert.equal((await listEvidence(bystander.user.organisationId)).length, 1);
 });
 
 test("TLY-97: a second request replaces the first rather than stacking two deadlines", async () => {
   const account = await populatedAccount("restated");
-  await requestAccountDeletion(account.user.id, account.email, GRACE_DAYS);
-  const second = await requestAccountDeletion(account.user.id, account.email, 30);
+  await requestAccountDeletion(account.user.organisationId, account.email, GRACE_DAYS);
+  const second = await requestAccountDeletion(account.user.organisationId, account.email, 30);
 
-  const pending = await pendingDeletion(account.user.id);
+  const pending = await pendingDeletion(account.user.organisationId);
   assert.equal(pending?.id, second.id, "two pending deletions would mean two different answers to when");
-  assert.equal(await cancelAccountDeletion(account.user.id), true);
-  assert.equal(await cancelAccountDeletion(account.user.id), false, "and one cancel clears it");
+  assert.equal(await cancelAccountDeletion(account.user.organisationId), true);
+  assert.equal(await cancelAccountDeletion(account.user.organisationId), false, "and one cancel clears it");
 });
 
 test("TLY-97: the countdown never runs negative", () => {

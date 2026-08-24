@@ -51,7 +51,7 @@ server.unref();
 
 const email = `runbook-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
 const user = await createUser(email, await bcrypt.hash("x", 4), "Runbook Ltd");
-const headers = { authorization: `Bearer ${signToken({ id: user.id, email })}`, "content-type": "application/json" };
+const headers = { authorization: `Bearer ${signToken({ id: user.id, organisationId: user.organisationId, email })}`, "content-type": "application/json" };
 
 test("TLY-82 AC1: every required document is its own upload step, in the pack's order", () => {
   const runbook = buildRunbook(record(analysis()), analysis());
@@ -99,12 +99,12 @@ test("TLY-82: an unstated channel or deadline says so rather than guessing", () 
 });
 
 test("TLY-82 AC2: ticks persist and are counted", async () => {
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "seed", externalId: `runbook-${Date.now()}`, title: "Ticked tender", authority: "Authority",
     procedure: "Open", deadline: "26/03/2026 12:00", estimatedValue: "", description: "",
     sourceUrl: "https://www.etenders.gov.ie/x", published: "", status: "ANALYSED", metadata: {},
   });
-  await saveTenderAnalysis(user.id, tender.id, analysis());
+  await saveTenderAnalysis(user.organisationId, tender.id, analysis());
 
   const before = await fetch(`${base}/api/tenders/${tender.id}/runbook`, { headers })
     .then((r) => r.json() as Promise<{ runbook: { steps: { id: string; done: boolean }[] }; completed: number; total: number }>);
@@ -124,12 +124,12 @@ test("TLY-82 AC2: ticks persist and are counted", async () => {
 });
 
 test("TLY-82: a step that is not in the runbook cannot be ticked", async () => {
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "seed", externalId: `runbook-bad-${Date.now()}`, title: "Bad step tender", authority: "Authority",
     procedure: "Open", deadline: "26/03/2026", estimatedValue: "", description: "",
     sourceUrl: "https://www.etenders.gov.ie/x", published: "", status: "ANALYSED", metadata: {},
   });
-  await saveTenderAnalysis(user.id, tender.id, analysis());
+  await saveTenderAnalysis(user.organisationId, tender.id, analysis());
 
   const response = await fetch(`${base}/api/tenders/${tender.id}/runbook/step-invented`, {
     method: "POST", headers, body: JSON.stringify({ done: true }),
@@ -139,13 +139,13 @@ test("TLY-82: a step that is not in the runbook cannot be ticked", async () => {
 
 test("TLY-82 AC4: the final ZIP carries the runbook, listing the same steps", async () => {
   const stored = analysis();
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "seed", externalId: `runbook-zip-${Date.now()}`, title: "Packed tender", authority: "Authority",
     procedure: "Open", deadline: "26/03/2026 12:00", estimatedValue: "", description: "",
     sourceUrl: "https://www.etenders.gov.ie/x", published: "", status: "ANALYSED", metadata: {},
   });
-  await saveTenderAnalysis(user.id, tender.id, stored);
-  await addEvidence(user.id, { kind: "Case study", name: "Reference", content: "x", tags: [], verified: true });
+  await saveTenderAnalysis(user.organisationId, tender.id, stored);
+  await addEvidence(user.organisationId, { kind: "Case study", name: "Reference", content: "x", tags: [], verified: true });
   await saveAnswer(tender.id, "seed", "An answer.", "ready", []);
 
   const result = await createSubmissionPack({

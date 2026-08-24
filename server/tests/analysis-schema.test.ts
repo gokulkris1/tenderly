@@ -90,13 +90,13 @@ test("TLY-40 AC1 and AC4: migration keeps a ready answer attached to its questio
   // points at a Postgres service container that no earlier step has migrated.
   await initializeDatabase();
   const user = await createUser(`tly40-${Date.now()}@example.test`, "hash", "Migration Ltd");
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "etenders", externalId: `tly40-${Date.now()}`, title: "Stage 0 Energy Audit", authority: "Sample Authority",
     procedure: "Open", deadline: "26/03/2026", estimatedValue: "", description: "", sourceUrl: "https://www.etenders.gov.ie/x",
     published: "", status: "ANALYSED", metadata: {},
   });
   // Stored as it would have been before TLY-40: no version, model-invented ids.
-  await saveTenderAnalysis(user.id, tender.id, analysisWith([quality]));
+  await saveTenderAnalysis(user.organisationId, tender.id, analysisWith([quality]));
   await saveAnswer(tender.id, "model-invented-1", "Our QMS is ISO 9001 certified.", "ready");
 
   const counts = await migrateAnalysisSchema();

@@ -31,17 +31,17 @@ server.unref();
 
 const email = `tasks-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
 const user = await createUser(email, await bcrypt.hash("x", 4), "Tasking Ltd");
-const headers = { authorization: `Bearer ${signToken({ id: user.id, email })}`, "content-type": "application/json" };
+const headers = { authorization: `Bearer ${signToken({ id: user.id, organisationId: user.organisationId, email })}`, "content-type": "application/json" };
 
 let counter = 0;
 async function makeTender() {
   counter += 1;
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "seed", externalId: `task-${Date.now()}-${counter}`, title: `Tasked tender ${counter}`,
     authority: "Authority", procedure: "Open", deadline: "26/03/2027", estimatedValue: "",
     description: "", sourceUrl: "https://www.etenders.gov.ie/x", published: "", status: "ANALYSED", metadata: {},
   });
-  await saveTenderAnalysis(user.id, tender.id, analysis());
+  await saveTenderAnalysis(user.organisationId, tender.id, analysis());
   return tender.id;
 }
 
@@ -92,7 +92,7 @@ test("TLY-84 AC3: resolving the blocker completes its task", async () => {
   assert.equal(certificate.completedAt, undefined);
 
   // Uploading and verifying the certificate is what clears the blocker.
-  await addEvidence(user.id, {
+  await addEvidence(user.organisationId, {
     kind: "Tax clearance", name: "Tax clearance certificate", content: "Valid to 2027.", tags: [], verified: true,
   });
 
@@ -171,8 +171,8 @@ test("TLY-84: tasks do not cross accounts", async () => {
   const tenderId = await makeTender();
   const otherEmail = `other-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   const other = await createUser(otherEmail, await bcrypt.hash("x", 4), "Other Ltd");
-  const otherHeaders = { authorization: `Bearer ${signToken({ id: other.id, email: otherEmail })}`, "content-type": "application/json" };
+  const otherHeaders = { authorization: `Bearer ${signToken({ id: other.id, organisationId: other.organisationId, email: otherEmail })}`, "content-type": "application/json" };
 
   assert.equal((await fetch(`${base}/api/tenders/${tenderId}/tasks`, { headers: otherHeaders })).status, 404);
-  assert.deepEqual(await listTasksForOwner(other.id, email), [], "and their own list stays empty");
+  assert.deepEqual(await listTasksForOwner(other.organisationId, email), [], "and their own list stays empty");
 });

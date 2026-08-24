@@ -95,10 +95,12 @@ npm run deletions:dry-run --prefix server   # lists what is due, deletes nothing
 npm run deletions --prefix server           # runs the due deletions
 ```
 
-The deletion is a single `DELETE FROM users`. Every table holding an account's
-data has a foreign key to `users` with `ON DELETE CASCADE`, so there is no list
-here to fall out of date, and no other organisation's rows are reachable from
-it. `award_history` is shared reference data with no account column and is
+The deletion is a single `DELETE FROM organisations`. Every table holding an
+organisation's data has a foreign key to it with `ON DELETE CASCADE`, so there
+is no list here to fall out of date, and no other organisation's rows are
+reachable from it. Sign-ins go separately, and only for people this
+organisation was the whole of: somebody who also works on a partner's account
+keeps theirs. `award_history` is shared reference data with no account column and is
 untouched by construction.
 
 One record survives: a row in `deletion_log` naming the account id, who asked

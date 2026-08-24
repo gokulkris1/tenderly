@@ -37,24 +37,24 @@ type Tenant = { token: string; tenderId: string; evidenceId: string; personId: s
 
 async function makeTenant(label: string): Promise<Tenant> {
   const user = await createUser(`${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`, await bcrypt.hash("x", 4), `${label} Ltd`);
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "seed", externalId: `${label}-${Date.now()}`, title: `${label} tender`, authority: "Authority",
     procedure: "Open", deadline: "26/03/2026", estimatedValue: "", description: "", sourceUrl: "https://www.etenders.gov.ie/x",
     published: "", status: "ANALYSED", metadata: {},
   });
   const stored = analysis();
-  await saveTenderAnalysis(user.id, tender.id, stored);
+  await saveTenderAnalysis(user.organisationId, tender.id, stored);
   const question = stored.questions[0];
   await saveAnswer(tender.id, question.id, `${label} confidential answer`, "ready", []);
-  const ev = await addEvidence(user.id, { kind: "Certificate", name: `${label} ISO`, content: `${label} confidential evidence`, tags: [], verified: true });
-  const person = await addPerson(user.id, { name: `${label} Person`, title: "Lead", cvText: `${label} confidential CV`, skills: [] });
+  const ev = await addEvidence(user.organisationId, { kind: "Certificate", name: `${label} ISO`, content: `${label} confidential evidence`, tags: [], verified: true });
+  const person = await addPerson(user.organisationId, { name: `${label} Person`, title: "Lead", cvText: `${label} confidential CV`, skills: [] });
   const facts = await replacePersonFacts(person.id, [{
     type: "certification", value: `${label} confidential certification`, detail: "Body",
     period: "2026", quote: "…", confidence: "HIGH",
   }]);
-  await savePreferences(user.id, { sectors: ["software-development"], keywords: [label], cpvCodes: [], valueMin: null, valueMax: null });
+  await savePreferences(user.organisationId, { sectors: ["software-development"], keywords: [label], cpvCodes: [], valueMin: null, valueMax: null });
   return {
-    token: signToken({ id: user.id, email: user.email }), tenderId: tender.id, evidenceId: ev.id, personId: person.id, factId: facts[0].id,
+    token: signToken({ id: user.id, organisationId: user.organisationId, email: user.email }), tenderId: tender.id, evidenceId: ev.id, personId: person.id, factId: facts[0].id,
     questionId: question.id, checklistId: stored.submissionChecklist[0].id,
   };
 }
