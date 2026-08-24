@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ApiError, createApiClient } from "../web/src/api/client";
 import "./tenderly.css";
 
@@ -26,6 +27,29 @@ import type {
 // Screen navigation is local to the app, not part of the wire contract.
 type AppSection = "Discover" | "My bids" | "Evidence" | "Team" | "Company" | "Settings";
 type BidStage = "Qualify" | "Synopsis" | "Respond" | "Assemble" | "Submit";
+
+/** The URL is the source of truth for which screen is showing (TLY-23). */
+const SECTION_PATHS: Record<AppSection, string> = {
+  Discover: "/discover",
+  "My bids": "/bids",
+  Evidence: "/evidence",
+  Team: "/team",
+  Company: "/company",
+  Settings: "/settings",
+};
+const stageSlug = (stage: BidStage) => stage.toLowerCase().replace(/\s+/g, "-");
+const STAGES: BidStage[] = ["Qualify", "Synopsis", "Respond", "Assemble", "Submit"];
+
+function readLocation(pathname: string): { section: AppSection; stage: BidStage; tenderId: string } {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] === "bids") {
+    const stage = STAGES.find((item) => stageSlug(item) === (parts[2] ?? "")) ?? "Qualify";
+    return { section: "My bids", stage, tenderId: parts[1] ?? "" };
+  }
+  const entry = (Object.entries(SECTION_PATHS) as [AppSection, string][])
+    .find(([, path]) => path === `/${parts[0] ?? ""}`);
+  return { section: entry ? entry[0] : "Discover", stage: "Qualify", tenderId: "" };
+}
 
 // The CSS keys off hyphenated slugs; the wire enum is underscored.
 const decisionSlug = (decision: Decision) => decision.toLowerCase().replace(/_/g, "-");
@@ -326,9 +350,17 @@ function Logo() {
 }
 
 export default function TenderlyApp() {
-  const [section, setSection] = useState<AppSection>("Discover");
-  const [stage, setStage] = useState<BidStage>("Qualify");
-  const [selectedId, setSelectedId] = useState(API_BASE ? "" : demoTenders[0].id);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const route = readLocation(location.pathname);
+  const section = route.section;
+  const stage = route.stage;
+  const setSection = (next: AppSection) => navigate(SECTION_PATHS[next]);
+  const openStage = (id: string, next: BidStage) => navigate(`/bids/${id}/${stageSlug(next)}`);
+  const [fallbackId, setFallbackId] = useState(API_BASE ? "" : demoTenders[0].id);
+  const selectedId = route.tenderId || fallbackId;
+  const setStage = (next: BidStage) => openStage(selectedId, next);
+  const setSelectedId = (id: string) => { setFallbackId(id); openStage(id, "Qualify"); };
   const [tenders, setTenders] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [discoveries, setDiscoveries] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [query, setQuery] = useState("");
@@ -351,7 +383,9 @@ export default function TenderlyApp() {
 
   const isDemo = !API_BASE;
   currentToken = token;
-  const selected = tenders.find((item) => item.id === selectedId) ?? tenders[0];
+  const routedTender = route.tenderId ? tenders.find((item) => item.id === route.tenderId) : undefined;
+  const selected = routedTender ?? (route.tenderId ? undefined : tenders.find((item) => item.id === selectedId) ?? tenders[0]);
+  const tenderNotFound = Boolean(route.tenderId) && tenders.length > 0 && !routedTender;
   const companyInitials = company.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "CO";
   const profileValues = [company.name, company.registration, company.turnover, company.employees, company.services, company.cpv, company.certifications, company.insurance];
   const profileCompleteness = Math.round((profileValues.filter((value) => value.trim()).length / profileValues.length) * 100);
@@ -387,7 +421,8 @@ export default function TenderlyApp() {
         setNotifications(notificationsData.items ?? []);
         setSectors(sectorsData.items ?? []);
         setPreferences(preferencesData.preferences);
-        if (bidsData.items?.[0]) setSelectedId(bidsData.items[0].id);
+        // Remember a default bid without navigating: the URL the user arrived on wins.
+        if (bidsData.items?.[0]) setFallbackId(bidsData.items[0].id);
 
         try {
           const discoveryData = await apiClient.discover();
@@ -498,8 +533,6 @@ export default function TenderlyApp() {
     const savedBid = tenders.find((item) => item.id === id);
     if (savedBid || isDemo) {
       setSelectedId(id);
-      setStage("Qualify");
-      setSection("My bids");
       return;
     }
     const opportunity = discoveries.find((item) => item.id === id);
@@ -509,8 +542,6 @@ export default function TenderlyApp() {
       const data = await apiClient.importTender(opportunity.sourceUrl);
       setTenders((items) => [data.tender, ...items.filter((item) => item.id !== data.tender.id)]);
       setSelectedId(data.tender.id);
-      setStage("Qualify");
-      setSection("My bids");
       setToast("Tender pack imported and qualification started");
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Could not import tender");
@@ -779,7 +810,15 @@ export default function TenderlyApp() {
             />
             </>
           )}
-          {section === "My bids" && !selected && <div className="no-questions panel"><span>▱</span><h2>No active bids yet</h2><p>Open a recommended opportunity or paste an eTenders link. Tenderly will import it into this workspace before qualification begins.</p><button className="continue-btn" onClick={() => setSection("Discover")}>Discover opportunities →</button></div>}
+          {section === "My bids" && tenderNotFound && (
+            <div className="no-questions panel" data-testid="bid-not-found">
+              <span>▱</span>
+              <h2>That bid could not be found</h2>
+              <p>The link may be out of date, or the bid may belong to another workspace.</p>
+              <button className="continue-btn" onClick={() => setSection("My bids")}>Back to My bids</button>
+            </div>
+          )}
+          {section === "My bids" && !selected && !tenderNotFound && <div className="no-questions panel"><span>▱</span><h2>No active bids yet</h2><p>Open a recommended opportunity or paste an eTenders link. Tenderly will import it into this workspace before qualification begins.</p><button className="continue-btn" onClick={() => setSection("Discover")}>Discover opportunities →</button></div>}
           {section === "Company" && <CompanyView company={company} setCompany={setCompany} onSave={async () => {
             if (isDemo) { setToast("Company profile saved for this demo session"); return; }
             try { await apiClient.saveCompany(company); setToast("Company profile saved"); } catch (error) { setToast(error instanceof Error ? error.message : "Could not save profile"); }
