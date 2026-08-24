@@ -237,6 +237,15 @@ export type NotificationItem = {
   createdAt?: string;
 };
 
+/** An account's model usage for one calendar month. */
+export type UsageTotals = {
+  month: string;
+  actions: number;
+  inputTokens: number;
+  outputTokens: number;
+  byKind: { kind: string; actions: number; inputTokens: number; outputTokens: number }[];
+};
+
 export type CompanyProfile = {
   name: string;
   registration: string;

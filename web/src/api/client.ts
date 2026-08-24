@@ -15,6 +15,7 @@ import type {
   PersonItem,
   SectorPreset,
   Tender,
+  UsageTotals,
 } from "@tenderly/shared";
 
 /** A failed API call, carrying enough for a screen to explain itself to a user. */
@@ -159,6 +160,7 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ action }),
       }),
+    usage: () => request<{ usage: UsageTotals }>("/api/usage", "Load AI usage"),
     setChecklistStatus: (tenderId: string, itemId: string, status: string) =>
       request<unknown>(`/api/tenders/${tenderId}/checklist/${itemId}`, "Update checklist", {
         method: "POST",
