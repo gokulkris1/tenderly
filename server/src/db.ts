@@ -25,6 +25,7 @@ import type {
   AuditEntry,
   BidAnswer,
   BidDecisionRecord,
+  Clarification,
   CompanyProfile,
   DiscoveryPreferences,
   EvidenceRecord,
@@ -77,6 +78,7 @@ const memory = {
   answerVersions: [] as AnswerVersion[],
   mockEvaluations: [] as MockEvaluation[],
   packQuestions: [] as PackQuestion[],
+  clarifications: [] as Clarification[],
   analysisVersions: [] as AnalysisVersionRecord[],
   savedSearches: [] as SavedSearch[],
   ingestionRuns: [] as IngestionRun[],
@@ -1196,6 +1198,52 @@ export async function getAnalysisVersion(accountId: string, versionId: string) {
     [versionId, accountId],
   );
   return result.rows[0] ? toAnalysisVersion(result.rows[0]) : null;
+}
+
+const toClarification = (row: Record<string, unknown>): Clarification => ({
+  id: String(row.id), tenderId: String(row.tender_id), question: String(row.question),
+  askedOn: String(row.asked_on ?? ""), askedBy: String(row.asked_by ?? ""),
+  response: String(row.response ?? ""), respondedOn: String(row.responded_on ?? ""),
+  createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+export async function recordClarification(input: Omit<Clarification, "id" | "createdAt">) {
+  const record: Clarification = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.clarifications.push(record); return record; }
+  await pool.query(
+    "INSERT INTO clarifications(id,tender_id,question,asked_on,asked_by,response,responded_on) VALUES($1,$2,$3,$4,$5,$6,$7)",
+    [record.id, record.tenderId, record.question, record.askedOn, record.askedBy, record.response, record.respondedOn],
+  );
+  return record;
+}
+
+/** Records the buyer's answer. Returns null when it is not this account's. */
+export async function answerClarification(accountId: string, clarificationId: string, response: string, respondedOn: string) {
+  if (!isUuid(clarificationId)) return null;
+  if (!pool) {
+    const record = memory.clarifications.find((entry) => entry.id === clarificationId);
+    if (!record) return null;
+    if (memory.tenders.get(record.tenderId)?.accountId !== accountId) return null;
+    record.response = response;
+    record.respondedOn = respondedOn;
+    return record;
+  }
+  const result = await pool.query(
+    `UPDATE clarifications SET response=$3, responded_on=$4
+      WHERE id=$1 AND tender_id IN (SELECT id FROM tenders WHERE account_id=$2) RETURNING *`,
+    [clarificationId, accountId, response, respondedOn],
+  );
+  return result.rows[0] ? toClarification(result.rows[0]) : null;
+}
+
+export async function listClarifications(tenderId: string) {
+  if (!pool) {
+    return memory.clarifications.filter((entry) => entry.tenderId === tenderId)
+      .slice().reverse()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const result = await pool.query("SELECT * FROM clarifications WHERE tender_id=$1 ORDER BY created_at DESC", [tenderId]);
+  return result.rows.map(toClarification);
 }
 
 export async function addEvidence(

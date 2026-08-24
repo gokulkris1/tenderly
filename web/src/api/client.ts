@@ -15,6 +15,7 @@ import type {
   AttestationState,
   AuditEntry,
   BidDecisionRecord,
+  Clarification,
   CompanyProfile,
   DeclarationAnswer,
   DeclarationState,
@@ -123,6 +124,16 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       }),
 
     // --- workspace --------------------------------------------------------
+    clarifications: (tenderId: string) =>
+      request<{ items: Clarification[]; open: number }>(`/api/tenders/${tenderId}/clarifications`, "Load clarifications"),
+    askClarification: (tenderId: string, question: string, askedOn: string) =>
+      request<{ clarification: Clarification }>(`/api/tenders/${tenderId}/clarifications`, "Record clarification", {
+        method: "POST", body: JSON.stringify({ question, askedOn }),
+      }),
+    answerClarification: (tenderId: string, clarificationId: string, response: string, respondedOn: string) =>
+      request<{ clarification: Clarification; reanalyseSuggested: boolean }>(
+        `/api/tenders/${tenderId}/clarifications/${clarificationId}`, "Record buyer response",
+        { method: "PUT", body: JSON.stringify({ response, respondedOn }) }),
     analysisVersions: (tenderId: string, versionId = "") =>
       request<AnalysisChanges>(`/api/tenders/${tenderId}/analysis-versions${versionId ? `?version=${encodeURIComponent(versionId)}` : ""}`, "Load analysis history"),
     packQuestions: (tenderId: string) =>

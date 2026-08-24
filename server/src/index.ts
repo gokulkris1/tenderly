@@ -57,6 +57,7 @@ import {
   listBidDecisions,
   listWatchlist,
   listDeclarationAnswers,
+  listClarifications,
   listDocuments,
   listEvidence,
   listMockEvaluations,
@@ -72,7 +73,9 @@ import {
   monthlyUsage,
   persistentDatabase,
   recordAffirmation,
+  answerClarification,
   recordAnalysisVersion,
+  recordClarification,
   recordAnswerVersion,
   recordBidDecision,
   recordMockEvaluation,
@@ -1310,6 +1313,78 @@ app.get("/api/tenders/:id/analysis-versions", async (req: AuthenticatedRequest, 
       changedAt: tender.metadata.lastAnalysisChangedAt ?? null,
       analysis: version?.analysis ?? null,
     });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Clarification exchanges with the buyer.
+ *
+ * Status is derived from whether a response exists rather than stored: a stored
+ * status is one more thing that can disagree with the facts beside it.
+ */
+app.get("/api/tenders/:id/clarifications", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const items = (await listClarifications(tender.id)).map((entry) => ({
+      ...entry, status: entry.response.trim() ? "Answered" : "Open",
+    }));
+    res.json({ items, open: items.filter((entry) => entry.status === "Open").length });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.post("/api/tenders/:id/clarifications", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const input = z.object({
+      question: z.string().trim().min(1, "Question text is required").max(4000),
+      askedOn: z.string().max(40).default(""),
+    }).parse(req.body);
+
+    const record = await recordClarification({
+      tenderId: tender.id, question: input.question,
+      askedOn: input.askedOn || new Date().toISOString().slice(0, 10),
+      askedBy: actorEmail(req), response: "", respondedOn: "",
+    });
+    res.status(201).json({ clarification: { ...record, status: "Open" } });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Records the buyer's answer.
+ *
+ * The answer joins the tender's source documents, so drafting can cite it: a
+ * clarification that changes a requirement is part of the pack in every sense
+ * that matters, even though the buyer published it separately.
+ */
+app.put("/api/tenders/:id/clarifications/:clarificationId", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const input = z.object({
+      response: z.string().trim().min(1, "Response text is required").max(8000),
+      respondedOn: z.string().max(40).default(""),
+    }).parse(req.body);
+
+    const record = await answerClarification(
+      account, routeParam(req.params.clarificationId), input.response,
+      input.respondedOn || new Date().toISOString().slice(0, 10),
+    );
+    if (!record) return res.status(404).json({ error: "Clarification not found" });
+
+    await saveDocument({
+      tenderId: tender.id,
+      filename: `Clarification — ${record.question.slice(0, 80)}`,
+      mimeType: "text/plain", role: "source",
+      extractedText: `Question: ${record.question}\nBuyer response (${record.respondedOn}): ${record.response}`,
+      extractionStatus: "EXTRACTED",
+    }).catch(() => undefined);
+
+    res.json({ clarification: { ...record, status: "Answered" }, reanalyseSuggested: true });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

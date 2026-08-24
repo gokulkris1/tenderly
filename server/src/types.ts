@@ -277,6 +277,24 @@ export type BidDecisionRecord = {
 };
 
 /**
+ * A clarification exchange with the buyer.
+ *
+ * Status is derived from whether a response has been recorded rather than
+ * stored separately: a stored status is one more thing that can disagree with
+ * the facts beside it.
+ */
+export type Clarification = {
+  id: string;
+  tenderId: string;
+  question: string;
+  askedOn: string;
+  askedBy: string;
+  response: string;
+  respondedOn: string;
+  createdAt: string;
+};
+
+/**
  * A question asked of the tender pack and the grounded answer it produced.
  *
  * Kept beside the tender because a bid team asks the same pack the same things
