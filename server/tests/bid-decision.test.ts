@@ -33,7 +33,7 @@ server.unref();
 
 const email = `decision-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
 const user = await createUser(email, await bcrypt.hash("x", 4), "Deciding Ltd");
-const token = signToken({ id: user.id, email });
+const token = signToken({ id: user.id, organisationId: user.organisationId, email });
 const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
 
 // Each tender needs a distinct title: buyer, title and deadline are the
@@ -42,13 +42,13 @@ const headers = { authorization: `Bearer ${token}`, "content-type": "application
 let fixtureCount = 0;
 async function tenderWith(gates: ReturnType<typeof gate>[], fitScore = 80) {
   fixtureCount += 1;
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "seed", externalId: `dec-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     title: `Decision tender ${fixtureCount}`, authority: "Authority", procedure: "Open", deadline: "26/03/2027",
     estimatedValue: "", description: "", sourceUrl: "https://www.etenders.gov.ie/x", published: "",
     status: "ANALYSED", metadata: {},
   });
-  await saveTenderAnalysis(user.id, tender.id, analysis(gates, fitScore));
+  await saveTenderAnalysis(user.organisationId, tender.id, analysis(gates, fitScore));
   return tender;
 }
 
@@ -111,7 +111,7 @@ test("TLY-50 AC5: the recommendation is frozen as it stood when the decision was
   await record(tender.id, "BID", "We will resolve the ISO gate this week");
 
   // The tender is re-analysed and the gate now passes.
-  await saveTenderAnalysis(user.id, tender.id, analysis([gate("iso", "PASS")]));
+  await saveTenderAnalysis(user.organisationId, tender.id, analysis([gate("iso", "PASS")]));
   const { tender: after } = await load(tender.id);
   assert.equal(after.recommendation?.decision, "GO", "the live recommendation moves");
   assert.equal(after.bidDecisions?.[0].recommendationAtTheTime, "REVIEW",
@@ -130,7 +130,7 @@ test("TLY-50: a decision cannot be recorded against another account's tender", a
   const other = await createUser(otherEmail, await bcrypt.hash("x", 4), "Other Ltd");
   const response = await fetch(`${base}/api/tenders/${tender.id}/decision`, {
     method: "POST",
-    headers: { authorization: `Bearer ${signToken({ id: other.id, email: otherEmail })}`, "content-type": "application/json" },
+    headers: { authorization: `Bearer ${signToken({ id: other.id, organisationId: other.organisationId, email: otherEmail })}`, "content-type": "application/json" },
     body: JSON.stringify({ decision: "BID", reason: "not mine" }),
   });
   assert.equal(response.status, 404);

@@ -61,6 +61,8 @@ type NotificationRow = { id: string; accountId: string; externalId: string; titl
 
 const memory = {
   users: new Map<string, UserRow>(),
+  organisations: new Map<string, { id: string; name: string; createdAt: string }>(),
+  memberships: [] as Membership[],
   companies: new Map<string, CompanyProfile>(),
   tenders: new Map<string, TenderRecord>(),
   documents: new Map<string, StoredDocument>(),
@@ -175,25 +177,58 @@ export async function closeDatabase() {
   await pool?.end();
 }
 
+export type MembershipRole = "owner" | "editor" | "viewer";
+
+/** One person's place in one organisation. Roles are enforced in TLY-88. */
+export type Membership = {
+  id: string;
+  organisationId: string;
+  userId: string;
+  role: MembershipRole;
+  invitedBy: string;
+  /** Null while an invitation is outstanding (TLY-87). */
+  acceptedAt?: string;
+  createdAt: string;
+};
+
+/**
+ * Registers a person and the organisation they are registering.
+ *
+ * Three rows, one transaction: the user, the organisation that owns the data,
+ * and the owner membership joining them. A user with no membership can sign in
+ * and reach nothing, so creating one without the other is not a state this
+ * function is allowed to leave behind.
+ */
 export async function createUser(email: string, passwordHash: string, companyName: string) {
   const normalized = email.trim().toLowerCase();
   const id = randomUUID();
+  const organisationId = randomUUID();
+  const now = new Date().toISOString();
   if (!pool) {
     if ([...memory.users.values()].some((user) => user.email === normalized)) throw new Error("EMAIL_EXISTS");
     memory.users.set(id, { id, email: normalized, passwordHash });
-    memory.companies.set(id, defaultCompany(companyName));
-    return { id, email: normalized };
+    memory.organisations.set(organisationId, { id: organisationId, name: companyName.trim(), createdAt: now });
+    memory.memberships.push({
+      id: randomUUID(), organisationId, userId: id, role: "owner", invitedBy: "", acceptedAt: now, createdAt: now,
+    });
+    memory.companies.set(organisationId, defaultCompany(companyName));
+    return { id, email: normalized, organisationId };
   }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query("INSERT INTO users(id,email,password_hash) VALUES($1,$2,$3)", [id, normalized, passwordHash]);
+    await client.query("INSERT INTO organisations(id,name) VALUES($1,$2)", [organisationId, companyName.trim()]);
+    await client.query(
+      "INSERT INTO memberships(id,organisation_id,user_id,role,accepted_at) VALUES($1,$2,$3,'owner',now())",
+      [randomUUID(), organisationId, id],
+    );
     await client.query(
       "INSERT INTO companies(id,account_id,name) VALUES($1,$2,$3)",
-      [randomUUID(), id, companyName.trim()],
+      [randomUUID(), organisationId, companyName.trim()],
     );
     await client.query("COMMIT");
-    return { id, email: normalized };
+    return { id, email: normalized, organisationId };
   } catch (error) {
     await client.query("ROLLBACK");
     if ((error as { code?: string }).code === "23505") throw new Error("EMAIL_EXISTS");
@@ -203,12 +238,107 @@ export async function createUser(email: string, passwordHash: string, companyNam
   }
 }
 
+function toMembership(row: Record<string, unknown>): Membership {
+  return {
+    id: String(row.id), organisationId: String(row.organisation_id), userId: String(row.user_id),
+    role: String(row.role) as MembershipRole, invitedBy: String(row.invited_by ?? ""),
+    acceptedAt: row.accepted_at ? new Date(row.accepted_at as string).toISOString() : undefined,
+    createdAt: new Date(row.created_at as string).toISOString(),
+  };
+}
+
+/** The organisations this person has accepted a place in. */
+export async function membershipsForUser(userId: string): Promise<Membership[]> {
+  if (!pool) return memory.memberships.filter((entry) => entry.userId === userId && entry.acceptedAt);
+  const result = await pool.query(
+    "SELECT * FROM memberships WHERE user_id=$1 AND accepted_at IS NOT NULL ORDER BY created_at", [userId]);
+  return result.rows.map(toMembership);
+}
+
+/**
+ * This person's place in this organisation, or null when they have none.
+ *
+ * The authority on what someone may do. The role in a token is a cache of this
+ * row, not a substitute for it.
+ */
+export async function membershipFor(organisationId: string, userId: string): Promise<Membership | null> {
+  if (!isUuid(organisationId) || !isUuid(userId)) return null;
+  if (!pool) {
+    return memory.memberships.find((entry) =>
+      entry.organisationId === organisationId && entry.userId === userId && entry.acceptedAt) ?? null;
+  }
+  const result = await pool.query(
+    "SELECT * FROM memberships WHERE organisation_id=$1 AND user_id=$2 AND accepted_at IS NOT NULL",
+    [organisationId, userId]);
+  return result.rows[0] ? toMembership(result.rows[0]) : null;
+}
+
+/**
+ * Adds somebody to an organisation.
+ *
+ * Accepted immediately here; TLY-87 introduces the invitation that leaves
+ * `accepted_at` null until the person says yes.
+ */
+export async function addMembership(
+  organisationId: string, memberId: string, role: MembershipRole, invitedBy = "",
+): Promise<Membership> {
+  const membership: Membership = {
+    id: randomUUID(), organisationId, userId: memberId, role, invitedBy,
+    acceptedAt: new Date().toISOString(), createdAt: new Date().toISOString(),
+  };
+  if (!pool) {
+    const existing = memory.memberships.find((entry) => entry.organisationId === organisationId && entry.userId === memberId);
+    if (existing) { existing.role = role; return existing; }
+    memory.memberships.push(membership);
+    return membership;
+  }
+  const result = await pool.query(
+    `INSERT INTO memberships(id,organisation_id,user_id,role,invited_by,accepted_at)
+     VALUES($1,$2,$3,$4,$5,now())
+     ON CONFLICT (organisation_id, user_id) DO UPDATE SET role=EXCLUDED.role
+     RETURNING *`,
+    [membership.id, organisationId, memberId, role, invitedBy],
+  );
+  return toMembership(result.rows[0]);
+}
+
+/** Everyone in one organisation, owners first. */
+export async function listMemberships(organisationId: string): Promise<Membership[]> {
+  if (!isUuid(organisationId)) return [];
+  if (!pool) return memory.memberships.filter((entry) => entry.organisationId === organisationId);
+  const result = await pool.query(
+    "SELECT * FROM memberships WHERE organisation_id=$1 ORDER BY role='owner' DESC, created_at", [organisationId]);
+  return result.rows.map(toMembership);
+}
+
+/**
+ * Sign-in details, including the organisation this person acts for.
+ *
+ * A user whose memberships have all been removed gets a null organisation
+ * rather than an invented one; the caller refuses the sign-in.
+ */
 export async function findUserByEmail(email: string) {
   const normalized = email.trim().toLowerCase();
-  if (!pool) return [...memory.users.values()].find((user) => user.email === normalized) ?? null;
-  const result = await pool.query<{ id: string; email: string; password_hash: string }>("SELECT id,email,password_hash FROM users WHERE email=$1", [normalized]);
+  if (!pool) {
+    const user = [...memory.users.values()].find((entry) => entry.email === normalized);
+    if (!user) return null;
+    const membership = memory.memberships.find((entry) => entry.userId === user.id && entry.acceptedAt);
+    return { ...user, organisationId: membership?.organisationId ?? "", role: membership?.role ?? null };
+  }
+  const result = await pool.query<{ id: string; email: string; password_hash: string; organisation_id: string | null; role: string | null }>(
+    `SELECT u.id, u.email, u.password_hash, m.organisation_id, m.role
+       FROM users u
+       LEFT JOIN memberships m ON m.user_id = u.id AND m.accepted_at IS NOT NULL
+      WHERE u.email=$1
+      ORDER BY m.created_at
+      LIMIT 1`,
+    [normalized],
+  );
   const row = result.rows[0];
-  return row ? { id: row.id, email: row.email, passwordHash: row.password_hash } : null;
+  return row ? {
+    id: row.id, email: row.email, passwordHash: row.password_hash,
+    organisationId: row.organisation_id ?? "", role: (row.role as MembershipRole | null) ?? null,
+  } : null;
 }
 
 export async function getUserById(id: string) {
@@ -1467,7 +1597,14 @@ export async function deleteAccount(accountId: string, requestedBy: string, requ
     memory.provenance = memory.provenance.filter((entry) => !answerIds.has(entry.answerId));
     memory.answerVersions = memory.answerVersions.filter((version) => !answerIds.has(version.answerId));
     memory.deletionRequests = memory.deletionRequests.filter((entry) => entry.accountId !== accountId);
-    memory.users.delete(accountId);
+    // The people go too, but only the ones this organisation was the whole of:
+    // somebody who also works on a partner's account keeps their sign-in.
+    const members = memory.memberships.filter((entry) => entry.organisationId === accountId).map((entry) => entry.userId);
+    memory.memberships = memory.memberships.filter((entry) => entry.organisationId !== accountId);
+    for (const userId of members) {
+      if (!memory.memberships.some((entry) => entry.userId === userId)) memory.users.delete(userId);
+    }
+    memory.organisations.delete(accountId);
     memory.companies.delete(accountId);
     memory.preferences.delete(accountId);
     memory.declarations.delete(accountId);
@@ -1481,7 +1618,15 @@ export async function deleteAccount(accountId: string, requestedBy: string, requ
     "INSERT INTO deletion_log(id,account_id,requested_by,requested_at) VALUES($1,$2,$3,$4)",
     [randomUUID(), accountId, requestedBy, requestedAt],
   );
-  const result = await pool.query("DELETE FROM users WHERE id=$1", [accountId]);
+  // Deleting the organisation cascades every table that holds its account_id.
+  // The sign-ins go separately, and only for people this organisation was the
+  // whole of: somebody who also works on a partner's account keeps theirs.
+  const members = await pool.query<{ user_id: string }>(
+    "SELECT user_id FROM memberships WHERE organisation_id=$1", [accountId]);
+  const result = await pool.query("DELETE FROM organisations WHERE id=$1", [accountId]);
+  for (const row of members.rows) {
+    await pool.query("DELETE FROM users u WHERE u.id=$1 AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.user_id=u.id)", [row.user_id]);
+  }
   return (result.rowCount ?? 0) > 0;
 }
 

@@ -20,7 +20,7 @@ server.unref();
 
 const email = `ask-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
 const user = await createUser(email, await bcrypt.hash("x", 4), "Asking Ltd");
-const headers = { authorization: `Bearer ${signToken({ id: user.id, email })}`, "content-type": "application/json" };
+const headers = { authorization: `Bearer ${signToken({ id: user.id, organisationId: user.organisationId, email })}`, "content-type": "application/json" };
 
 const INSURANCE_DOC = [
   "1. INTRODUCTION",
@@ -37,7 +37,7 @@ const INSURANCE_DOC = [
 let counter = 0;
 async function makeTender(documents: { filename: string; text: string }[]) {
   counter += 1;
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "seed", externalId: `ask-${Date.now()}-${counter}`, title: `Asked tender ${counter}`,
     authority: "Authority", procedure: "Open", deadline: "26/03/2027", estimatedValue: "",
     description: "", sourceUrl: "https://www.etenders.gov.ie/x", published: "", status: "ANALYSED", metadata: {},
@@ -157,7 +157,7 @@ test("TLY-44: another account cannot ask about, or read, this pack", async () =>
   const tenderId = await makeTender([{ filename: "ITT.pdf", text: INSURANCE_DOC }]);
   const otherEmail = `other-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   const other = await createUser(otherEmail, await bcrypt.hash("x", 4), "Other Ltd");
-  const otherHeaders = { authorization: `Bearer ${signToken({ id: other.id, email: otherEmail })}`, "content-type": "application/json" };
+  const otherHeaders = { authorization: `Bearer ${signToken({ id: other.id, organisationId: other.organisationId, email: otherEmail })}`, "content-type": "application/json" };
 
   assert.equal((await fetch(`${base}/api/tenders/${tenderId}/ask`, { headers: otherHeaders })).status, 404);
   const asked = await fetch(`${base}/api/tenders/${tenderId}/ask`, {

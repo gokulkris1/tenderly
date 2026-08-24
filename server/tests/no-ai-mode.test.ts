@@ -36,14 +36,14 @@ server.unref();
 
 const email = `noai-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
 const user = await createUser(email, await bcrypt.hash("x", 4), "No AI Ltd");
-const token = signToken({ id: user.id, email: user.email });
-const tender = await upsertTender(user.id, {
+const token = signToken({ id: user.id, organisationId: user.organisationId, email: user.email });
+const tender = await upsertTender(user.organisationId, {
   source: "seed", externalId: `noai-${Date.now()}`, title: "No-AI tender", authority: "Authority",
   procedure: "Open", deadline: "26/03/2026", estimatedValue: "", description: "", sourceUrl: "https://www.etenders.gov.ie/x",
   published: "", status: "ANALYSED", metadata: {},
 });
 const stored = analysis();
-await saveTenderAnalysis(user.id, tender.id, stored);
+await saveTenderAnalysis(user.organisationId, tender.id, stored);
 const questionId = stored.questions[0].id;
 const auth = { authorization: `Bearer ${token}`, "content-type": "application/json" };
 

@@ -6,7 +6,7 @@ import rateLimit from "express-rate-limit";
 import multer from "multer";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { accountId, actorEmail, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
+import { accountId, actorEmail, requireAuth, signToken, userId, type AuthenticatedRequest } from "./auth.js";
 import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer, draftDecisionRationale, evaluateDraft, extractCvRecords } from "./ai.js";
 import { askThePack } from "./ai.js";
 import { badgeFor, classForHumanEdit } from "./provenance.js";
@@ -25,7 +25,7 @@ import { mergeNotices } from "./dedupe.js";
 import { deadlinePressure, parseDeadline } from "./pressure.js";
 import { vaultCompleteness } from "./vault.js";
 import { buildAccountExport } from "./account-export.js";
-import { CONFIRMATION_PHRASE, GRACE_DAYS, confirmsDeletion, daysRemaining, roleFor } from "./account-erasure.js";
+import { CONFIRMATION_PHRASE, GRACE_DAYS, confirmsDeletion, daysRemaining, isOwner } from "./account-erasure.js";
 import { skillMatrix, skillMatrixCsv } from "./skills.js";
 import { matchRoles, roleBlockers } from "./role-matching.js";
 import { DECLARATIONS, affirmationProblems, declarationEvidence, needsReaffirmation } from "./declarations.js";
@@ -340,7 +340,14 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
     const input = credentialsSchema.pick({ email: true, password: true }).parse(req.body);
     const user = await findUserByEmail(input.email);
     if (!user || !(await bcrypt.compare(input.password, user.passwordHash))) return res.status(401).json({ error: "Email or password is incorrect" });
-    res.json({ token: signToken(user), user: { id: user.id, email: user.email } });
+    // A sign-in with no organisation has nothing to sign in to: the last
+    // membership was removed, or the organisation was deleted. Minting a token
+    // with no tenant would produce a session that 401s on every request.
+    if (!user.organisationId) return res.status(403).json({ error: "Your access to this workspace has been removed" });
+    res.json({
+      token: signToken({ id: user.id, organisationId: user.organisationId, email: user.email, role: user.role ?? "owner" }),
+      user: { id: user.id, email: user.email },
+    });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
@@ -1828,7 +1835,7 @@ app.get("/api/notifications", async (req: AuthenticatedRequest, res) => {
 app.get("/api/account/export", async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
-    if (await roleFor(account, actorEmail(req)) !== "owner") {
+    if (!await isOwner(account, userId(req))) {
       return res.status(403).json({ error: "Only the account owner can export the organisation's data" });
     }
     const archive = await buildAccountExport(account);
@@ -1869,7 +1876,7 @@ app.post("/api/account/deletion", async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
     const actor = actorEmail(req);
-    if (await roleFor(account, actor) !== "owner") {
+    if (!await isOwner(account, userId(req))) {
       return res.status(403).json({ error: "Only the account owner can delete the organisation's account" });
     }
     const input = z.object({ confirmation: z.string().max(200).default("") }).parse(req.body);
@@ -1892,8 +1899,7 @@ app.post("/api/account/deletion", async (req: AuthenticatedRequest, res) => {
 app.delete("/api/account/deletion", async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
-    const actor = actorEmail(req);
-    if (await roleFor(account, actor) !== "owner") {
+    if (!await isOwner(account, userId(req))) {
       return res.status(403).json({ error: "Only the account owner can cancel the deletion" });
     }
     if (!await cancelAccountDeletion(account)) {

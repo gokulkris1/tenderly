@@ -103,16 +103,16 @@ test("TLY-32 AC4: a later duplicate attaches to the record already worked on", a
   const user = await createUser(email, await bcrypt.hash("x", 4), "Dedupe Ltd");
 
   // The eTenders record, imported and worked on first.
-  const first = await upsertTender(user.id, {
+  const first = await upsertTender(user.organisationId, {
     ...notice(), source: "etenders", status: "IMPORTED",
     metadata: { "TED links for published notices": "2026/S 123-456789" },
   });
   const stored = analysis();
-  await saveTenderAnalysis(user.id, first.id, stored);
+  await saveTenderAnalysis(user.organisationId, first.id, stored);
   const answer = await saveAnswer(first.id, stored.questions[0].id, "Work already done.", "ready", []);
 
   // The TED duplicate, ingested afterwards.
-  const second = await upsertTender(user.id, {
+  const second = await upsertTender(user.organisationId, {
     ...notice({ externalId: "456789-2026", description: "", estimatedValue: "", sourceUrl: "https://ted.europa.eu/en/notice/456789-2026/pdf" }),
     source: "ted", status: "IMPORTED", metadata: {},
   });
@@ -123,9 +123,9 @@ test("TLY-32 AC4: a later duplicate attaches to the record already worked on", a
   assert.equal(answers[0].id, answer.id);
   assert.equal(answers[0].response, "Work already done.", "nothing a person wrote is lost to a re-ingest");
 
-  const analysed = await getTender(user.id, first.id);
+  const analysed = await getTender(user.organisationId, first.id);
   assert.ok(analysed?.analysis, "the analysis survives too");
 
-  const all = await listTenders(user.id);
+  const all = await listTenders(user.organisationId);
   assert.equal(all.length, 1, "one opportunity, one row");
 });

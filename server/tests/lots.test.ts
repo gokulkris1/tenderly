@@ -86,17 +86,17 @@ test("TLY-41 AC6: the selection is stored on the tender, so it survives a reload
   const email = `lots-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`;
   const user = await createUser(email, await bcrypt.hash("x", 4), "Lots Ltd");
   process.env.JWT_SECRET ||= "test-secret-that-is-at-least-32-characters";
-  signToken({ id: user.id, email });
+  signToken({ id: user.id, organisationId: user.organisationId, email });
 
-  const tender = await upsertTender(user.id, {
+  const tender = await upsertTender(user.organisationId, {
     source: "seed", externalId: `lots-${Date.now()}`, title: "Divided tender", authority: "Authority",
     procedure: "Open", deadline: "26/03/2026", estimatedValue: "", description: "",
     sourceUrl: "https://www.etenders.gov.ie/x", published: "", status: "ANALYSED",
     metadata: { selectedLots: ["Lot 2"] },
   });
-  await saveTenderAnalysis(user.id, tender.id, analysis());
+  await saveTenderAnalysis(user.organisationId, tender.id, analysis());
 
-  const reloaded = await getTender(user.id, tender.id);
+  const reloaded = await getTender(user.organisationId, tender.id);
   assert.deepEqual(selectedLots(reloaded!), ["Lot 2"], "the choice is a property of the tender, not of the session");
   assert.equal(serializeTender(reloaded!, []).selectedLots?.[0], "Lot 2");
 });
