@@ -51,6 +51,24 @@ export type Gate = {
 /** How much of a response section a machine produced. */
 export type ProvenanceClass = "ai-generated" | "ai-assisted" | "human";
 
+/** One step of the submission runbook. */
+export type RunbookStep = {
+  id: string;
+  text: string;
+  /** The sentence in the pack this step came from, when it came from one. */
+  source?: string;
+  done: boolean;
+};
+
+/** The steps to take on the buyer's portal, in order. Tenderly does not submit. */
+export type Runbook = {
+  channel: string;
+  deadline: string;
+  steps: RunbookStep[];
+  /** The pack stated no formalities, so these are the general steps. */
+  generic: boolean;
+};
+
 /**
  * One piece of work on a bid. A blocker task completes when its blocker clears,
  * never by hand — otherwise the tick and the blocker disagree.

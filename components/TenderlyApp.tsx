@@ -40,6 +40,7 @@ import type {
   Recommendation,
   RequiredCertificateStatus,
   RoleMatch,
+  Runbook,
   SavedSearch,
   SavedSearchFilter,
   ScoreBreakdown,
@@ -796,6 +797,9 @@ export default function TenderlyApp() {
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
   const [openClarifications, setOpenClarifications] = useState(0);
   const [tasks, setTasks] = useState<BidTask[]>([]);
+  const [runbook, setRunbook] = useState<Runbook | null>(null);
+  const [runbookCompleted, setRunbookCompleted] = useState(0);
+  const [runbookTotal, setRunbookTotal] = useState(0);
   const [attestationState, setAttestationState] = useState<AttestationState | null>(null);
   const [tenders, setTenders] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [discoveries, setDiscoveries] = useState<Tender[]>(API_BASE ? [] : demoTenders);
@@ -909,6 +913,7 @@ export default function TenderlyApp() {
     void refreshAnalysisChanges(selectedId);
     void refreshClarifications(selectedId);
     void refreshTasks(selectedId);
+    void refreshRunbook(selectedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -1157,6 +1162,31 @@ export default function TenderlyApp() {
       setToast("Attestation recorded · the final pack is released");
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not record the attestation");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function refreshRunbook(tenderId: string) {
+    if (isDemo || !API_BASE || !token) return;
+    try {
+      const { runbook: steps, completed, total } = await apiClient.runbook(tenderId);
+      setRunbook(steps);
+      setRunbookCompleted(completed);
+      setRunbookTotal(total);
+    } catch {
+      setRunbook(null);
+    }
+  }
+
+  async function tickRunbookStep(stepId: string, done: boolean) {
+    if (!selected || isDemo) return;
+    try {
+      setLoading("runbook");
+      await apiClient.tickRunbookStep(selected.id, stepId, done);
+      await refreshRunbook(selected.id);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not update the runbook");
     } finally {
       setLoading("");
     }
@@ -1955,6 +1985,10 @@ export default function TenderlyApp() {
               restoreVersion={restoreVersion}
               attestation={attestationState}
               onAttest={recordAttestation}
+              runbook={runbook}
+              runbookCompleted={runbookCompleted}
+              runbookTotal={runbookTotal}
+              tickRunbookStep={tickRunbookStep}
               tasks={tasks}
               addTask={addTask}
               updateTask={updateTask}
@@ -2332,8 +2366,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, tasks, addTask, updateTask, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; clarifications: Clarification[]; openClarifications: number; askClarification: (question: string) => void; answerClarification: (id: string, response: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; tasks: BidTask[]; addTask: (title: string, dueOn: string) => void; updateTask: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, runbook, runbookCompleted, runbookTotal, tickRunbookStep, tasks, addTask, updateTask, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; clarifications: Clarification[]; openClarifications: number; askClarification: (question: string) => void; answerClarification: (id: string, response: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; runbook: Runbook | null; runbookCompleted: number; runbookTotal: number; tickRunbookStep: (stepId: string, done: boolean) => void; tasks: BidTask[]; addTask: (title: string, dueOn: string) => void; updateTask: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -2414,7 +2448,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
       {stage === "Synopsis" && <Synopsis tender={tender} onDownload={() => downloadAsset("deck")} onContinue={() => setStage("Respond")} loading={loading === "deck"} />}
       {stage === "Respond" && <Respond tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} evaluation={evaluation} onRunEvaluation={runMockEvaluation} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
       {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} attestation={attestation} onAttest={onAttest} tasks={tasks} onAddTask={addTask} onUpdateTask={updateTask} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
-      {stage === "Submit" && <Submit tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
+      {stage === "Submit" && <Submit runbook={runbook} runbookCompleted={runbookCompleted} runbookTotal={runbookTotal} onTickRunbook={tickRunbookStep} runbookBusy={loading === "runbook"} tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
     </div>
   );
 }
@@ -2838,7 +2872,56 @@ function FileButton({ label, accept, onFile }: { label: string; accept: string; 
   return <label className="file-action">{label}<input type="file" accept={accept} onChange={(event) => { const file = event.target.files?.[0]; if (file) onFile(file); event.currentTarget.value = ""; }} /></label>;
 }
 
-function Submit({ tender, onDownload, onReview, loading, blockers }: { tender: Tender; onDownload: () => void; onReview: () => void; loading: boolean; blockers: string[] }) {
+/**
+ * The steps to take on the buyer's portal, in order.
+ *
+ * Tenderly does not submit. This is the handover: which file goes where, under
+ * what name, in what order — the things bids actually fail on. Where the pack
+ * states a rule it is quoted; where it states none the step says so rather than
+ * inventing a convention.
+ */
+function SubmissionRunbook({ runbook, completed, total, onTick, busy }: {
+  runbook: Runbook | null; completed: number; total: number;
+  onTick: (stepId: string, done: boolean) => void; busy: boolean;
+}) {
+  if (!runbook) return null;
+  return (
+    <section className="panel runbook" data-testid="runbook">
+      <div className="panel-heading">
+        <div>
+          <h3>Submission runbook</h3>
+          <p>Tenderly does not submit on your behalf. These are the steps on the buyer's portal.</p>
+        </div>
+        <span className="manifest-status" data-testid="runbook-progress">{completed} of {total} done</span>
+      </div>
+
+      <dl className="runbook-facts">
+        <div><dt>Channel</dt><dd>{runbook.channel}</dd></div>
+        <div><dt>Deadline</dt><dd className="deadline">{runbook.deadline}</dd></div>
+      </dl>
+
+      {runbook.generic && (
+        <p className="runbook-generic">The pack stated no submission formalities, so these are the general steps.</p>
+      )}
+
+      <ol className="runbook-steps">
+        {runbook.steps.map((step) => (
+          <li key={step.id} className={step.done ? "done" : ""} data-testid={`runbook-${step.id}`}>
+            <label>
+              <input type="checkbox" checked={step.done} disabled={busy} onChange={() => onTick(step.id, !step.done)} />
+              <span>
+                {step.text}
+                {step.source && <small>Pack says: “{step.source}”</small>}
+              </span>
+            </label>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function Submit({ tender, onDownload, onReview, loading, blockers, runbook, runbookCompleted, runbookTotal, onTickRunbook, runbookBusy }: { tender: Tender; onDownload: () => void; onReview: () => void; loading: boolean; blockers: string[]; runbook: Runbook | null; runbookCompleted: number; runbookTotal: number; onTickRunbook: (stepId: string, done: boolean) => void; runbookBusy: boolean }) {
   const eligibilityReady = tender.eligibility ? tender.eligibility === "PASS" : tender.gates.every((gate) => gate.state === "pass");
   const requiredQuestions = tender.questions.filter((question) => question.required !== false);
   const responsesReady = requiredQuestions.length === 0 || requiredQuestions.every((question) => question.status === "ready" && question.answer.trim());
@@ -2853,6 +2936,7 @@ function Submit({ tender, onDownload, onReview, loading, blockers }: { tender: T
   return (
     <div className="submit-page">
       <section className="submit-hero"><span className="lock-orb">✓</span><p className="eyebrow">HUMAN-CONTROLLED SUBMISSION</p><h2>Ready means actually ready.</h2><p>Tenderly can build the final ZIP, but it never presses the buyer portal’s final submit button for you. You keep the last check and submission control.</p></section>
+      <SubmissionRunbook runbook={runbook} completed={runbookCompleted} total={runbookTotal} onTick={onTickRunbook} busy={runbookBusy} />
       <div className="submit-grid"><section className="panel final-checks"><h3>Final verification</h3>{checks.map(([label, ok, detail]) => <div key={label}><span className={ok ? "check-ok" : "check-wait"}>{ok ? "✓" : "!"}</span><p><strong>{label}</strong><small>{detail}</small></p>{label === "Deadline re-check" ? <a href={tender.sourceUrl} target="_blank" rel="noreferrer">Open ↗</a> : <button onClick={onReview}>{ok ? "View" : "Review"}</button>}</div>)}</section><aside className="panel submit-card"><p className="eyebrow">SUBMISSION</p><h3>{tender.deadline}</h3><p>Official deadline shown from the source notice. Re-check eTenders immediately before upload.</p><button className="continue-btn" onClick={onDownload} disabled={loading}>{loading ? "Checking pack…" : "⇩ Download final ZIP"}</button><a href={tender.sourceUrl} target="_blank" rel="noreferrer">Open eTenders submission page ↗</a><small>The API performs the authoritative blocker check when you request the final ZIP.</small>{blockers.length > 0 && <ul className="blocker-list" data-testid="blockers">{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>}</aside></div>
     </div>
   );
