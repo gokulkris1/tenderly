@@ -22,6 +22,9 @@ export const AUDIT_ACTIONS = {
   declarationsAffirmed: "declarations.affirmed",
   personArchived: "person.archived",
   personReinstated: "person.reinstated",
+  accountExported: "account.exported",
+  accountDeletionRequested: "account.deletion_requested",
+  accountDeletionCancelled: "account.deletion_cancelled",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

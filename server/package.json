@@ -12,8 +12,11 @@
     "start": "node dist/src/index.js",
     "test": "node --import tsx --test tests/*.test.ts",
     "job:discover": "node dist/src/job.js",
+    "job:deletions": "node dist/src/deletion-job.js",
     "retention": "node --import tsx src/retention-job.ts",
-    "retention:dry-run": "node --import tsx src/retention-job.ts --dry-run"
+    "retention:dry-run": "node --import tsx src/retention-job.ts --dry-run",
+    "deletions": "node --import tsx src/deletion-job.ts",
+    "deletions:dry-run": "node --import tsx src/deletion-job.ts --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.118.0",

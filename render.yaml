@@ -52,3 +52,22 @@ services:
         value: "850"
       - key: TENDERLY_DISCOVERY_MIN_SCORE
         value: "45"
+
+  # Account deletions are an obligation with a clock on them, so they run on a
+  # schedule rather than when somebody remembers. Each run only touches accounts
+  # whose grace period has already expired and that were not cancelled.
+  - type: cron
+    name: tenderly-deletions
+    runtime: node
+    plan: starter
+    rootDir: server
+    schedule: "45 3 * * *"
+    buildCommand: npm ci && npm run build
+    startCommand: npm run job:deletions
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false

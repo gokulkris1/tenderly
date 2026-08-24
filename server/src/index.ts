@@ -24,6 +24,8 @@ import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./e
 import { mergeNotices } from "./dedupe.js";
 import { deadlinePressure, parseDeadline } from "./pressure.js";
 import { vaultCompleteness } from "./vault.js";
+import { buildAccountExport } from "./account-export.js";
+import { CONFIRMATION_PHRASE, GRACE_DAYS, confirmsDeletion, daysRemaining, roleFor } from "./account-erasure.js";
 import { skillMatrix, skillMatrixCsv } from "./skills.js";
 import { matchRoles, roleBlockers } from "./role-matching.js";
 import { DECLARATIONS, affirmationProblems, declarationEvidence, needsReaffirmation } from "./declarations.js";
@@ -100,9 +102,12 @@ import {
   updatePerson,
   updateTenderMetadata,
   confirmAllPersonFacts,
+  cancelAccountDeletion,
   listAccountPersonFacts,
   listPersonFacts,
+  pendingDeletion,
   replacePersonFacts,
+  requestAccountDeletion,
   updatePersonFact,
   upsertBidTask,
   upsertTender,
@@ -1811,6 +1816,95 @@ app.post("/api/people/:id/records/confirm", async (req: AuthenticatedRequest, re
 
 app.get("/api/notifications", async (req: AuthenticatedRequest, res) => {
   try { res.json({ items: await listNotifications(accountId(req)) }); } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Subject access, as a file.
+ *
+ * Building the archive reads every table this account touches, so it is not a
+ * cheap request — but it is rare, and a person exercising a legal right should
+ * not have to ask support and wait for an email.
+ */
+app.get("/api/account/export", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    if (await roleFor(account, actorEmail(req)) !== "owner") {
+      return res.status(403).json({ error: "Only the account owner can export the organisation's data" });
+    }
+    const archive = await buildAccountExport(account);
+    await audit(req, {
+      action: AUDIT_ACTIONS.accountExported, subjectType: "account", subjectId: account,
+      subjectLabel: "Data export", metadata: { files: archive.files.length, bytes: archive.buffer.length },
+    });
+    res.setHeader("content-type", "application/zip");
+    res.setHeader("content-disposition", `attachment; filename="${archive.filename}"`);
+    res.send(archive.buffer);
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** Whether a deletion is pending, and how long is left to change your mind. */
+app.get("/api/account/deletion", async (req: AuthenticatedRequest, res) => {
+  try {
+    const pending = await pendingDeletion(accountId(req));
+    res.json({
+      pending: pending ? {
+        scheduledFor: pending.scheduledFor,
+        requestedBy: pending.requestedBy,
+        daysRemaining: daysRemaining(pending.scheduledFor),
+      } : null,
+      graceDays: GRACE_DAYS,
+      confirmationPhrase: CONFIRMATION_PHRASE,
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Schedules the account for deletion.
+ *
+ * Nothing is destroyed here. The request is recorded, the grace period starts,
+ * and the account keeps working — a person who changes their mind on day three
+ * has lost nothing, and a person who meant it gets what they asked for.
+ */
+app.post("/api/account/deletion", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const actor = actorEmail(req);
+    if (await roleFor(account, actor) !== "owner") {
+      return res.status(403).json({ error: "Only the account owner can delete the organisation's account" });
+    }
+    const input = z.object({ confirmation: z.string().max(200).default("") }).parse(req.body);
+    if (!confirmsDeletion(input.confirmation)) {
+      return res.status(400).json({ error: `Type ${CONFIRMATION_PHRASE} to confirm` });
+    }
+    const request = await requestAccountDeletion(account, actor, GRACE_DAYS);
+    await audit(req, {
+      action: AUDIT_ACTIONS.accountDeletionRequested, subjectType: "account", subjectId: account,
+      subjectLabel: "Account deletion", metadata: { scheduledFor: request.scheduledFor, graceDays: GRACE_DAYS },
+    });
+    res.status(202).json({
+      scheduledFor: request.scheduledFor,
+      daysRemaining: daysRemaining(request.scheduledFor),
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** Calls it off. Only meaningful inside the grace period, which is the point of having one. */
+app.delete("/api/account/deletion", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const actor = actorEmail(req);
+    if (await roleFor(account, actor) !== "owner") {
+      return res.status(403).json({ error: "Only the account owner can cancel the deletion" });
+    }
+    if (!await cancelAccountDeletion(account)) {
+      return res.status(404).json({ error: "No deletion is pending" });
+    }
+    await audit(req, {
+      action: AUDIT_ACTIONS.accountDeletionCancelled, subjectType: "account", subjectId: account,
+      subjectLabel: "Account deletion",
+    });
+    res.json({ cancelled: true });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
 app.use((error: unknown, req: Request, res: Response, _next: unknown) => {

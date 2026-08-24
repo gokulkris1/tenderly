@@ -72,6 +72,13 @@ export type ApiClientOptions = {
 export type DraftedAnswer = { answer: string; status: string; missingInputs: string[] };
 export type DownloadedAsset = { blob: Blob; filename: string };
 
+/** Whether this account is scheduled for deletion, and the terms of doing it. */
+export type AccountDeletionState = {
+  pending: { scheduledFor: string; requestedBy: string; daysRemaining: number } | null;
+  graceDays: number;
+  confirmationPhrase: string;
+};
+
 export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
   /** No API configured: the app runs its built-in demonstration workspace. */
   const isDemo = !baseUrl;
@@ -377,6 +384,33 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       body.append("role", role);
       return upload<unknown>(`/api/tenders/${tenderId}/documents`, "Upload", body);
     },
+
+    // --- your data --------------------------------------------------------
+    /**
+     * Downloads the account's own data as an archive.
+     *
+     * The response is bytes and can be large, so it never goes through the JSON
+     * request helper.
+     */
+    exportAccountData: async () => {
+      const response = await fetch(`${baseUrl}/api/account/export`, { headers: authHeaders() });
+      if (!response.ok) throw await failure(response, "Export your data");
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") ?? "";
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? "tenderly-export.zip";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
+    deletionState: () => request<AccountDeletionState>("/api/account/deletion", "Load deletion status"),
+    requestAccountDeletion: (confirmation: string) =>
+      request<{ scheduledFor: string; daysRemaining: number }>("/api/account/deletion", "Delete account", {
+        method: "POST", body: JSON.stringify({ confirmation }),
+      }),
+    cancelAccountDeletion: () =>
+      request<{ cancelled: boolean }>("/api/account/deletion", "Cancel deletion", { method: "DELETE" }),
 
     // --- generated artefacts ---------------------------------------------
     /**

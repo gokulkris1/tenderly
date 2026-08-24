@@ -81,6 +81,8 @@ const memory = {
   packQuestions: [] as PackQuestion[],
   clarifications: [] as Clarification[],
   bidTasks: [] as BidTask[],
+  deletionRequests: [] as DeletionRequest[],
+  deletionLog: [] as { accountId: string; requestedBy: string; requestedAt: string; completedAt: string }[],
   analysisVersions: [] as AnalysisVersionRecord[],
   savedSearches: [] as SavedSearch[],
   ingestionRuns: [] as IngestionRun[],
@@ -1342,6 +1344,156 @@ export async function syncBlockerTasks(tenderId: string, blockers: string[]) {
       [task.id, shouldBeComplete],
     );
   }
+}
+
+function toDeletionRequest(row: Record<string, unknown>): DeletionRequest {
+  return {
+    id: String(row.id), accountId: String(row.account_id), requestedBy: String(row.requested_by),
+    requestedAt: new Date(row.created_at as string).toISOString(),
+    scheduledFor: new Date(row.scheduled_for as string).toISOString(),
+  };
+}
+
+export type DeletionRequest = {
+  id: string;
+  accountId: string;
+  requestedBy: string;
+  requestedAt: string;
+  scheduledFor: string;
+  cancelledAt?: string;
+};
+
+/**
+ * Schedules an account for deletion after a grace period.
+ *
+ * Nothing is touched until the job runs: a "pending deletion" that already
+ * broke things is not a grace period, it is a slower outage.
+ */
+export async function requestAccountDeletion(accountId: string, requestedBy: string, graceDays: number) {
+  const scheduledFor = new Date(Date.now() + graceDays * 86_400_000).toISOString();
+  const request: DeletionRequest = {
+    id: randomUUID(), accountId, requestedBy, requestedAt: new Date().toISOString(), scheduledFor,
+  };
+  if (!pool) {
+      memory.deletionRequests = memory.deletionRequests.filter((entry) => entry.accountId !== accountId || entry.cancelledAt);
+    memory.deletionRequests.push(request);
+    return request;
+  }
+  await pool.query("UPDATE deletion_requests SET cancelled_at = now() WHERE account_id=$1 AND cancelled_at IS NULL", [accountId]);
+  await pool.query(
+    "INSERT INTO deletion_requests(id,account_id,requested_by,scheduled_for) VALUES($1,$2,$3,$4)",
+    [request.id, accountId, requestedBy, scheduledFor],
+  );
+  return request;
+}
+
+/** The account's pending deletion, or null when there is none. */
+export async function pendingDeletion(accountId: string): Promise<DeletionRequest | null> {
+  if (!pool) {
+    return memory.deletionRequests.find((entry) => entry.accountId === accountId && !entry.cancelledAt) ?? null;
+  }
+  const result = await pool.query(
+    "SELECT * FROM deletion_requests WHERE account_id=$1 AND cancelled_at IS NULL ORDER BY created_at DESC LIMIT 1",
+    [accountId],
+  );
+  const row = result.rows[0];
+  return row ? toDeletionRequest(row) : null;
+}
+
+/** Cancels a pending deletion. Returns false when there was none. */
+export async function cancelAccountDeletion(accountId: string) {
+  if (!pool) {
+    const pending = memory.deletionRequests.find((entry) => entry.accountId === accountId && !entry.cancelledAt);
+    if (!pending) return false;
+    pending.cancelledAt = new Date().toISOString();
+    return true;
+  }
+  const result = await pool.query(
+    "UPDATE deletion_requests SET cancelled_at = now() WHERE account_id=$1 AND cancelled_at IS NULL", [accountId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Deletes one account and everything hanging off it.
+ *
+ * The cascade does the work: every table that holds this account's data has a
+ * foreign key to users with ON DELETE CASCADE, so there is no list here to fall
+ * out of date. award_history is shared reference data with no account column
+ * and is untouched by construction.
+ */
+export async function deleteAccount(accountId: string, requestedBy: string, requestedAt: string) {
+  if (!pool) {
+    // The in-memory store has no foreign keys, so the cascade is written out by
+    // hand. A half-deletion in development that looks complete is how a real one
+    // ships incomplete.
+    const tenderIds = new Set<string>();
+    for (const [id, tender] of memory.tenders) {
+      if (tender.accountId !== accountId) continue;
+      tenderIds.add(id);
+      memory.tenders.delete(id);
+    }
+    const personIds = new Set<string>();
+    for (const [id, person] of memory.people) {
+      if (person.accountId !== accountId) continue;
+      personIds.add(id);
+      memory.people.delete(id);
+    }
+    const answerIds = new Set<string>();
+    for (const [id, answer] of memory.answers) {
+      if (!tenderIds.has(answer.tenderId)) continue;
+      answerIds.add(id);
+      memory.answers.delete(id);
+    }
+    for (const [id, document] of memory.documents) if (tenderIds.has(document.tenderId)) memory.documents.delete(id);
+    for (const [id, item] of memory.evidence) {
+      if (item.accountId !== accountId) continue;
+      memory.evidence.delete(id);
+      memoryEvidenceFiles.delete(id);
+    }
+    for (const [id, notification] of memory.notifications) if (notification.accountId === accountId) memory.notifications.delete(id);
+    const byAccount = <T extends { accountId: string }>(rows: T[]) => rows.filter((row) => row.accountId !== accountId);
+    const byTender = <T extends { tenderId: string }>(rows: T[]) => rows.filter((row) => !tenderIds.has(row.tenderId));
+    memory.usage = byAccount(memory.usage);
+    memory.audit = byAccount(memory.audit);
+    memory.watchlist = byAccount(memory.watchlist);
+    memory.savedSearches = byAccount(memory.savedSearches);
+    memory.bidDecisions = byTender(memory.bidDecisions);
+    memory.clarifications = byTender(memory.clarifications);
+    memory.bidTasks = byTender(memory.bidTasks);
+    memory.mockEvaluations = byTender(memory.mockEvaluations);
+    memory.packQuestions = byTender(memory.packQuestions);
+    memory.analysisVersions = byTender(memory.analysisVersions);
+    memory.personFacts = memory.personFacts.filter((fact) => !personIds.has(fact.personId));
+    memory.provenance = memory.provenance.filter((entry) => !answerIds.has(entry.answerId));
+    memory.answerVersions = memory.answerVersions.filter((version) => !answerIds.has(version.answerId));
+    memory.deletionRequests = memory.deletionRequests.filter((entry) => entry.accountId !== accountId);
+    memory.users.delete(accountId);
+    memory.companies.delete(accountId);
+    memory.preferences.delete(accountId);
+    memory.declarations.delete(accountId);
+    memory.affirmations.delete(accountId);
+    memory.deletionLog.push({ accountId, requestedBy, requestedAt, completedAt: new Date().toISOString() });
+    return true;
+  }
+  // The erasure record is written first: if the delete fails, we have a record
+  // of an attempt rather than a deletion nobody can evidence.
+  await pool.query(
+    "INSERT INTO deletion_log(id,account_id,requested_by,requested_at) VALUES($1,$2,$3,$4)",
+    [randomUUID(), accountId, requestedBy, requestedAt],
+  );
+  const result = await pool.query("DELETE FROM users WHERE id=$1", [accountId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** Deletions whose grace period has expired. */
+export async function dueDeletions(): Promise<DeletionRequest[]> {
+  const now = new Date().toISOString();
+  if (!pool) {
+    return memory.deletionRequests.filter((entry) => !entry.cancelledAt && entry.scheduledFor <= now);
+  }
+  const result = await pool.query(
+    "SELECT * FROM deletion_requests WHERE cancelled_at IS NULL AND scheduled_for <= now()");
+  return result.rows.map(toDeletionRequest);
 }
 
 export async function addEvidence(
