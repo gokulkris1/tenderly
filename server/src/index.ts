@@ -8,10 +8,12 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { accountId, actorEmail, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
 import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer, draftDecisionRationale, evaluateDraft, extractCvRecords } from "./ai.js";
+import { askThePack } from "./ai.js";
 import { badgeFor, classForHumanEdit } from "./provenance.js";
 import { diffVersions } from "./versions.js";
 import { ESTIMATE_NOTICE, prioritisedGaps, scoreEvaluation } from "./evaluation.js";
 import { buildPortfolio } from "./portfolio.js";
+import { NO_ANSWER, chunkDocument, rankChunks } from "./retrieval.js";
 import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
@@ -56,6 +58,7 @@ import {
   listEvidence,
   listMockEvaluations,
   listNotifications,
+  listPackQuestions,
   listActivePeople,
   listPeople,
   listSavedSearches,
@@ -69,6 +72,7 @@ import {
   recordAnswerVersion,
   recordBidDecision,
   recordMockEvaluation,
+  recordPackQuestion,
   removeFromWatchlist,
   recordProvenance,
   saveAnswer,
@@ -1185,6 +1189,69 @@ app.get("/api/tenders/:id/mock-evaluation", async (req: AuthenticatedRequest, re
     if (!tender) return res.status(404).json({ error: "Tender not found" });
     const runs = await listMockEvaluations(tender.id);
     res.json({ evaluations: runs.map((run) => ({ ...run, notice: ESTIMATE_NOTICE })), notice: ESTIMATE_NOTICE });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Answers a question from the tender pack, with the passage it came from.
+ *
+ * The answer is grounded or it is a refusal: a bid manager will have to satisfy
+ * an evaluator that the figure is right, and an invented requirement is worse
+ * than no answer.
+ */
+app.post("/api/tenders/:id/ask", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const { question } = z.object({ question: z.string().trim().min(3).max(500) }).parse(req.body);
+
+    const documents = (await listDocuments(tender.id)).filter((document) => document.extractedText.trim().length > 0);
+    if (documents.length === 0) {
+      return res.status(409).json({ error: "No extracted documents to search" });
+    }
+
+    const chunks = documents.flatMap((document) => chunkDocument(document.filename, document.extractedText));
+    const ranked = rankChunks(question, chunks);
+
+    // Nothing matched: answer honestly without spending a model call on it.
+    if (ranked.length === 0) {
+      const record = await recordPackQuestion({
+        tenderId: tender.id, question, answer: NO_ANSWER, citations: [], actor: actorEmail(req),
+      });
+      return res.status(201).json({ result: record });
+    }
+
+    // The pack is the most likely place an instruction would be hidden, and
+    // this feature reads packs for a living.
+    const enveloped = ranked
+      .map((chunk) => `${DOCUMENT_OPEN(chunk.documentName)}\n${chunk.heading ? `${neutraliseEnvelopeMarkers(chunk.heading)}\n` : ""}${neutraliseEnvelopeMarkers(chunk.text)}\n${DOCUMENT_CLOSE}`)
+      .join("\n\n");
+
+    const answered = await askThePack({ accountId: account, tenderId: tender.id, question, envelopedPassages: enveloped });
+    if (!answered) return res.status(503).json({ error: "Pack questions are unavailable" });
+
+    // A citation naming a document we did not supply is dropped: the point of
+    // the citation is that a person can go and read it.
+    const supplied = new Set(ranked.map((chunk) => chunk.documentName));
+    const citations = answered.citations.filter((citation) => supplied.has(citation.documentName));
+
+    const record = await recordPackQuestion({
+      tenderId: tender.id, question,
+      answer: answered.answer, citations, actor: actorEmail(req),
+    });
+    res.status(201).json({ result: record });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** Everything asked of this pack, newest first. */
+app.get("/api/tenders/:id/ask", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const documents = (await listDocuments(tender.id)).filter((document) => document.extractedText.trim().length > 0);
+    res.json({ questions: await listPackQuestions(tender.id), searchable: documents.length > 0 });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

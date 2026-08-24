@@ -27,6 +27,7 @@ import type {
   Lot,
   MockEvaluation,
   NotificationItem,
+  PackQuestion,
   PersonFact,
   PersonItem,
   Portfolio,
@@ -343,6 +344,59 @@ function BidDecisionPanel({ tender, onRecord, busy }: {
   );
 }
 
+/**
+ * Ask the tender pack a question.
+ *
+ * Every answer cites the document and the sentence it rests on, because a bid
+ * manager will have to satisfy an evaluator that the figure is right. A pack
+ * that does not address the question says so — an invented requirement is worse
+ * than no answer, and a plausible one is worse still because nobody checks it.
+ */
+function AskThePack({ questions, searchable, onAsk, busy }: {
+  questions: PackQuestion[]; searchable: boolean; onAsk: (question: string) => void; busy: boolean;
+}) {
+  const [question, setQuestion] = useState("");
+  return (
+    <section className="panel ask-panel" data-testid="ask-the-pack">
+      <div className="panel-heading">
+        <div><h2>Ask the pack</h2><p>Answers come from the uploaded documents, with the passage they came from.</p></div>
+      </div>
+
+      {!searchable
+        ? <p className="ask-empty" data-testid="ask-unavailable">No extracted documents to search — upload the tender pack first.</p>
+        : (
+          <form
+            className="ask-form"
+            onSubmit={(event) => { event.preventDefault(); if (question.trim().length > 2) { onAsk(question.trim()); setQuestion(""); } }}
+          >
+            <input
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="What insurance is required?"
+              disabled={busy}
+            />
+            <button className="quiet-btn" disabled={busy || question.trim().length < 3}>{busy ? "Reading…" : "Ask"}</button>
+          </form>
+        )}
+
+      {questions.length > 0 && (
+        <ul className="ask-history">
+          {questions.map((entry) => (
+            <li key={entry.id} data-testid={`ask-${entry.id}`}>
+              <strong>{entry.question}</strong>
+              <p>{entry.answer}</p>
+              {entry.citations.map((citation, index) => (
+                <blockquote key={index}>“{citation.quote}”<cite>{citation.documentName}</cite></blockquote>
+              ))}
+              <small>{entry.actor} · {new Date(entry.createdAt).toLocaleString()}</small>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function RecommendationPanel({ recommendation }: { recommendation?: Recommendation }) {
   if (!recommendation) return null;
   return (
@@ -644,6 +698,8 @@ export default function TenderlyApp() {
   const [critique, setCritique] = useState<AnswerCritique | null>(null);
   const [answerHistory, setAnswerHistory] = useState<AnswerHistory | null>(null);
   const [evaluation, setEvaluation] = useState<EvaluationState | null>(null);
+  const [packQuestions, setPackQuestions] = useState<PackQuestion[]>([]);
+  const [packSearchable, setPackSearchable] = useState(false);
   const [attestationState, setAttestationState] = useState<AttestationState | null>(null);
   const [tenders, setTenders] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [discoveries, setDiscoveries] = useState<Tender[]>(API_BASE ? [] : demoTenders);
@@ -749,6 +805,13 @@ export default function TenderlyApp() {
     if (first) void loadAnswerHistory(first);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, selectedId]);
+
+  // The pack Q&A belongs to the tender being looked at.
+  useEffect(() => {
+    if (!selectedId || isDemo) return;
+    void refreshPackQuestions(selectedId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -995,6 +1058,32 @@ export default function TenderlyApp() {
       setToast("Attestation recorded · the final pack is released");
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not record the attestation");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function refreshPackQuestions(tenderId: string) {
+    if (isDemo || !API_BASE || !token) return;
+    try {
+      const { questions, searchable } = await apiClient.packQuestions(tenderId);
+      setPackQuestions(questions);
+      setPackSearchable(searchable);
+    } catch {
+      setPackQuestions([]);
+      setPackSearchable(false);
+    }
+  }
+
+  async function askThePack(question: string) {
+    if (!selected) return;
+    if (isDemo) { setToast("Asking the pack is disabled in the demo"); return; }
+    try {
+      setLoading("ask");
+      const { result } = await apiClient.askThePack(selected.id, question);
+      setPackQuestions((items) => [result, ...items]);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not read the pack");
     } finally {
       setLoading("");
     }
@@ -1644,6 +1733,9 @@ export default function TenderlyApp() {
             <BidWorkspace
               acknowledgeAiPolicy={acknowledgeAiPolicy}
               assignRole={assignRole}
+              packQuestions={packQuestions}
+              packSearchable={packSearchable}
+              askThePack={askThePack}
               onOpenCitation={openCitation}
               setSelectedLots={setSelectedLots}
               recordBidDecision={recordBidDecision}
@@ -2032,8 +2124,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -2073,6 +2165,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
             </section>
 
             <RecommendationPanel recommendation={tender.recommendation} />
+            <AskThePack questions={packQuestions} searchable={packSearchable} onAsk={askThePack} busy={loading === "ask"} />
             <BidDecisionPanel tender={tender} onRecord={recordBidDecision} busy={loading === "decision"} />
             <RoleMatches matches={tender.roleMatches ?? []} onAssign={assignRole} busy={loading === "assign-role"} />
             <LotSelector lots={tender.lots ?? []} selected={tender.selectedLots ?? []} onChange={setSelectedLots} busy={loading === "lots"} />

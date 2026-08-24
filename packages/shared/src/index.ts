@@ -46,6 +46,16 @@ export type Gate = {
 /** How much of a response section a machine produced. */
 export type ProvenanceClass = "ai-generated" | "ai-assisted" | "human";
 
+/** A question asked of the tender pack, with the passage the answer rests on. */
+export type PackQuestion = {
+  id: string;
+  question: string;
+  answer: string;
+  citations: { documentName: string; quote: string }[];
+  actor: string;
+  createdAt: string;
+};
+
 /** One row of the pipeline board. */
 export type PortfolioRow = {
   id: string;

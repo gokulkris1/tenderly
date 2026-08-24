@@ -22,6 +22,7 @@ import type {
   EvidenceItem,
   MockEvaluation,
   NotificationItem,
+  PackQuestion,
   PersonFact,
   PersonItem,
   Portfolio,
@@ -121,6 +122,12 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       }),
 
     // --- workspace --------------------------------------------------------
+    packQuestions: (tenderId: string) =>
+      request<{ questions: PackQuestion[]; searchable: boolean }>(`/api/tenders/${tenderId}/ask`, "Load pack questions"),
+    askThePack: (tenderId: string, question: string) =>
+      request<{ result: PackQuestion }>(`/api/tenders/${tenderId}/ask`, "Ask the pack", {
+        method: "POST", body: JSON.stringify({ question }),
+      }),
     portfolio: (sort: "deadline" | "recommendation" | "blockers" = "deadline") =>
       request<{ portfolio: Portfolio }>(`/api/portfolio?sort=${sort}`, "Load portfolio"),
     listTenders: () => request<{ items: Tender[] }>("/api/tenders", "Load bids"),

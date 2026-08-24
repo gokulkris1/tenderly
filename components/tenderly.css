@@ -681,3 +681,15 @@ button:disabled { cursor: wait; opacity: .62; }
 .portfolio-facts small { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .portfolio-facts strong { font-size: 13px; }
 .portfolio-blockers { color: var(--amber); }
+
+/* TLY-44 — ask the pack, and be shown the sentence the answer rests on. */
+.ask-form { display: flex; gap: 10px; margin-top: 12px; }
+.ask-form input { flex: 1; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.ask-empty { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+.ask-history { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 2px; }
+.ask-history li { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--line-soft); }
+.ask-history strong { font-size: 13px; }
+.ask-history p { margin: 0; font-size: 13px; line-height: 1.65; }
+.ask-history blockquote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--line); background: var(--paper); border-radius: 0 8px 8px 0; font-size: 12px; }
+.ask-history cite { display: block; margin-top: 5px; font-size: 10px; font-style: normal; color: var(--muted); }
+.ask-history small { font-size: 10px; color: var(--muted); }
