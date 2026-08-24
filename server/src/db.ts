@@ -6,6 +6,7 @@ import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
 import { allCpvCodes, cpvAncestors, normaliseCpv } from "./cpv.js";
 import { canonicalKey } from "./dedupe.js";
 import type { IngestionRun } from "./ingestion-health.js";
+import type { AnswerVersion } from "./versions.js";
 import type { Affirmation, DeclarationAnswer } from "./declarations.js";
 import type {
   AuditEntry,
@@ -60,6 +61,7 @@ const memory = {
   bidDecisions: [] as BidDecisionRecord[],
   watchlist: [] as WatchlistEntry[],
   personFacts: [] as PersonFact[],
+  answerVersions: [] as AnswerVersion[],
   savedSearches: [] as SavedSearch[],
   ingestionRuns: [] as IngestionRun[],
   declarations: new Map<string, DeclarationAnswer[]>(),
@@ -1019,6 +1021,62 @@ export async function applyRetention(policy: { id: string; label: string; cutoff
     client.release();
   }
   return { removed, removedTenders, dryRun };
+}
+
+const toAnswerVersion = (row: Record<string, unknown>): AnswerVersion => ({
+  id: String(row.id), answerId: String(row.answer_id), response: String(row.response ?? ""),
+  status: String(row.status ?? "draft"),
+  provenanceClass: row.provenance_class as AnswerVersion["provenanceClass"],
+  actor: String(row.actor ?? ""),
+  restoredFrom: (row.restored_from as string | null) ?? undefined,
+  createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/**
+ * Records one saved state of an answer.
+ *
+ * Called on every save, including a restore — the point is that no state is
+ * ever lost, so there is no path that skips this.
+ */
+export async function recordAnswerVersion(input: Omit<AnswerVersion, "id" | "createdAt">) {
+  const version: AnswerVersion = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.answerVersions.push(version); return version; }
+  await pool.query(
+    `INSERT INTO answer_versions(id,answer_id,response,status,provenance_class,actor,restored_from)
+     VALUES($1,$2,$3,$4,$5,$6,$7)`,
+    [version.id, version.answerId, version.response, version.status, version.provenanceClass, version.actor, version.restoredFrom ?? null],
+  );
+  return version;
+}
+
+/** One answer's versions, oldest first. */
+export async function listAnswerVersions(answerId: string) {
+  if (!pool) {
+    return memory.answerVersions.filter((version) => version.answerId === answerId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  const result = await pool.query("SELECT * FROM answer_versions WHERE answer_id=$1 ORDER BY created_at, id", [answerId]);
+  return result.rows.map(toAnswerVersion);
+}
+
+/** One version, scoped to the account that owns its tender. */
+export async function getAnswerVersion(accountId: string, versionId: string) {
+  if (!isUuid(versionId)) return null;
+  if (!pool) {
+    const version = memory.answerVersions.find((entry) => entry.id === versionId);
+    if (!version) return null;
+    const answer = [...memory.answers.values()].find((entry) => entry.id === version.answerId);
+    const tender = answer ? memory.tenders.get(answer.tenderId) : undefined;
+    return tender?.accountId === accountId ? version : null;
+  }
+  const result = await pool.query(
+    `SELECT v.* FROM answer_versions v
+       JOIN bid_answers a ON a.id = v.answer_id
+       JOIN tenders t ON t.id = a.tender_id
+      WHERE v.id=$1 AND t.account_id=$2`,
+    [versionId, accountId],
+  );
+  return result.rows[0] ? toAnswerVersion(result.rows[0]) : null;
 }
 
 export async function addEvidence(

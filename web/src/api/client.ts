@@ -9,6 +9,7 @@
 import type {
   Affirmation,
   AiPolicyAcknowledgement,
+  AnswerVersion,
   Attestation,
   AttestationState,
   AuditEntry,
@@ -16,6 +17,7 @@ import type {
   CompanyProfile,
   DeclarationAnswer,
   DeclarationState,
+  DiffSegment,
   DiscoveryPreferences,
   EvidenceItem,
   NotificationItem,
@@ -169,6 +171,15 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         "Draft answer",
         { method: "POST", body: "{}" },
       ),
+    answerVersions: (tenderId: string, questionId: string, compare?: { from: string; to: string }) => {
+      const query = compare ? `?from=${encodeURIComponent(compare.from)}&to=${encodeURIComponent(compare.to)}` : "";
+      return request<{ versions: AnswerVersion[]; diff?: DiffSegment[] }>(
+        `/api/tenders/${tenderId}/answers/${questionId}/versions${query}`, "Load answer history");
+    },
+    restoreAnswerVersion: (tenderId: string, questionId: string, versionId: string) =>
+      request<{ answer: unknown; versions: AnswerVersion[] }>(
+        `/api/tenders/${tenderId}/answers/${questionId}/versions/${versionId}/restore`, "Restore version",
+        { method: "POST", body: "{}" }),
     saveAnswer: (tenderId: string, questionId: string, response: string, status: string) =>
       request<unknown>(`/api/tenders/${tenderId}/answers/${questionId}`, "Save answer", {
         method: "PUT",
