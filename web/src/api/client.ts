@@ -20,6 +20,7 @@ import type {
   SectorPreset,
   Tender,
   UsageTotals,
+  WatchlistItem,
 } from "@tenderly/shared";
 
 /** A failed API call, carrying enough for a screen to explain itself to a user. */
@@ -167,6 +168,11 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ confirmed: true }),
       }),
+    watchlist: () => request<{ items: WatchlistItem[] }>("/api/watchlist", "Load watchlist"),
+    watch: (notice: { externalId: string; title: string; authority: string; deadline: string; sourceUrl: string }) =>
+      request<unknown>("/api/watchlist", "Watch notice", { method: "POST", body: JSON.stringify(notice) }),
+    unwatch: (externalId: string) =>
+      request<unknown>(`/api/watchlist/${encodeURIComponent(externalId)}`, "Unwatch notice", { method: "DELETE" }),
     recordBidDecision: (tenderId: string, decision: "BID" | "NO_BID", reason: string) =>
       request<{ decision: BidDecisionRecord }>(`/api/tenders/${tenderId}/decision`, "Record bid decision", {
         method: "POST",

@@ -32,10 +32,11 @@ import type {
   SubmissionItem,
   Tender,
   UsageTotals,
+  WatchlistItem,
 } from "@tenderly/shared";
 
 // Screen navigation is local to the app, not part of the wire contract.
-type AppSection = "Discover" | "My bids" | "Evidence" | "Team" | "Company" | "Settings";
+type AppSection = "Discover" | "Watchlist" | "My bids" | "Evidence" | "Team" | "Company" | "Settings";
 type BidStage = "Qualify" | "Synopsis" | "Respond" | "Assemble" | "Submit";
 
 /** The URL is the source of truth for which screen is showing (TLY-23). */
@@ -45,6 +46,7 @@ const SECTION_PATHS: Record<AppSection, string> = {
   Evidence: "/evidence",
   Team: "/team",
   Company: "/company",
+  Watchlist: "/watchlist",
   Settings: "/settings",
 };
 const stageSlug = (stage: BidStage) => stage.toLowerCase().replace(/\s+/g, "-");
@@ -207,6 +209,7 @@ const demoNotifications: NotificationItem[] = [
 
 const navItems: { label: AppSection; icon: string; badge?: string }[] = [
   { label: "Discover", icon: "⌕", badge: "12" },
+  { label: "Watchlist", icon: "★" },
   { label: "My bids", icon: "▱", badge: "3" },
   { label: "Evidence", icon: "◇" },
   { label: "Team", icon: "◎" },
@@ -593,6 +596,10 @@ export default function TenderlyApp() {
   // The authoritative blocker list the API returns when it refuses a final pack.
   const [blockers, setBlockers] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageTotals | null>(null);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  // The star state on Discover is derived from the watchlist, so the two can
+  // never disagree about what is being watched.
+  const watchedIds = useMemo(() => new Set(watchlist.map((item) => item.externalId)), [watchlist]);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [auditFilter, setAuditFilter] = useState<{ action: string; days: number }>({ action: "", days: 30 });
   const auditAction = auditFilter.action;
@@ -643,6 +650,12 @@ export default function TenderlyApp() {
     void loadAttestation(selectedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, selectedId, tenders]);
+
+  useEffect(() => {
+    if (!API_BASE || !token || isDemo) return;
+    void refreshWatchlist();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, section]);
 
   useEffect(() => {
     if (!toast) return;
@@ -852,6 +865,71 @@ export default function TenderlyApp() {
       setCritique({ questionId, ...result });
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not critique this answer");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function refreshWatchlist() {
+    if (isDemo || !API_BASE || !token) return;
+    try {
+      const { items } = await apiClient.watchlist();
+      setWatchlist(items);
+    } catch {
+      // The watchlist is a convenience; a failure here must not break Discover.
+    }
+  }
+
+  async function toggleWatch(tender: Tender) {
+    if (isDemo) { setToast("Watchlist is disabled in the demo"); return; }
+    const externalId = tender.resourceId;
+    try {
+      setLoading("watchlist");
+      if (watchedIds.has(externalId)) {
+        await apiClient.unwatch(externalId);
+        setToast("Removed from watchlist");
+      } else {
+        await apiClient.watch({
+          externalId, title: tender.title, authority: tender.authority,
+          deadline: tender.deadline, sourceUrl: tender.sourceUrl,
+        });
+        setToast("Added to watchlist");
+      }
+      await refreshWatchlist();
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not update the watchlist");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function unwatchNotice(externalId: string) {
+    if (isDemo) return;
+    try {
+      setLoading("watchlist");
+      await apiClient.unwatch(externalId);
+      await refreshWatchlist();
+      setToast("Removed from watchlist");
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not update the watchlist");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  /** Promoting a watched notice runs the ordinary import and opens the bid. */
+  async function importWatched(item: WatchlistItem) {
+    if (isDemo || !item.sourceUrl) return;
+    try {
+      setLoading("watchlist");
+      const { tender } = await apiClient.importTender(item.sourceUrl);
+      setTenders((items) => [tender, ...items.filter((entry) => entry.id !== tender.id)]);
+      await refreshWatchlist();
+      setSelectedId(tender.id);
+      setSection("My bids");
+      setToast(`Imported ${tender.title}`);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not import that notice");
     } finally {
       setLoading("");
     }
@@ -1128,6 +1206,17 @@ export default function TenderlyApp() {
               setShowImport={setShowImport}
               hasPreferences={preferences.sectors.length > 0 || preferences.keywords.length > 0}
               onOpenSettings={() => setSection("Settings")}
+              watching={watchedIds}
+              onToggleWatch={toggleWatch}
+            />
+          )}
+          {section === "Watchlist" && (
+            <WatchlistView
+              items={watchlist}
+              loading={loading === "watchlist"}
+              onUnwatch={unwatchNotice}
+              onImport={importWatched}
+              onDiscover={() => setSection("Discover")}
             />
           )}
           {section === "My bids" && selected && (
@@ -1236,8 +1325,60 @@ function ScoreBreakdownDetail({ breakdown }: { breakdown?: ScoreBreakdown }) {
   );
 }
 
-function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid, setShowImport, hasPreferences, onOpenSettings }: {
-  tenders: Tender[]; query: string; setQuery: (value: string) => void; refreshDiscovery: () => void; loading: boolean; openBid: (id: string) => void; setShowImport: (value: boolean) => void; hasPreferences: boolean; onOpenSettings: () => void;
+/**
+ * Notices being watched without a bid record.
+ *
+ * Live items first, soonest deadline first. A passed deadline reads "Deadline
+ * passed" under a Closed heading rather than a negative number — the item stays
+ * because the user put it there, but it stops pretending to be an opportunity.
+ */
+function WatchlistView({ items, loading, onUnwatch, onImport, onDiscover }: {
+  items: WatchlistItem[]; loading: boolean;
+  onUnwatch: (externalId: string) => void; onImport: (item: WatchlistItem) => void; onDiscover: () => void;
+}) {
+  const live = items.filter((item) => !item.closed);
+  const closed = items.filter((item) => item.closed);
+  const row = (item: WatchlistItem) => (
+    <article className="watch-row" key={item.externalId} data-testid={`watch-row-${item.externalId}`}>
+      <div>
+        <h3>{item.title}</h3>
+        <p className="authority">{item.authority || "Contracting authority"}</p>
+        <div className="tender-facts">
+          <span><small>Deadline</small><strong>{item.deadline || "Not stated"}</strong></span>
+          <span><small>Time left</small><strong className={item.closed ? "watch-passed" : ""}>{item.closed ? "Deadline passed" : item.daysRemaining === null ? "Not stated" : `${item.daysRemaining} day${item.daysRemaining === 1 ? "" : "s"}`}</strong></span>
+        </div>
+      </div>
+      <div className="watch-actions">
+        <button className="quiet-btn" onClick={() => onImport(item)} disabled={loading}>Import as bid</button>
+        <button className="text-action" onClick={() => onUnwatch(item.externalId)} disabled={loading}>Unwatch</button>
+      </div>
+    </article>
+  );
+
+  return (
+    <div className="watchlist-page">
+      <div className="section-intro">
+        <div>
+          <p className="eyebrow">WATCHLIST</p>
+          <h2>Interesting, not yet a bid.</h2>
+          <p>Notices you are keeping an eye on. Nothing here has been imported or analysed, so watching costs nothing.</p>
+        </div>
+        <button className="quiet-btn" onClick={onDiscover}>Back to Discover</button>
+      </div>
+      {items.length === 0 && <section className="panel"><p>Nothing on the watchlist yet. Star a notice on Discover to keep an eye on its deadline.</p></section>}
+      {live.length > 0 && <section className="panel watch-list">{live.map(row)}</section>}
+      {closed.length > 0 && (
+        <section className="panel watch-list">
+          <p className="eyebrow">CLOSED</p>
+          {closed.map(row)}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid, setShowImport, hasPreferences, onOpenSettings, watching, onToggleWatch }: {
+  tenders: Tender[]; query: string; setQuery: (value: string) => void; refreshDiscovery: () => void; loading: boolean; openBid: (id: string) => void; setShowImport: (value: boolean) => void; hasPreferences: boolean; onOpenSettings: () => void; watching: Set<string>; onToggleWatch: (tender: Tender) => void;
 }) {
   return (
     <div className="discover-page">
@@ -1299,6 +1440,12 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
               <ScoreBreakdownDetail breakdown={tender.scoreBreakdown} />
             </div>
             <div className="tender-decision">
+              <button
+                className={`watch-star ${watching.has(tender.resourceId) ? "active" : ""}`}
+                data-testid={`watch-${tender.resourceId}`}
+                title={watching.has(tender.resourceId) ? "Remove from watchlist" : "Watch this notice"}
+                onClick={(event) => { event.stopPropagation(); onToggleWatch(tender); }}
+              >{watching.has(tender.resourceId) ? "★" : "☆"}</button>
               <span className={`decision-pill decision-${decisionSlug(tender.decision)}`}>{tender.decision === "GO" ? "✓" : tender.decision === "PARTNER" ? "↔" : tender.decision === "NO_GO" ? "×" : "!"} {decisionLabel(tender.decision)}</span>
               <button aria-label={`Review ${tender.title}`}>Review <span>→</span></button>
             </div>

@@ -218,6 +218,24 @@ export type ProvenanceEntry = {
 };
 
 /**
+ * A notice someone is keeping an eye on without committing to a bid.
+ *
+ * Deliberately not a tender: nothing is imported and no analysis is run, so
+ * watching something costs nothing.
+ */
+export type WatchlistEntry = {
+  id: string;
+  accountId: string;
+  externalId: string;
+  title: string;
+  authority: string;
+  deadline: string;
+  sourceUrl: string;
+  note: string;
+  createdAt: string;
+};
+
+/**
  * What the company chose to do about a tender.
  *
  * The recommendation is advice; this is the decision. Recorded with who made it

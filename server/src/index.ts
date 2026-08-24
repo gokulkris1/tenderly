@@ -15,11 +15,12 @@ import { searchTed } from "./sources/ted.js";
 import { combineSourceText, extractDocumentText } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./etenders.js";
 import { mergeNotices } from "./dedupe.js";
-import { deadlinePressure } from "./pressure.js";
+import { deadlinePressure, parseDeadline } from "./pressure.js";
 import { decide, unsupportedFigures } from "./decision.js";
 import { parseContractValue, scoreNotice } from "./scoring.js";
 import {
   addEvidence,
+  addToWatchlist,
   addPerson,
   awardIntelligence,
   companyWonBefore,
@@ -34,6 +35,7 @@ import {
   listAnswers,
   listAudit,
   listBidDecisions,
+  listWatchlist,
   listDocuments,
   listEvidence,
   listNotifications,
@@ -45,6 +47,7 @@ import {
   monthlyUsage,
   persistentDatabase,
   recordBidDecision,
+  removeFromWatchlist,
   recordProvenance,
   saveAnswer,
   saveDocument,
@@ -373,6 +376,8 @@ app.post("/api/tenders/import", importLimiter, async (req: AuthenticatedRequest,
     if (warnings.length) tender = await updateTenderMetadata(account, tender.id, { documentWarnings: warnings });
     let analysisError = "";
     try { tender = await analyseSavedTender(account, tender.id); } catch (error) { analysisError = error instanceof Error ? error.message : "Analysis did not complete"; }
+    // Importing a watched notice promotes it: it is a bid now, not a maybe.
+    if (tender.externalId) await removeFromWatchlist(account, tender.externalId).catch(() => false);
     res.status(201).json({ tender: await tenderWithAnswers(account, tender), warnings, analysisError });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status === 500 ? 502 : mapped.status).json({ error: mapped.message }); }
 });
@@ -695,6 +700,55 @@ app.get("/api/audit", async (req: AuthenticatedRequest, res) => {
     }).parse(req.query);
     const since = query.days ? new Date(Date.now() - query.days * 86_400_000) : undefined;
     res.json({ entries: await listAudit(accountId(req), { action: query.action, since, limit: query.limit }) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * The notices this account is watching, soonest deadline first.
+ *
+ * A passed deadline is reported as closed rather than as a negative count: the
+ * item stays visible because the user put it there, but it is not pretending to
+ * be an opportunity any more.
+ */
+app.get("/api/watchlist", async (req: AuthenticatedRequest, res) => {
+  try {
+    const entries = await listWatchlist(accountId(req));
+    const items = entries.map((entry) => {
+      const deadline = parseDeadline(entry.deadline);
+      const days = deadline ? Math.ceil((deadline.getTime() - Date.now()) / 86_400_000) : null;
+      return {
+        externalId: entry.externalId, title: entry.title, authority: entry.authority,
+        deadline: entry.deadline, sourceUrl: entry.sourceUrl, note: entry.note,
+        daysRemaining: days !== null && days >= 0 ? days : null,
+        closed: days !== null && days < 0,
+        createdAt: entry.createdAt,
+      };
+    });
+    // Live items first, soonest deadline first; closed ones fall to the bottom.
+    items.sort((a, b) => Number(a.closed) - Number(b.closed) || (a.daysRemaining ?? 0) - (b.daysRemaining ?? 0));
+    res.json({ items });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.post("/api/watchlist", async (req: AuthenticatedRequest, res) => {
+  try {
+    const input = z.object({
+      externalId: z.string().min(1).max(200),
+      title: z.string().min(1).max(500),
+      authority: z.string().max(300).default(""),
+      deadline: z.string().max(100).default(""),
+      sourceUrl: z.string().max(2000).default(""),
+      note: z.string().max(1000).default(""),
+    }).parse(req.body);
+    res.status(201).json({ entry: await addToWatchlist(accountId(req), input) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.delete("/api/watchlist/:externalId", async (req: AuthenticatedRequest, res) => {
+  try {
+    const removed = await removeFromWatchlist(accountId(req), routeParam(req.params.externalId));
+    if (!removed) return res.status(404).json({ error: "That notice is not on your watchlist" });
+    res.json({ removed: true });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
