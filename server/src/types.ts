@@ -150,6 +150,8 @@ export type TenderRecord = PublicTender & {
   source: string;
   /** Canonical eight-digit CPV, absent when the notice carries no readable code. */
   cpvNormalised?: string;
+  /** Cross-portal identity: two rows sharing this are one opportunity. */
+  canonicalKey?: string;
   metadata: Record<string, unknown>;
   analysis: TenderAnalysis | null;
 };
