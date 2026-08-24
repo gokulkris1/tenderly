@@ -8,6 +8,7 @@ import { canonicalKey } from "./dedupe.js";
 import type { IngestionRun } from "./ingestion-health.js";
 import type { AnswerVersion } from "./versions.js";
 import type { MockEvaluation } from "./evaluation.js";
+import type { PackQuestion } from "./types.js";
 import type { Affirmation, DeclarationAnswer } from "./declarations.js";
 import type {
   AuditEntry,
@@ -64,6 +65,7 @@ const memory = {
   personFacts: [] as PersonFact[],
   answerVersions: [] as AnswerVersion[],
   mockEvaluations: [] as MockEvaluation[],
+  packQuestions: [] as PackQuestion[],
   savedSearches: [] as SavedSearch[],
   ingestionRuns: [] as IngestionRun[],
   declarations: new Map<string, DeclarationAnswer[]>(),
@@ -1110,6 +1112,34 @@ export async function listMockEvaluations(tenderId: string) {
   }
   const result = await pool.query("SELECT * FROM mock_evaluations WHERE tender_id=$1 ORDER BY created_at DESC", [tenderId]);
   return result.rows.map(toMockEvaluation);
+}
+
+const toPackQuestion = (row: Record<string, unknown>): PackQuestion => ({
+  id: String(row.id), tenderId: String(row.tender_id), question: String(row.question),
+  answer: String(row.answer ?? ""), citations: (row.citations ?? []) as PackQuestion["citations"],
+  actor: String(row.actor ?? ""), createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/** Records one question asked of the pack, with the answer it produced. */
+export async function recordPackQuestion(input: Omit<PackQuestion, "id" | "createdAt">) {
+  const record: PackQuestion = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.packQuestions.push(record); return record; }
+  await pool.query(
+    "INSERT INTO pack_questions(id,tender_id,question,answer,citations,actor) VALUES($1,$2,$3,$4,$5,$6)",
+    [record.id, record.tenderId, record.question, record.answer, JSON.stringify(record.citations), record.actor],
+  );
+  return record;
+}
+
+/** Everything asked of this pack, newest first. */
+export async function listPackQuestions(tenderId: string) {
+  if (!pool) {
+    return memory.packQuestions.filter((entry) => entry.tenderId === tenderId)
+      .reverse()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const result = await pool.query("SELECT * FROM pack_questions WHERE tender_id=$1 ORDER BY created_at DESC", [tenderId]);
+  return result.rows.map(toPackQuestion);
 }
 
 export async function addEvidence(

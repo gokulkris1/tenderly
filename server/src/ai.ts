@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { answerCritiqueSchema, bidAnswerDraftSchema, cvExtractionSchema, decisionRationaleSchema, mockEvaluationSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
-import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, CRITIQUE_PROMPT, CV_PROMPT, DRAFTING_PROMPT, EVALUATION_PROMPT, RATIONALE_PROMPT } from "./prompts/index.js";
+import { answerCritiqueSchema, bidAnswerDraftSchema, cvExtractionSchema, decisionRationaleSchema, mockEvaluationSchema, packAnswerSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
+import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, ASK_PROMPT, CRITIQUE_PROMPT, CV_PROMPT, DRAFTING_PROMPT, EVALUATION_PROMPT, RATIONALE_PROMPT } from "./prompts/index.js";
 import { withStableIds } from "./analysis-schema.js";
 import { exclusionNotes, partitionEvidence, resolveCitations } from "./citations.js";
 import { reconcileGates, rollUpEligibility } from "./eligibility.js";
@@ -351,6 +351,41 @@ export async function evaluateDraft(args: {
     return parseToolResult(response, mockEvaluationSchema, "mock evaluation");
   } catch (error) {
     console.error("mock evaluation failed:", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/**
+ * Answers a question from passages retrieved out of the tender pack.
+ *
+ * The passages arrive inside the untrusted-document envelope, because a tender
+ * pack is the most likely place an instruction would be hidden — and this
+ * feature reads packs for a living.
+ */
+export async function askThePack(args: {
+  accountId: string;
+  tenderId: string;
+  question: string;
+  envelopedPassages: string;
+}) {
+  if (!client) return null;
+  const { tool, choice } = forcedTool("record_pack_answer", "Answer the question using only the supplied passages, citing them verbatim.", packAnswerSchema);
+  try {
+    const response = await callModel({
+      kind: "critique", accountId: args.accountId, tenderId: args.tenderId,
+      request: {
+        model,
+        max_tokens: 2000,
+        system: ASK_PROMPT,
+        messages: [{ role: "user", content: `Question: ${args.question}\n\n${args.envelopedPassages}` }],
+        tools: [tool],
+        tool_choice: choice,
+        output_config: { effort: "medium" },
+      },
+    });
+    return parseToolResult(response, packAnswerSchema, "pack answer");
+  } catch (error) {
+    console.error("pack question failed:", error instanceof Error ? error.message : error);
     return null;
   }
 }

@@ -205,6 +205,20 @@ export const mockEvaluationSchema = z.object({
   criteria: z.array(criterionScoreSchema),
 });
 
+/**
+ * A grounded answer about the tender pack.
+ *
+ * Citations are verbatim by construction: the field is the sentence, so there
+ * is nowhere to put a paraphrase and call it a quote.
+ */
+export const packAnswerSchema = z.object({
+  answer: z.string(),
+  citations: z.array(z.object({
+    documentName: z.string(),
+    quote: z.string(),
+  })),
+});
+
 export const bidAnswerDraftSchema = z.object({
   status: z.enum(["DRAFTED", "NEEDS_INPUT"]),
   answer: z.string(),

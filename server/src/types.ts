@@ -277,6 +277,24 @@ export type BidDecisionRecord = {
 };
 
 /**
+ * A question asked of the tender pack and the grounded answer it produced.
+ *
+ * Kept beside the tender because a bid team asks the same pack the same things
+ * repeatedly, and "is a site visit mandatory" is worth more on the record than
+ * in somebody's memory.
+ */
+export type PackQuestion = {
+  id: string;
+  tenderId: string;
+  question: string;
+  answer: string;
+  /** Document name and the verbatim sentence the answer rests on. */
+  citations: { documentName: string; quote: string }[];
+  actor: string;
+  createdAt: string;
+};
+
+/**
  * One recorded action that changes what eventually leaves the company.
  *
  * Entries never contain document contents or secrets — only what was acted on,
