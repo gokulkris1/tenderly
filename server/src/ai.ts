@@ -5,6 +5,7 @@ import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, ASK_PROMPT, CRITIQUE_PROMPT, 
 import { withStableIds } from "./analysis-schema.js";
 import { exclusionNotes, partitionEvidence, resolveCitations } from "./citations.js";
 import { reconcileGates, rollUpEligibility } from "./eligibility.js";
+import { partialJsonString } from "./streaming.js";
 import { recordUsage } from "./db.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, TenderAnalysis, TenderRecord, UsageEvent } from "./types.js";
 
@@ -15,7 +16,8 @@ const client = apiKey ? new Anthropic({ apiKey }) : null;
 
 /**
  * Analysis returns a large structured object; drafting returns one answer.
- * Neither is streamed here — streaming drafting to the UI is TLY-68.
+ * Drafting can also be streamed (TLY-68); both paths validate against the same
+ * Zod schema, so a streamed draft is not a laxer draft.
  *
  * 16000 is the SDK's ceiling for a non-streaming request: above it the client
  * refuses outright ("Streaming is required for operations that may take longer
@@ -207,6 +209,84 @@ export async function draftBidAnswer(args: {
   const draft = parseToolResult(response, bidAnswerDraftSchema, "drafting") as BidAnswerDraft;
   // The model names the evidence it used; the citation carries the identifier,
   // so the UI can open the document rather than a name that points nowhere.
+  return { ...draft, citations: resolveCitations(draft.evidenceUsed, citable) };
+}
+
+/**
+ * Drafts one answer, streaming the prose as it is written.
+ *
+ * Same prompt, same forced tool, same Zod validation as `draftBidAnswer` — the
+ * only difference is that the caller sees the answer grow. Nothing is saved
+ * here: the caller saves on completion, so a stopped or failed stream leaves
+ * the previous answer exactly as it was.
+ *
+ * `onText` receives the answer so far, not a delta, because that is what a
+ * screen renders and it makes a dropped event harmless.
+ */
+export async function streamBidAnswer(args: {
+  tender: TenderRecord;
+  company: CompanyProfile;
+  question: TenderAnalysis["questions"][number];
+  evidence: EvidenceRecord[];
+  people: PersonRecord[];
+  existingAnswers: BidAnswer[];
+  onText: (answerSoFar: string) => void;
+  signal?: AbortSignal;
+}) {
+  if (!client) throw new Error("Configure ANTHROPIC_API_KEY to draft evidence-grounded bid responses");
+
+  const { citable, excluded } = partitionEvidence(args.evidence);
+  const payload = {
+    tender: { title: args.tender.title, authority: args.tender.authority, analysis: args.tender.analysis },
+    question: args.question,
+    bidderProfile: args.company,
+    approvedEvidence: citable.map((item) => ({ name: item.name, kind: item.kind, content: item.content })),
+    evidenceHeldButUnusable: exclusionNotes(excluded),
+    people: args.people,
+    priorAnswers: args.existingAnswers.map((answer) => ({ questionId: answer.questionId, response: answer.response })),
+  };
+  const { tool, choice } = forcedTool("record_bid_answer", "Record the drafted answer to this scored question.", bidAnswerDraftSchema);
+
+  // The tool input arrives as JSON fragments, so the prose the user watches is
+  // read out of a document that is still being written.
+  let json = "";
+  let shown = "";
+  const stream = client.messages.stream({
+    model,
+    max_tokens: DRAFT_MAX_TOKENS,
+    system: DRAFTING_PROMPT,
+    messages: [{ role: "user", content: JSON.stringify(payload) }],
+    tools: [tool],
+    tool_choice: choice,
+    output_config: { effort: "high" },
+  }, { signal: args.signal });
+
+  stream.on("streamEvent", (event) => {
+    if (event.type !== "content_block_delta" || event.delta.type !== "input_json_delta") return;
+    json += event.delta.partial_json;
+    const answer = partialJsonString(json, "answer");
+    if (answer !== null && answer !== shown) {
+      shown = answer;
+      args.onText(shown);
+    }
+  });
+
+  const response = await stream.finalMessage();
+  // Metering is a property of every model call, streamed or not.
+  if (args.tender.accountId) {
+    try {
+      await recordUsage({
+        accountId: args.tender.accountId, kind: "draft", model,
+        inputTokens: response.usage?.input_tokens ?? 0,
+        outputTokens: response.usage?.output_tokens ?? 0,
+        requestId: response.id, tenderId: args.tender.id,
+      });
+    } catch (error) {
+      console.error("usage metering failed for draft:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  const draft = parseToolResult(response, bidAnswerDraftSchema, "drafting") as BidAnswerDraft;
   return { ...draft, citations: resolveCitations(draft.evidenceUsed, citable) };
 }
 

@@ -29,7 +29,8 @@ import {
   invitationLink, invitationProblem, newInvitationToken,
 } from "./invitations.js";
 import { sendEmail } from "./mail.js";
-import { draftAndSaveAnswer, draftContext } from "./drafting.js";
+import { draftAndSaveAnswer, draftContext, streamAndSaveAnswer } from "./drafting.js";
+import { SSE_HEADERS, sseEvent } from "./streaming.js";
 import { isRunning, runFor, startBatchDraft, summarise } from "./batch-draft.js";
 import { LAST_OWNER, attachMembership, requireEditorForWrites, requireRole } from "./roles.js";
 import { buildAccountExport } from "./account-export.js";
@@ -2185,6 +2186,64 @@ app.get("/api/tenders/:id/draft-all", async (req: AuthenticatedRequest, res) => 
     if (!run) return res.json({ run: null, summary: null, running: false });
     res.json({ run, summary: summarise(run), running: !run.finishedAt });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Drafts one answer as a stream of server-sent events.
+ *
+ * Tens of seconds of spinner is indistinguishable from a hung request, and
+ * people click again. Watching the answer arrive makes the wait legible and
+ * lets somebody stop a draft that is going wrong.
+ *
+ * Nothing is saved until the draft completes and validates. A stopped stream, a
+ * dropped connection and a malformed payload all leave the previous answer
+ * exactly where it was — half a draft is not a draft.
+ */
+app.post("/api/tenders/:id/answers/:questionId/draft-stream", draftLimiter, draftHourlyLimiter, async (req: AuthenticatedRequest, res) => {
+  const account = accountId(req);
+  const tender = await getTender(account, routeParam(req.params.id));
+  if (!tender) return res.status(404).json({ error: "Tender not found" });
+  if (!tender.analysis) return res.status(409).json({ error: "Run tender analysis before drafting responses" });
+  if (noAiMode(tender)) return res.status(409).json({ error: NO_AI_REFUSAL });
+  const questionId = routeParam(req.params.questionId);
+  const question = tender.analysis.questions.find((item) => item.id === questionId);
+  if (!question) return res.status(404).json({ error: "Scored question not found" });
+
+  // Everything that could be a plain HTTP error has been answered above. From
+  // here the response is a stream, so failures travel as an error event.
+  res.writeHead(200, SSE_HEADERS);
+  res.flushHeaders?.();
+
+  const controller = new AbortController();
+  // Stop is a closed connection: the client aborts its fetch, and the model
+  // call is abandoned rather than left running and billed for nothing.
+  req.on("close", () => controller.abort());
+
+  try {
+    const context = await draftContext(account, tender.id);
+    const { draft, saved } = await streamAndSaveAnswer({
+      tender, question, context, actor: actorEmail(req), signal: controller.signal,
+      onText: (answerSoFar) => res.write(sseEvent("text", { answer: answerSoFar })),
+    });
+    res.write(sseEvent("done", {
+      answer: draft.answer, status: saved.status,
+      missingInputs: draft.missingInputs, citations: draft.citations ?? [],
+      claimsToVerify: draft.claimsToVerify ?? [],
+    }));
+  } catch (error) {
+    const stopped = controller.signal.aborted || (error instanceof Error && error.message === "STOPPED");
+    if (!stopped) {
+      // Named, so the screen can say which question failed rather than that
+      // something did.
+      res.write(sseEvent("error", {
+        questionId: question.id, title: question.title,
+        message: error instanceof Error ? error.message : "Drafting failed",
+      }));
+      log("error", { route: "draft-stream", tenderId: tender.id, questionId: question.id, message: String(error) });
+    }
+  } finally {
+    res.end();
+  }
 });
 
 app.use((error: unknown, req: Request, res: Response, _next: unknown) => {

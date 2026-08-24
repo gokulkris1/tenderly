@@ -204,6 +204,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     "GET /api/tenders/:id/attestation", "POST /api/tenders/:id/attestation",
     "POST /api/tenders/:id/answers/:questionId/critique",
     "POST /api/tenders/:id/draft-all", "GET /api/tenders/:id/draft-all",
+    "POST /api/tenders/:id/answers/:questionId/draft-stream",
     "POST /api/tenders/:id/checklist/:itemId", "GET /api/tenders/:id/red-team",
     "GET /api/tenders/:id/mock-evaluation", "POST /api/tenders/:id/mock-evaluation",
     "GET /api/tenders/:id/ask", "POST /api/tenders/:id/ask", "GET /api/tenders/:id/analysis-versions",

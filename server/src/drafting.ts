@@ -1,4 +1,4 @@
-import { aiModel, draftBidAnswer } from "./ai.js";
+import { aiModel, draftBidAnswer, streamBidAnswer } from "./ai.js";
 import { declarationEvidence } from "./declarations.js";
 import {
   getCompany, latestAffirmation, listActivePeople, listAnswers, listDeclarationAnswers, listEvidence,
@@ -68,6 +68,49 @@ export function ensureInputMarkers(answer: string, missingInputs: string[]) {
   return prose ? `${prose}\n\n${markers}` : markers;
 }
 
+/** How a streamed draft is produced. Replaced in tests so no model is called. */
+export type Streamer = (input: {
+  tender: TenderRecord;
+  company: CompanyProfile;
+  question: TenderAnalysis["questions"][number];
+  evidence: EvidenceRecord[];
+  people: PersonRecord[];
+  existingAnswers: BidAnswer[];
+  onText: (answerSoFar: string) => void;
+  signal?: AbortSignal;
+}) => Promise<Awaited<ReturnType<typeof draftBidAnswer>>>;
+
+/**
+ * Drafts one answer, streaming it, and saves only when it completes.
+ *
+ * A stopped or failed stream writes nothing: the previous answer is still the
+ * saved answer, because half a draft is not a draft and silently keeping one
+ * would leave a person editing prose that stops mid-sentence for reasons the
+ * product never explained.
+ */
+export async function streamAndSaveAnswer(args: {
+  tender: TenderRecord;
+  question: TenderAnalysis["questions"][number];
+  context: DraftContext;
+  actor: string;
+  onText: (answerSoFar: string) => void;
+  signal?: AbortSignal;
+  streamer?: Streamer;
+}) {
+  const stream: Streamer = args.streamer ?? streamBidAnswer;
+  const draft = await stream({
+    tender: args.tender, company: args.context.company, question: args.question,
+    evidence: args.context.evidence, people: args.context.people,
+    existingAnswers: args.context.existingAnswers, onText: args.onText, signal: args.signal,
+  });
+
+  // Checked after the stream and before the write: an aborted request must not
+  // land an answer just because the last fragment arrived first.
+  if (args.signal?.aborted) throw new Error("STOPPED");
+
+  return persistDraft({ tender: args.tender, question: args.question, draft, actor: args.actor });
+}
+
 export type DraftOutcome = {
   questionId: string;
   title: string;
@@ -95,6 +138,23 @@ export async function draftAndSaveAnswer(args: {
     evidence: args.context.evidence, people: args.context.people, existingAnswers: args.context.existingAnswers,
   });
 
+  return persistDraft({ tender: args.tender, question: args.question, draft, actor: args.actor });
+}
+
+/**
+ * Writes one drafted answer and its ledger entries.
+ *
+ * Shared by the streamed and non-streamed paths so that a streamed draft is
+ * recorded exactly as a non-streamed one is — same status rule, same markers,
+ * same provenance, same version.
+ */
+async function persistDraft(args: {
+  tender: TenderRecord;
+  question: TenderAnalysis["questions"][number];
+  draft: Awaited<ReturnType<typeof draftBidAnswer>>;
+  actor: string;
+}) {
+  const { draft } = args;
   const answer = ensureInputMarkers(draft.answer, draft.missingInputs);
   const status = draft.missingInputs.length ? "needs-input" : "draft";
   // The citation stores the vault item's identifier, not just its name, so the
