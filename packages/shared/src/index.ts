@@ -51,6 +51,19 @@ export type Gate = {
 /** How much of a response section a machine produced. */
 export type ProvenanceClass = "ai-generated" | "ai-assisted" | "human";
 
+/** A clarification exchange with the buyer. */
+export type Clarification = {
+  id: string;
+  question: string;
+  askedOn: string;
+  askedBy: string;
+  response: string;
+  respondedOn: string;
+  /** Derived from whether a response exists, never stored separately. */
+  status: "Open" | "Answered";
+  createdAt: string;
+};
+
 /** What changed between two analyses of the same tender. */
 export type AnalysisChanges = {
   versions: { id: string; createdAt: string; actor: string; promptVersion: string; current: boolean }[];

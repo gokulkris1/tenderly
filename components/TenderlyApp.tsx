@@ -14,6 +14,7 @@ import type {
   AwardCriterion,
   AwardIntelligence as AwardIntelligenceData,
   BidQuestion,
+  Clarification,
   CompanyProfile,
   DeadlinePressure,
   Decision,
@@ -360,6 +361,63 @@ function BidDecisionPanel({ tender, onRecord, busy }: {
  * panel is where a bid team finds out that the deadline moved or a requirement
  * was rewritten — the thing that used to happen silently.
  */
+/**
+ * Clarification exchanges with the buyer.
+ *
+ * These live in email today, so the analysis never learns about them and two
+ * people ask the same question. Recording the buyer's answer adds it to the
+ * pack, because a clarification that changes a requirement is part of the
+ * tender in every sense that matters.
+ */
+function Clarifications({ items, open, onAsk, onAnswer, busy }: {
+  items: Clarification[]; open: number;
+  onAsk: (question: string) => void;
+  onAnswer: (clarificationId: string, response: string) => void;
+  busy: boolean;
+}) {
+  const [question, setQuestion] = useState("");
+  const [answering, setAnswering] = useState("");
+  const [response, setResponse] = useState("");
+
+  return (
+    <section className="panel clarifications" data-testid="clarifications">
+      <div className="panel-heading">
+        <div><h2>Clarifications</h2><p>Questions put to the buyer, and what they answered.</p></div>
+        {open > 0 && <span className="clar-count" data-testid="open-clarifications">{open} open clarification{open === 1 ? "" : "s"}</span>}
+      </div>
+
+      <form className="ask-form" onSubmit={(event) => { event.preventDefault(); if (question.trim()) { onAsk(question.trim()); setQuestion(""); } }}>
+        <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Is the site visit mandatory?" disabled={busy} />
+        <button className="quiet-btn" disabled={busy || !question.trim()}>Record question</button>
+      </form>
+
+      {items.length > 0 && (
+        <ul className="clar-list">
+          {items.map((item) => (
+            <li key={item.id} data-testid={`clarification-${item.id}`}>
+              <div className="clar-head">
+                <strong>{item.question}</strong>
+                <span className={item.status === "Answered" ? "verified" : "review-state"}>{item.status}</span>
+              </div>
+              <small>Asked {item.askedOn} by {item.askedBy}</small>
+              {item.response
+                ? <blockquote>“{item.response}”<cite>Buyer response · {item.respondedOn}</cite></blockquote>
+                : answering === item.id
+                  ? (
+                    <form className="ask-form" onSubmit={(event) => { event.preventDefault(); if (response.trim()) { onAnswer(item.id, response.trim()); setAnswering(""); setResponse(""); } }}>
+                      <input value={response} onChange={(event) => setResponse(event.target.value)} placeholder="What the buyer answered" disabled={busy} />
+                      <button className="quiet-btn" disabled={busy || !response.trim()}>Save</button>
+                    </form>
+                  )
+                  : <button className="text-action" onClick={() => { setAnswering(item.id); setResponse(""); }}>Record the buyer's answer</button>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function WhatChanged({ state, onSelectVersion }: {
   state: AnalysisChanges | null; onSelectVersion: (versionId: string) => void;
 }) {
@@ -734,6 +792,8 @@ export default function TenderlyApp() {
   const [packQuestions, setPackQuestions] = useState<PackQuestion[]>([]);
   const [packSearchable, setPackSearchable] = useState(false);
   const [analysisChanges, setAnalysisChanges] = useState<AnalysisChanges | null>(null);
+  const [clarifications, setClarifications] = useState<Clarification[]>([]);
+  const [openClarifications, setOpenClarifications] = useState(0);
   const [attestationState, setAttestationState] = useState<AttestationState | null>(null);
   const [tenders, setTenders] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [discoveries, setDiscoveries] = useState<Tender[]>(API_BASE ? [] : demoTenders);
@@ -845,6 +905,7 @@ export default function TenderlyApp() {
     if (!selectedId || isDemo) return;
     void refreshPackQuestions(selectedId);
     void refreshAnalysisChanges(selectedId);
+    void refreshClarifications(selectedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -1093,6 +1154,47 @@ export default function TenderlyApp() {
       setToast("Attestation recorded · the final pack is released");
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not record the attestation");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function refreshClarifications(tenderId: string) {
+    if (isDemo || !API_BASE || !token) return;
+    try {
+      const { items, open } = await apiClient.clarifications(tenderId);
+      setClarifications(items);
+      setOpenClarifications(open);
+    } catch {
+      setClarifications([]);
+      setOpenClarifications(0);
+    }
+  }
+
+  async function askClarification(question: string) {
+    if (!selected || isDemo) return;
+    try {
+      setLoading("clarify");
+      await apiClient.askClarification(selected.id, question, new Date().toISOString().slice(0, 10));
+      await refreshClarifications(selected.id);
+      setToast("Clarification recorded");
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not record that clarification");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function answerClarification(clarificationId: string, response: string) {
+    if (!selected || isDemo) return;
+    try {
+      setLoading("clarify");
+      await apiClient.answerClarification(selected.id, clarificationId, response, new Date().toISOString().slice(0, 10));
+      await refreshClarifications(selected.id);
+      // The answer is now part of the pack, so what it changed is worth re-reading.
+      setToast("Buyer response recorded · re-run the analysis to see what it changed");
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not record that response");
     } finally {
       setLoading("");
     }
@@ -1794,6 +1896,10 @@ export default function TenderlyApp() {
               askThePack={askThePack}
               analysisChanges={analysisChanges}
               viewAnalysisVersion={viewAnalysisVersion}
+              clarifications={clarifications}
+              openClarifications={openClarifications}
+              askClarification={askClarification}
+              answerClarification={answerClarification}
               onOpenCitation={openCitation}
               setSelectedLots={setSelectedLots}
               recordBidDecision={recordBidDecision}
@@ -2182,8 +2288,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; clarifications: Clarification[]; openClarifications: number; askClarification: (question: string) => void; answerClarification: (id: string, response: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -2223,6 +2329,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
             </section>
 
             <RecommendationPanel recommendation={tender.recommendation} />
+            <Clarifications items={clarifications} open={openClarifications} onAsk={askClarification} onAnswer={answerClarification} busy={loading === "clarify"} />
             <WhatChanged state={analysisChanges} onSelectVersion={viewAnalysisVersion} />
             <AskThePack questions={packQuestions} searchable={packSearchable} onAsk={askThePack} busy={loading === "ask"} />
             <BidDecisionPanel tender={tender} onRecord={recordBidDecision} busy={loading === "decision"} />
