@@ -34,6 +34,7 @@ import type {
   SubmissionItem,
   Tender,
   UsageTotals,
+  VaultCompleteness,
   WatchlistItem,
 } from "@tenderly/shared";
 
@@ -599,6 +600,7 @@ export default function TenderlyApp() {
   const [blockers, setBlockers] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageTotals | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [vaultReadiness, setVaultReadiness] = useState<VaultCompleteness | null>(null);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [activeSearchId, setActiveSearchId] = useState("");
   const [activeSearchName, setActiveSearchName] = useState("");
@@ -660,6 +662,8 @@ export default function TenderlyApp() {
     if (!API_BASE || !token || isDemo) return;
     void refreshWatchlist();
     void refreshSavedSearches();
+    // Recomputed on the server from the vault itself, so it is never stale.
+    apiClient.vaultCompleteness().then(({ completeness }) => setVaultReadiness(completeness)).catch(() => setVaultReadiness(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, section]);
 
@@ -1326,7 +1330,7 @@ export default function TenderlyApp() {
             </div>
           )}
           {section === "My bids" && !selected && !tenderNotFound && <div className="no-questions panel"><span>▱</span><h2>No active bids yet</h2><p>Open a recommended opportunity or paste an eTenders link. Tenderly will import it into this workspace before qualification begins.</p><button className="continue-btn" onClick={() => setSection("Discover")}>Discover opportunities →</button></div>}
-          {section === "Company" && <CompanyView company={company} setCompany={setCompany} onSave={async () => {
+          {section === "Company" && <CompanyView vaultReadiness={vaultReadiness} onOpenEvidence={() => setSection("Evidence")} company={company} setCompany={setCompany} onSave={async () => {
             if (isDemo) { setToast("Company profile saved for this demo session"); return; }
             try { await apiClient.saveCompany(company); setToast("Company profile saved"); } catch (error) { setToast(error instanceof Error ? error.message : "Could not save profile"); }
           }} />}
@@ -1887,7 +1891,7 @@ function Submit({ tender, onDownload, onReview, loading, blockers }: { tender: T
   );
 }
 
-function CompanyView({ company, setCompany, onSave }: { company: CompanyProfile; setCompany: (company: CompanyProfile) => void; onSave: () => void }) {
+function CompanyView({ company, setCompany, onSave, vaultReadiness, onOpenEvidence }: { company: CompanyProfile; setCompany: (company: CompanyProfile) => void; onSave: () => void; vaultReadiness: VaultCompleteness | null; onOpenEvidence: () => void }) {
   const fields: { key: keyof CompanyProfile; label: string; hint: string; wide?: boolean }[] = [
     { key: "name", label: "Legal company name", hint: "Exact registered name" },
     { key: "registration", label: "Company registration no.", hint: "Used for declarations" },
@@ -1899,7 +1903,7 @@ function CompanyView({ company, setCompany, onSave }: { company: CompanyProfile;
     { key: "insurance", label: "Insurance limits", hint: "PI, PL, EL and cyber where applicable", wide: true },
   ];
   const completeness = Math.round((fields.filter((field) => company[field.key].trim()).length / fields.length) * 100);
-  return <div className="profile-page"><div className="section-intro"><div><p className="eyebrow">BIDDER PROFILE</p><h2>Teach Tenderly what you can prove.</h2><p>This profile drives tender matching and eligibility. Missing data produces “Review”, never a guessed pass.</p></div><button className="continue-btn" onClick={onSave}>Save profile</button></div><div className="profile-grid"><section className="panel profile-form"><div className="profile-completeness"><span><strong>{completeness}%</strong><small>profile completeness</small></span><i><b style={{ width: `${completeness}%` }} /></i><p>Add registration, turnover and insurance limits to strengthen automatic qualification.</p></div><div className="form-grid">{fields.map((field) => <label key={field.key} className={field.wide ? "wide" : ""}><span>{field.label}</span>{field.wide ? <textarea value={company[field.key]} onChange={(event) => setCompany({ ...company, [field.key]: event.target.value })} placeholder={field.hint} /> : <input value={company[field.key]} onChange={(event) => setCompany({ ...company, [field.key]: event.target.value })} placeholder={field.hint} />}</label>)}</div></section><aside className="profile-aside"><section className="panel"><span className="aside-icon">◇</span><h3>Why this matters</h3><p>Tenderly compares explicit tender requirements with explicit bidder facts. The stronger this profile, the fewer false positives your feed contains.</p></section><section className="panel"><h3>Next best additions</h3><p>1. Upload audited accounts / turnover evidence</p><p>2. Add insurance certificates</p><p>3. Add 3–5 reference projects</p><p>4. Add reusable company policies</p></section></aside></div></div>;
+  return <div className="profile-page"><div className="section-intro"><div><p className="eyebrow">BIDDER PROFILE</p><h2>Teach Tenderly what you can prove.</h2><p>This profile drives tender matching and eligibility. Missing data produces “Review”, never a guessed pass.</p></div><button className="continue-btn" onClick={onSave}>Save profile</button></div><div className="profile-grid"><section className="panel profile-form"><div className="profile-completeness"><span><strong>{completeness}%</strong><small>profile completeness</small></span><i><b style={{ width: `${completeness}%` }} /></i><p>Add registration, turnover and insurance limits to strengthen automatic qualification.</p></div><div className="form-grid">{fields.map((field) => <label key={field.key} className={field.wide ? "wide" : ""}><span>{field.label}</span>{field.wide ? <textarea value={company[field.key]} onChange={(event) => setCompany({ ...company, [field.key]: event.target.value })} placeholder={field.hint} /> : <input value={company[field.key]} onChange={(event) => setCompany({ ...company, [field.key]: event.target.value })} placeholder={field.hint} />}</label>)}</div></section><aside className="profile-aside"><VaultMeter completeness={vaultReadiness} onOpenEvidence={onOpenEvidence} /><section className="panel"><span className="aside-icon">◇</span><h3>Why this matters</h3><p>Tenderly compares explicit tender requirements with explicit bidder facts. The stronger this profile, the fewer false positives your feed contains.</p></section><section className="panel"><h3>Next best additions</h3><p>1. Upload audited accounts / turnover evidence</p><p>2. Add insurance certificates</p><p>3. Add 3–5 reference projects</p><p>4. Add reusable company policies</p></section></aside></div></div>;
 }
 
 /** File sizes as a person reads them, not as bytes. */
@@ -1907,6 +1911,40 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * How ready the company is to be asked for its paperwork.
+ *
+ * A kind counts only when it is present, in date and verified. The three ways
+ * of falling short are listed separately, because "you have it but nobody
+ * checked it" and "you never uploaded it" are different jobs.
+ */
+function VaultMeter({ completeness, onOpenEvidence }: { completeness: VaultCompleteness | null; onOpenEvidence: () => void }) {
+  if (!completeness) return null;
+  const done = completeness.complete === completeness.total;
+  const group = (title: string, items: string[], tone: string) => items.length > 0 && (
+    <div className={`vault-group ${tone}`}><strong>{title}</strong><ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></div>
+  );
+  return (
+    <section className={`panel vault-meter ${done ? "complete" : ""}`} data-testid="vault-meter">
+      <div className="panel-heading">
+        <div><h3>Vault readiness</h3><p>The documents Irish public tenders routinely ask for.</p></div>
+        <strong className="vault-count" data-testid="vault-count">{completeness.complete} of {completeness.total}</strong>
+      </div>
+      <i className="vault-bar"><b style={{ width: `${Math.round((completeness.complete / completeness.total) * 100)}%` }} /></i>
+      {done
+        ? <p className="vault-done">Every standard document is present, in date and verified.</p>
+        : (
+          <>
+            {group("Expired", completeness.expired, "warn")}
+            {group("Awaiting verification", completeness.awaitingVerification, "warn")}
+            {group("Missing", completeness.missing, "missing")}
+            <button className="quiet-btn" onClick={onOpenEvidence}>Open the vault</button>
+          </>
+        )}
+    </section>
+  );
 }
 
 function EvidenceView({ tab, setTab, evidence, people, onUploadEvidence, onUploadCv, onVerify, onDownload, loading }: { tab: "Evidence" | "CVs"; setTab: (tab: "Evidence" | "CVs") => void; evidence: EvidenceItem[]; people: PersonItem[]; onUploadEvidence: (file: File) => void; onUploadCv: (file: File) => void; onVerify: (id: string, verified: boolean) => void; onDownload: (item: EvidenceItem) => void; loading: string }) {

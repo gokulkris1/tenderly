@@ -553,3 +553,17 @@ button:disabled { cursor: wait; opacity: .62; }
 .active-search { font-size: 13px; }
 .saved-search-form { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 .saved-search-form input { flex: 1; min-width: 160px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+
+/* TLY-55 — how ready the company is to be asked for its paperwork. */
+.vault-meter .panel-heading { align-items: flex-start; }
+.vault-count { flex: none; font-size: 19px; }
+.vault-bar { display: block; height: 6px; margin-top: 12px; background: var(--line-soft); border-radius: 999px; overflow: hidden; }
+.vault-bar b { display: block; height: 100%; background: var(--green); }
+.vault-meter.complete .vault-bar b { background: var(--green-2); }
+.vault-done { margin: 12px 0 0; font-size: 12px; color: var(--green-2); }
+.vault-group { margin-top: 12px; }
+.vault-group strong { font-size: 11px; letter-spacing: .02em; }
+.vault-group.warn strong { color: var(--amber); }
+.vault-group.missing strong { color: var(--muted); }
+.vault-group ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.vault-group li { font-size: 12px; padding: 3px 0; color: var(--ink-2); }
