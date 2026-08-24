@@ -15,6 +15,8 @@ import type {
   CompanyProfile,
   DeadlinePressure,
   Decision,
+  DeclarationAnswer,
+  DeclarationState,
   DiscoveryPreferences,
   EvidenceItem,
   Formality,
@@ -601,6 +603,7 @@ export default function TenderlyApp() {
   const [usage, setUsage] = useState<UsageTotals | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [vaultReadiness, setVaultReadiness] = useState<VaultCompleteness | null>(null);
+  const [declarations, setDeclarations] = useState<DeclarationState | null>(null);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [activeSearchId, setActiveSearchId] = useState("");
   const [activeSearchName, setActiveSearchName] = useState("");
@@ -664,6 +667,7 @@ export default function TenderlyApp() {
     void refreshSavedSearches();
     // Recomputed on the server from the vault itself, so it is never stale.
     apiClient.vaultCompleteness().then(({ completeness }) => setVaultReadiness(completeness)).catch(() => setVaultReadiness(null));
+    void refreshDeclarations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, section]);
 
@@ -925,6 +929,43 @@ export default function TenderlyApp() {
       setCritique({ questionId, ...result });
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not critique this answer");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function refreshDeclarations() {
+    if (isDemo || !API_BASE || !token) return;
+    try {
+      setDeclarations(await apiClient.declarations());
+    } catch {
+      setDeclarations(null);
+    }
+  }
+
+  async function saveDeclarations(answers: DeclarationAnswer[]) {
+    if (isDemo) { setToast("Declarations are disabled in the demo"); return; }
+    try {
+      setLoading("declarations");
+      await apiClient.saveDeclarations(answers);
+      await refreshDeclarations();
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not save the declarations");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function affirmDeclarations() {
+    if (isDemo) return;
+    try {
+      setLoading("declarations");
+      const { affirmation } = await apiClient.affirmDeclarations();
+      await refreshDeclarations();
+      setToast(`Declarations affirmed by ${affirmation.affirmedBy}`);
+    } catch (error) {
+      // The server's wording is the one the AC names; do not paraphrase it.
+      setToast(error instanceof ApiError ? error.message : "Could not affirm the declarations");
     } finally {
       setLoading("");
     }
@@ -1330,7 +1371,7 @@ export default function TenderlyApp() {
             </div>
           )}
           {section === "My bids" && !selected && !tenderNotFound && <div className="no-questions panel"><span>▱</span><h2>No active bids yet</h2><p>Open a recommended opportunity or paste an eTenders link. Tenderly will import it into this workspace before qualification begins.</p><button className="continue-btn" onClick={() => setSection("Discover")}>Discover opportunities →</button></div>}
-          {section === "Company" && <CompanyView vaultReadiness={vaultReadiness} onOpenEvidence={() => setSection("Evidence")} company={company} setCompany={setCompany} onSave={async () => {
+          {section === "Company" && <CompanyView vaultReadiness={vaultReadiness} onOpenEvidence={() => setSection("Evidence")} declarations={declarations} onSaveDeclarations={saveDeclarations} onAffirmDeclarations={affirmDeclarations} busyDeclarations={loading === "declarations"} company={company} setCompany={setCompany} onSave={async () => {
             if (isDemo) { setToast("Company profile saved for this demo session"); return; }
             try { await apiClient.saveCompany(company); setToast("Company profile saved"); } catch (error) { setToast(error instanceof Error ? error.message : "Could not save profile"); }
           }} />}
@@ -1891,7 +1932,7 @@ function Submit({ tender, onDownload, onReview, loading, blockers }: { tender: T
   );
 }
 
-function CompanyView({ company, setCompany, onSave, vaultReadiness, onOpenEvidence }: { company: CompanyProfile; setCompany: (company: CompanyProfile) => void; onSave: () => void; vaultReadiness: VaultCompleteness | null; onOpenEvidence: () => void }) {
+function CompanyView({ company, setCompany, onSave, vaultReadiness, onOpenEvidence, declarations, onSaveDeclarations, onAffirmDeclarations, busyDeclarations }: { company: CompanyProfile; setCompany: (company: CompanyProfile) => void; onSave: () => void; vaultReadiness: VaultCompleteness | null; onOpenEvidence: () => void; declarations: DeclarationState | null; onSaveDeclarations: (answers: DeclarationAnswer[]) => void; onAffirmDeclarations: () => void; busyDeclarations: boolean }) {
   const fields: { key: keyof CompanyProfile; label: string; hint: string; wide?: boolean }[] = [
     { key: "name", label: "Legal company name", hint: "Exact registered name" },
     { key: "registration", label: "Company registration no.", hint: "Used for declarations" },
@@ -1903,7 +1944,7 @@ function CompanyView({ company, setCompany, onSave, vaultReadiness, onOpenEviden
     { key: "insurance", label: "Insurance limits", hint: "PI, PL, EL and cyber where applicable", wide: true },
   ];
   const completeness = Math.round((fields.filter((field) => company[field.key].trim()).length / fields.length) * 100);
-  return <div className="profile-page"><div className="section-intro"><div><p className="eyebrow">BIDDER PROFILE</p><h2>Teach Tenderly what you can prove.</h2><p>This profile drives tender matching and eligibility. Missing data produces “Review”, never a guessed pass.</p></div><button className="continue-btn" onClick={onSave}>Save profile</button></div><div className="profile-grid"><section className="panel profile-form"><div className="profile-completeness"><span><strong>{completeness}%</strong><small>profile completeness</small></span><i><b style={{ width: `${completeness}%` }} /></i><p>Add registration, turnover and insurance limits to strengthen automatic qualification.</p></div><div className="form-grid">{fields.map((field) => <label key={field.key} className={field.wide ? "wide" : ""}><span>{field.label}</span>{field.wide ? <textarea value={company[field.key]} onChange={(event) => setCompany({ ...company, [field.key]: event.target.value })} placeholder={field.hint} /> : <input value={company[field.key]} onChange={(event) => setCompany({ ...company, [field.key]: event.target.value })} placeholder={field.hint} />}</label>)}</div></section><aside className="profile-aside"><VaultMeter completeness={vaultReadiness} onOpenEvidence={onOpenEvidence} /><section className="panel"><span className="aside-icon">◇</span><h3>Why this matters</h3><p>Tenderly compares explicit tender requirements with explicit bidder facts. The stronger this profile, the fewer false positives your feed contains.</p></section><section className="panel"><h3>Next best additions</h3><p>1. Upload audited accounts / turnover evidence</p><p>2. Add insurance certificates</p><p>3. Add 3–5 reference projects</p><p>4. Add reusable company policies</p></section></aside></div></div>;
+  return <div className="profile-page"><div className="section-intro"><div><p className="eyebrow">BIDDER PROFILE</p><h2>Teach Tenderly what you can prove.</h2><p>This profile drives tender matching and eligibility. Missing data produces “Review”, never a guessed pass.</p></div><button className="continue-btn" onClick={onSave}>Save profile</button></div><div className="profile-grid"><section className="panel profile-form"><div className="profile-completeness"><span><strong>{completeness}%</strong><small>profile completeness</small></span><i><b style={{ width: `${completeness}%` }} /></i><p>Add registration, turnover and insurance limits to strengthen automatic qualification.</p></div><div className="form-grid">{fields.map((field) => <label key={field.key} className={field.wide ? "wide" : ""}><span>{field.label}</span>{field.wide ? <textarea value={company[field.key]} onChange={(event) => setCompany({ ...company, [field.key]: event.target.value })} placeholder={field.hint} /> : <input value={company[field.key]} onChange={(event) => setCompany({ ...company, [field.key]: event.target.value })} placeholder={field.hint} />}</label>)}</div></section><aside className="profile-aside"><VaultMeter completeness={vaultReadiness} onOpenEvidence={onOpenEvidence} /><DeclarationsPanel state={declarations} onSave={onSaveDeclarations} onAffirm={onAffirmDeclarations} busy={busyDeclarations} /><section className="panel"><span className="aside-icon">◇</span><h3>Why this matters</h3><p>Tenderly compares explicit tender requirements with explicit bidder facts. The stronger this profile, the fewer false positives your feed contains.</p></section><section className="panel"><h3>Next best additions</h3><p>1. Upload audited accounts / turnover evidence</p><p>2. Add insurance certificates</p><p>3. Add 3–5 reference projects</p><p>4. Add reusable company policies</p></section></aside></div></div>;
 }
 
 /** File sizes as a person reads them, not as bytes. */
@@ -1920,6 +1961,96 @@ function formatBytes(bytes: number) {
  * of falling short are listed separately, because "you have it but nobody
  * checked it" and "you never uploaded it" are different jobs.
  */
+/**
+ * The ESPD self-declarations, answered once and reused on every bid.
+ *
+ * Affirming is the moment a named person stands behind the whole set, so it is
+ * refused while anything is unanswered or while a "yes" that needs explaining
+ * has no explanation — "yes, but" without the "but" is worse than silence.
+ */
+function DeclarationsPanel({ state, onSave, onAffirm, busy }: {
+  state: DeclarationState | null;
+  onSave: (answers: DeclarationAnswer[]) => void;
+  onAffirm: () => void;
+  busy: boolean;
+}) {
+  const [draft, setDraft] = useState<DeclarationAnswer[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!state) return;
+    const byId = new Map(state.answers.map((answer) => [answer.declarationId, answer]));
+    setDraft(state.declarations.map((declaration) =>
+      byId.get(declaration.id) ?? { declarationId: declaration.id, answer: null, notes: "" }));
+  }, [state]);
+
+  if (!state) return null;
+
+  const update = (id: string, patch: Partial<DeclarationAnswer>) =>
+    setDraft((current) => current.map((answer) => (answer.declarationId === id ? { ...answer, ...patch } : answer)));
+
+  const needsDetail = (id: string) => {
+    const declaration = state.declarations.find((entry) => entry.id === id);
+    const answer = draft.find((entry) => entry.declarationId === id);
+    return Boolean(declaration && answer?.answer === declaration.answerRequiringDetail && !answer.notes.trim());
+  };
+  const blocked = draft.some((answer) => !answer.answer) || draft.some((answer) => needsDetail(answer.declarationId));
+
+  return (
+    <section className="panel declarations-panel" data-testid="declarations">
+      <div className="panel-heading">
+        <div><h3>ESPD declarations</h3><p>Answer once, reuse on every bid. A buyer asks when these were last affirmed.</p></div>
+        <button className="text-action" onClick={() => setOpen((value) => !value)}>{open ? "Hide" : "Open"}</button>
+      </div>
+
+      {state.affirmation && !state.needsReaffirmation && (
+        <p className="declarations-affirmed" data-testid="affirmed">
+          Affirmed by {state.affirmation.affirmedBy} on {new Date(state.affirmation.at).toLocaleDateString()}
+        </p>
+      )}
+      {state.needsReaffirmation && (
+        <p className="declarations-stale" data-testid="needs-reaffirmation">
+          Declarations need re-affirmation
+          {state.affirmation ? ` · last affirmed ${new Date(state.affirmation.at).toLocaleDateString()}` : " · never affirmed"}
+        </p>
+      )}
+
+      {open && (
+        <>
+          {(["III", "IV"] as const).map((part) => (
+            <div className="declaration-part" key={part}>
+              <p className="eyebrow">{part === "III" ? "PART III · GROUNDS FOR EXCLUSION" : "PART IV · SELECTION CRITERIA"}</p>
+              {state.declarations.filter((declaration) => declaration.part === part).map((declaration) => {
+                const answer = draft.find((entry) => entry.declarationId === declaration.id);
+                return (
+                  <div className="declaration-row" key={declaration.id} data-testid={`declaration-${declaration.id}`}>
+                    <p><strong>{declaration.heading}</strong><small>{declaration.statement}</small></p>
+                    <div className="declaration-answer">
+                      <label><input type="radio" checked={answer?.answer === "yes"} onChange={() => update(declaration.id, { answer: "yes" })} /> Yes</label>
+                      <label><input type="radio" checked={answer?.answer === "no"} onChange={() => update(declaration.id, { answer: "no" })} /> No</label>
+                    </div>
+                    <input
+                      value={answer?.notes ?? ""}
+                      onChange={(event) => update(declaration.id, { notes: event.target.value })}
+                      placeholder={needsDetail(declaration.id) ? "Supporting details are required for this answer" : "Notes"}
+                      className={needsDetail(declaration.id) ? "needs-detail" : ""}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          <div className="declaration-actions">
+            <button className="text-action" onClick={() => onSave(draft)} disabled={busy}>Save answers</button>
+            <button className="quiet-btn" onClick={() => { onSave(draft); onAffirm(); }} disabled={busy || blocked}>Affirm</button>
+          </div>
+          {blocked && <p className="declaration-warning">Every declaration needs an answer, and a Yes on an exclusion ground needs supporting details.</p>}
+        </>
+      )}
+    </section>
+  );
+}
+
 function VaultMeter({ completeness, onOpenEvidence }: { completeness: VaultCompleteness | null; onOpenEvidence: () => void }) {
   if (!completeness) return null;
   const done = completeness.complete === completeness.total;

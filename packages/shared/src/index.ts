@@ -398,6 +398,35 @@ export type EvidenceItem = {
   expiresOn?: string;
 };
 
+/** One ESPD self-declaration a company answers once and reuses. */
+export type Declaration = {
+  id: string;
+  part: "III" | "IV";
+  heading: string;
+  statement: string;
+  /** The answer that cannot stand without an explanation. */
+  answerRequiringDetail: "yes" | "no";
+};
+
+export type DeclarationAnswer = {
+  declarationId: string;
+  answer: "yes" | "no" | null;
+  notes: string;
+};
+
+/** Who affirmed the whole set, and when. */
+export type Affirmation = {
+  affirmedBy: string;
+  at: string;
+};
+
+export type DeclarationState = {
+  declarations: Declaration[];
+  answers: DeclarationAnswer[];
+  affirmation: Affirmation | null;
+  needsReaffirmation: boolean;
+};
+
 /** One standard document kind and whether the vault satisfies it. */
 export type VaultKindState = {
   id: string;

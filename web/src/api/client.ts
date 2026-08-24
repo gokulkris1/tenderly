@@ -7,12 +7,15 @@
  * from here rather than calling fetch.
  */
 import type {
+  Affirmation,
   AiPolicyAcknowledgement,
   Attestation,
   AttestationState,
   AuditEntry,
   BidDecisionRecord,
   CompanyProfile,
+  DeclarationAnswer,
+  DeclarationState,
   DiscoveryPreferences,
   EvidenceItem,
   NotificationItem,
@@ -241,6 +244,15 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       anchor.click();
       URL.revokeObjectURL(url);
     },
+    declarations: () => request<DeclarationState>("/api/declarations", "Load declarations"),
+    saveDeclarations: (answers: DeclarationAnswer[]) =>
+      request<{ answers: DeclarationAnswer[] }>("/api/declarations", "Save declarations", {
+        method: "PUT", body: JSON.stringify({ answers }),
+      }),
+    affirmDeclarations: () =>
+      request<{ affirmation: Affirmation }>("/api/declarations/affirm", "Affirm declarations", {
+        method: "POST", body: "{}",
+      }),
     vaultCompleteness: () => request<{ completeness: VaultCompleteness }>("/api/vault/completeness", "Load vault readiness"),
     setEvidenceVerified: (itemId: string, verified: boolean) =>
       request<{ item: EvidenceItem }>(`/api/evidence/${itemId}/verification`, "Update evidence", {

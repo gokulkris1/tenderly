@@ -17,6 +17,7 @@ import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./e
 import { mergeNotices } from "./dedupe.js";
 import { deadlinePressure, parseDeadline } from "./pressure.js";
 import { vaultCompleteness } from "./vault.js";
+import { DECLARATIONS, affirmationProblems, declarationEvidence, needsReaffirmation } from "./declarations.js";
 import { decide, unsupportedFigures } from "./decision.js";
 import { parseContractValue, scoreNotice } from "./scoring.js";
 import {
@@ -38,10 +39,12 @@ import {
   initializeDatabase,
   knownBuyersFor,
   listAnswers,
+  latestAffirmation,
   latestIngestionRuns,
   listAudit,
   listBidDecisions,
   listWatchlist,
+  listDeclarationAnswers,
   listDocuments,
   listEvidence,
   listNotifications,
@@ -53,10 +56,12 @@ import {
   migrateAnalysisSchema,
   monthlyUsage,
   persistentDatabase,
+  recordAffirmation,
   recordBidDecision,
   removeFromWatchlist,
   recordProvenance,
   saveAnswer,
+  saveDeclarationAnswers,
   saveDocument,
   savePreferences,
   saveTenderAnalysis,
@@ -468,7 +473,20 @@ app.post("/api/tenders/:id/answers/:questionId/draft", draftLimiter, draftHourly
     const question = tender.analysis.questions.find((item) => item.id === questionId);
     if (!question) return res.status(404).json({ error: "Scored question not found" });
     const [company, evidence, people, answers] = await Promise.all([getCompany(account), listEvidence(account), listPeople(account), listAnswers(tender.id)]);
-    const draft = await draftBidAnswer({ tender, company, question, evidence, people, existingAnswers: answers });
+
+    // Affirmed ESPD declarations are citable evidence: a person has stood
+    // behind them. An unaffirmed or stale set is not offered, because citing it
+    // in a tender response would be a claim nobody actually made.
+    const [declarationAnswers, affirmation] = await Promise.all([listDeclarationAnswers(account), latestAffirmation(account)]);
+    const declarationText = declarationEvidence({ answers: declarationAnswers, affirmation });
+    const evidenceWithDeclarations = declarationText
+      ? [...evidence, {
+          id: "espd-declarations", accountId: account, kind: "ESPD self-declaration",
+          name: "ESPD self-declarations", content: declarationText, tags: ["espd"], verified: true,
+        }]
+      : evidence;
+
+    const draft = await draftBidAnswer({ tender, company, question, evidence: evidenceWithDeclarations, people, existingAnswers: answers });
     const saved = await saveAnswer(tender.id, question.id, draft.answer, draft.missingInputs.length ? "needs-input" : "draft", draft.evidenceUsed);
     // The ledger records that a model wrote this text, and which one.
     await recordProvenance({
@@ -828,6 +846,70 @@ app.delete("/api/watchlist/:externalId", async (req: AuthenticatedRequest, res) 
     const removed = await removeFromWatchlist(accountId(req), routeParam(req.params.externalId));
     if (!removed) return res.status(404).json({ error: "That notice is not on your watchlist" });
     res.json({ removed: true });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * The ESPD declarations, their answers and when they were last affirmed.
+ */
+app.get("/api/declarations", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const [answers, affirmation] = await Promise.all([listDeclarationAnswers(account), latestAffirmation(account)]);
+    res.json({
+      declarations: DECLARATIONS,
+      answers,
+      affirmation,
+      needsReaffirmation: needsReaffirmation(affirmation),
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** Saves answers without affirming them: a draft is not a statement. */
+app.put("/api/declarations", async (req: AuthenticatedRequest, res) => {
+  try {
+    const known = new Set(DECLARATIONS.map((declaration) => declaration.id));
+    const input = z.object({
+      answers: z.array(z.object({
+        declarationId: z.string().max(64),
+        answer: z.enum(["yes", "no"]).nullable(),
+        notes: z.string().max(4000).default(""),
+      })).max(60),
+    }).parse(req.body);
+
+    const unknown = input.answers.filter((answer) => !known.has(answer.declarationId));
+    if (unknown.length) return res.status(400).json({ error: `Unknown declaration: ${unknown.map((a) => a.declarationId).join(", ")}` });
+
+    res.json({ answers: await saveDeclarationAnswers(accountId(req), input.answers) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Affirms the set as it stands.
+ *
+ * Refused while any declaration is unanswered, or while an answer that needs
+ * explaining has none: affirming a blank, or a "yes" with no "but", is a
+ * statement nobody could stand behind.
+ */
+app.post("/api/declarations/affirm", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const answers = await listDeclarationAnswers(account);
+    const problems = affirmationProblems(answers);
+    if (problems.length) {
+      return res.status(400).json({
+        error: problems.some((problem) => problem.problem.startsWith("Supporting details"))
+          ? "Supporting details are required for this answer"
+          : "Every declaration must be answered before affirming",
+        problems,
+      });
+    }
+    const affirmation = await recordAffirmation(account, actorEmail(req));
+    await audit(req, {
+      action: AUDIT_ACTIONS.declarationsAffirmed, subjectType: "declarations", subjectId: account,
+      subjectLabel: "ESPD self-declarations",
+    });
+    res.status(201).json({ affirmation });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
