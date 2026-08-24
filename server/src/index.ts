@@ -9,6 +9,7 @@ import { z } from "zod";
 import { accountId, actorEmail, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
 import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer, draftDecisionRationale, extractCvRecords } from "./ai.js";
 import { badgeFor, classForHumanEdit } from "./provenance.js";
+import { diffVersions } from "./versions.js";
 import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
@@ -36,10 +37,12 @@ import {
   getCompany,
   getPreferences,
   getSavedSearch,
+  getAnswerVersion,
   getTender,
   getUserById,
   initializeDatabase,
   knownBuyersFor,
+  listAnswerVersions,
   listAnswers,
   latestAffirmation,
   latestIngestionRuns,
@@ -60,6 +63,7 @@ import {
   monthlyUsage,
   persistentDatabase,
   recordAffirmation,
+  recordAnswerVersion,
   recordBidDecision,
   removeFromWatchlist,
   recordProvenance,
@@ -550,6 +554,12 @@ app.post("/api/tenders/:id/answers/:questionId/draft", draftLimiter, draftHourly
       model: aiModel(), promptVersion: DRAFTING_PROMPT_VERSION,
       evidenceIds: draft.evidenceUsed, actor: actorEmail(req),
     });
+    // No saved state is ever lost, so every path that writes an answer also
+    // records the version it wrote.
+    await recordAnswerVersion({
+      answerId: saved.id, response: saved.response, status: saved.status,
+      provenanceClass: "ai-generated", actor: actorEmail(req),
+    });
     res.json(draft);
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
@@ -569,11 +579,75 @@ app.put("/api/tenders/:id/answers/:questionId", async (req: AuthenticatedRequest
     }
     // Editing text a model produced does not erase that a model produced it.
     const history = await listProvenance(answer.id);
+    const answerClass = classForHumanEdit(history);
     await recordProvenance({
-      answerId: answer.id, section: "body", class: classForHumanEdit(history),
+      answerId: answer.id, section: "body", class: answerClass,
       evidenceIds: answer.evidence, actor: actorEmail(req),
     });
+    await recordAnswerVersion({
+      answerId: answer.id, response: answer.response, status: answer.status,
+      provenanceClass: answerClass, actor: actorEmail(req),
+    });
     res.json({ answer });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Every saved state of one answer, oldest first, with a diff between any two.
+ */
+app.get("/api/tenders/:id/answers/:questionId/versions", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const questionId = routeParam(req.params.questionId);
+    const answer = (await listAnswers(tender.id)).find((item) => item.questionId === questionId);
+    if (!answer) return res.status(404).json({ error: "No saved answer for this question" });
+
+    const versions = await listAnswerVersions(answer.id);
+    const compare = z.object({ from: z.string().max(64).optional(), to: z.string().max(64).optional() })
+      .parse({ from: req.query.from, to: req.query.to });
+
+    let diff: ReturnType<typeof diffVersions> | undefined;
+    if (compare.from && compare.to) {
+      const before = versions.find((version) => version.id === compare.from);
+      const after = versions.find((version) => version.id === compare.to);
+      if (!before || !after) return res.status(404).json({ error: "Version not found" });
+      diff = diffVersions(before.response, after.response);
+    }
+    res.json({ versions, diff });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Restores an earlier version by writing a new one.
+ *
+ * Never rewinds: the restored version carries the provenance class of the text
+ * it restores, so an answer restored from an AI-generated draft still reads as
+ * AI-generated. Restoring is not a way to launder how something was written.
+ */
+app.post("/api/tenders/:id/answers/:questionId/versions/:versionId/restore", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender?.analysis) return res.status(404).json({ error: "Tender analysis not found" });
+    const questionId = routeParam(req.params.questionId);
+    const answer = (await listAnswers(tender.id)).find((item) => item.questionId === questionId);
+    if (!answer) return res.status(404).json({ error: "No saved answer for this question" });
+
+    const version = await getAnswerVersion(account, routeParam(req.params.versionId));
+    if (!version || version.answerId !== answer.id) return res.status(404).json({ error: "Version not found" });
+
+    const saved = await saveAnswer(tender.id, questionId, version.response, version.status, answer.evidence);
+    await recordProvenance({
+      answerId: saved.id, section: "body", class: version.provenanceClass,
+      evidenceIds: saved.evidence, actor: actorEmail(req),
+    });
+    await recordAnswerVersion({
+      answerId: saved.id, response: saved.response, status: saved.status,
+      provenanceClass: version.provenanceClass, actor: actorEmail(req), restoredFrom: version.id,
+    });
+    res.json({ answer: saved, versions: await listAnswerVersions(saved.id) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

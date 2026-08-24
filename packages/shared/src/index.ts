@@ -46,6 +46,22 @@ export type Gate = {
 /** How much of a response section a machine produced. */
 export type ProvenanceClass = "ai-generated" | "ai-assisted" | "human";
 
+/** One saved state of an answer. Restoring adds a version; it never rewinds. */
+export type AnswerVersion = {
+  id: string;
+  answerId: string;
+  response: string;
+  status: string;
+  provenanceClass: ProvenanceClass;
+  actor: string;
+  /** Set when this version was produced by restoring an earlier one. */
+  restoredFrom?: string;
+  createdAt: string;
+};
+
+/** A word-level difference between two versions. */
+export type DiffSegment = { kind: "same" | "added" | "removed"; text: string };
+
 /** One entry in an answer's append-only provenance ledger. */
 export type ProvenanceEntry = {
   section: string;

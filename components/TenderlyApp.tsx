@@ -7,6 +7,7 @@ import "./tenderly.css";
 
 import type {
   AiUsePolicy,
+  AnswerVersion,
   AttestationState,
   AuditEntry,
   AwardCriterion,
@@ -17,6 +18,7 @@ import type {
   Decision,
   DeclarationAnswer,
   DeclarationState,
+  DiffSegment,
   DiscoveryPreferences,
   EvidenceItem,
   Formality,
@@ -635,6 +637,7 @@ export default function TenderlyApp() {
   const setSelectedId = (id: string) => { setFallbackId(id); openStage(id, "Qualify"); };
   // A critique judges what the user wrote; it never carries replacement prose.
   const [critique, setCritique] = useState<AnswerCritique | null>(null);
+  const [answerHistory, setAnswerHistory] = useState<AnswerHistory | null>(null);
   const [attestationState, setAttestationState] = useState<AttestationState | null>(null);
   const [tenders, setTenders] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [discoveries, setDiscoveries] = useState<Tender[]>(API_BASE ? [] : demoTenders);
@@ -728,6 +731,15 @@ export default function TenderlyApp() {
     void refreshDeclarations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, section]);
+
+  // The history follows the question being edited; there is nothing useful to
+  // show about a question the user is not looking at.
+  useEffect(() => {
+    if (stage !== "Respond" || !selected || isDemo) return;
+    const first = selected.questions[0]?.id;
+    if (first) void loadAnswerHistory(first);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, selectedId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -974,6 +986,65 @@ export default function TenderlyApp() {
       setToast("Attestation recorded · the final pack is released");
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not record the attestation");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function loadAnswerHistory(questionId: string) {
+    if (!selected || isDemo) return;
+    try {
+      setLoading("versions");
+      const { versions } = await apiClient.answerVersions(selected.id, questionId);
+      setAnswerHistory({ questionId, versions, selected: [] });
+    } catch {
+      // History is a convenience; its absence must not block editing.
+      setAnswerHistory(null);
+    } finally {
+      setLoading("");
+    }
+  }
+
+  /** Ticking a third version replaces the older of the two already ticked. */
+  function selectVersion(versionId: string) {
+    setAnswerHistory((current) => {
+      if (!current) return current;
+      const already = current.selected.includes(versionId);
+      const next = already
+        ? current.selected.filter((id) => id !== versionId)
+        : [...current.selected, versionId].slice(-2);
+      return { ...current, selected: next, diff: undefined };
+    });
+  }
+
+  async function compareVersions() {
+    if (!selected || !answerHistory || answerHistory.selected.length !== 2) return;
+    // Compare oldest to newest, so "added" reads as what the later one gained.
+    const ordered = answerHistory.versions
+      .filter((version) => answerHistory.selected.includes(version.id))
+      .map((version) => version.id);
+    try {
+      setLoading("versions");
+      const { diff } = await apiClient.answerVersions(selected.id, answerHistory.questionId, { from: ordered[0], to: ordered[1] });
+      setAnswerHistory((current) => (current ? { ...current, diff } : current));
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not compare those versions");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function restoreVersion(versionId: string) {
+    if (!selected || !answerHistory) return;
+    try {
+      setLoading("versions");
+      const { versions } = await apiClient.restoreAnswerVersion(selected.id, answerHistory.questionId, versionId);
+      setAnswerHistory({ questionId: answerHistory.questionId, versions, selected: [] });
+      const { tender } = await apiClient.tender(selected.id);
+      setTenders((items) => items.map((item) => (item.id === tender.id ? tender : item)));
+      setToast("Version restored · a new version was written, nothing was rewound");
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not restore that version");
     } finally {
       setLoading("");
     }
@@ -1529,6 +1600,10 @@ export default function TenderlyApp() {
               setNoAiMode={setNoAiMode}
               critiqueAnswer={critiqueAnswer}
               critique={critique}
+              answerHistory={answerHistory}
+              selectVersion={selectVersion}
+              compareVersions={compareVersions}
+              restoreVersion={restoreVersion}
               attestation={attestationState}
               onAttest={recordAttestation}
               tender={selected}
@@ -1826,8 +1901,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, attestation, onAttest, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -1903,7 +1978,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
       )}
 
       {stage === "Synopsis" && <Synopsis tender={tender} onDownload={() => downloadAsset("deck")} onContinue={() => setStage("Respond")} loading={loading === "deck"} />}
-      {stage === "Respond" && <Respond tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
+      {stage === "Respond" && <Respond tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
       {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} attestation={attestation} onAttest={onAttest} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
       {stage === "Submit" && <Submit tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
     </div>
@@ -1923,6 +1998,14 @@ function Synopsis({ tender, onDownload, onContinue, loading }: { tender: Tender;
     </div>
   );
 }
+
+type AnswerHistory = {
+  questionId: string;
+  versions: AnswerVersion[];
+  diff?: DiffSegment[];
+  /** The two versions ticked for comparison. */
+  selected: string[];
+};
 
 type AnswerCritique = { questionId: string; strengths: string[]; gaps: string[]; missingEvidence: string[] };
 
@@ -1967,7 +2050,65 @@ function ProvenanceBadge({ entry }: { entry?: ProvenanceEntry }) {
   );
 }
 
-function Respond({ tender, setNoAiMode, critiqueAnswer, critique, onBackToQualify, onOpenCitation, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue }: { tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; onBackToQualify: () => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
+/**
+ * Every saved state of an answer, with a comparison and a restore.
+ *
+ * Restoring adds a version rather than rewinding, and keeps the class of the
+ * text it restores — an answer restored from an AI draft still reads as
+ * AI-generated. Restoring is not a way to launder how something was written.
+ */
+function VersionHistory({ versions, diff, selected, onSelect, onCompare, onRestore, busy }: {
+  versions: AnswerVersion[]; diff?: DiffSegment[]; selected: string[];
+  onSelect: (versionId: string) => void; onCompare: () => void;
+  onRestore: (versionId: string) => void; busy: boolean;
+}) {
+  if (versions.length === 0) return null;
+  return (
+    <section className="panel version-history" data-testid="version-history">
+      <div className="panel-heading">
+        <div><h3>History</h3><p>Every saved state. Restoring writes a new version — nothing is ever lost.</p></div>
+        <button
+          className="text-action"
+          disabled={busy || versions.length < 2 || selected.length !== 2}
+          title={versions.length < 2 ? "There is only one version" : "Select two versions to compare"}
+          onClick={onCompare}
+        >Compare</button>
+      </div>
+
+      <ul className="version-list">
+        {versions.map((version, index) => (
+          <li key={version.id} data-testid={`version-${version.id}`}>
+            <label>
+              <input
+                type="checkbox"
+                checked={selected.includes(version.id)}
+                disabled={versions.length < 2}
+                onChange={() => onSelect(version.id)}
+              />
+              <span>
+                <strong>Version {index + 1}{version.restoredFrom ? " · restored" : ""}</strong>
+                <small>{version.provenanceClass} · {version.actor} · {new Date(version.createdAt).toLocaleString()}</small>
+              </span>
+            </label>
+            {index < versions.length - 1 && (
+              <button className="text-action" disabled={busy} onClick={() => onRestore(version.id)}>Restore</button>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {diff && (
+        <p className="version-diff" data-testid="version-diff">
+          {diff.map((segment, index) => (
+            <span key={index} className={segment.kind}>{segment.text}</span>
+          ))}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function Respond({ tender, setNoAiMode, critiqueAnswer, critique, history, onSelectVersion, onCompareVersions, onRestoreVersion, onBackToQualify, onOpenCitation, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue }: { tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; history: AnswerHistory | null; onSelectVersion: (versionId: string) => void; onCompareVersions: () => void; onRestoreVersion: (versionId: string) => void; onBackToQualify: () => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
   const [activeId, setActiveId] = useState(tender.questions[0]?.id ?? "");
   const active = tender.questions.find((question) => question.id === activeId) ?? tender.questions[0];
   if (!active) return <div className="no-questions panel"><span>◇</span><h2>Import the full tender pack first</h2><p>The notice gives Tenderly the opportunity metadata. The RFT / RFQ documents are needed to extract scored questions, word limits, mandatory roles and response templates.</p><FileButton label={loading === "upload" ? "Uploading…" : "Upload tender documents"} accept=".pdf,.docx,.xlsx,.xls,.pptx,.zip,.txt,.xml" onFile={(file) => uploadTenderFile(file, "source")} /></div>;
@@ -2016,6 +2157,17 @@ function Respond({ tender, setNoAiMode, critiqueAnswer, critique, onBackToQualif
           ? <button className="quiet-btn" onClick={() => critiqueAnswer(active.id)} disabled={loading === `critique-${active.id}`}>{loading === `critique-${active.id}` ? "Reviewing…" : "◇ Critique what I wrote"}</button>
           : <button className="ai-draft" onClick={() => draftAnswer(active.id)} disabled={loading === active.id}>{loading === active.id ? "Drafting…" : "✦ Draft from evidence"}</button>}</div></div>
         {critique?.questionId === active.id && <CritiquePanel critique={critique} />}
+        {history?.questionId === active.id && (
+          <VersionHistory
+            versions={history.versions}
+            diff={history.diff}
+            selected={history.selected}
+            onSelect={onSelectVersion}
+            onCompare={onCompareVersions}
+            onRestore={onRestoreVersion}
+            busy={loading === "versions"}
+          />
+        )}
         {(active.citations?.length ?? 0) > 0 && (
           <section className="answer-citations" data-testid="answer-citations">
             <p className="eyebrow">CITED FROM YOUR VAULT</p>

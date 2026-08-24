@@ -634,3 +634,15 @@ button:disabled { cursor: wait; opacity: .62; }
 .answer-citations { margin-top: 14px; }
 .answer-citations .citation { margin: 8px 8px 0 0; padding: 5px 12px; border: 1px solid var(--green); border-radius: 999px; background: var(--green-soft); color: var(--green-2); font-size: 11px; cursor: pointer; }
 .answer-citations .citation:disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: default; }
+
+/* TLY-77 — every saved state; restoring adds a version, it never rewinds. */
+.version-history { margin-top: 18px; }
+.version-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 2px; }
+.version-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+.version-list label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.version-list span { display: grid; gap: 2px; }
+.version-list strong { font-size: 13px; }
+.version-list small { font-size: 11px; color: var(--muted); }
+.version-diff { margin: 14px 0 0; padding: 12px 14px; background: var(--paper); border-radius: 8px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+.version-diff .added { background: var(--green-soft); color: var(--green-2); }
+.version-diff .removed { background: var(--red-soft); color: var(--red); text-decoration: line-through; }
