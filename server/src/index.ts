@@ -36,6 +36,7 @@ import {
   initializeDatabase,
   knownBuyersFor,
   listAnswers,
+  latestIngestionRuns,
   listAudit,
   listBidDecisions,
   listWatchlist,
@@ -197,8 +198,19 @@ async function analyseSavedTender(account: string, tenderId: string) {
   return saveTenderAnalysis(account, tender.id, analysis);
 }
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "tenderly-api", database: persistentDatabase ? "configured" : "memory", ai: aiConfigured() ? "configured" : "not-configured", aiModel: aiModel(), time: new Date().toISOString() });
+app.get("/health", async (_req, res) => {
+  // The most recent run per source, so a portal that has stopped yielding is
+  // visible from outside rather than only in a scheduler's exit status.
+  const ingestion = await latestIngestionRuns()
+    .then((runs) => runs.map((run) => ({ source: run.source, parsed: run.noticesParsed, at: run.createdAt, alarms: run.alarms })))
+    .catch(() => []);
+  res.json({
+    ok: true, service: "tenderly-api",
+    database: persistentDatabase ? "configured" : "memory",
+    ai: aiConfigured() ? "configured" : "not-configured", aiModel: aiModel(),
+    ingestion,
+    time: new Date().toISOString(),
+  });
 });
 
 app.post("/api/auth/register", authLimiter, async (req, res) => {

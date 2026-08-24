@@ -5,6 +5,7 @@ import pg from "pg";
 import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
 import { allCpvCodes, cpvAncestors, normaliseCpv } from "./cpv.js";
 import { canonicalKey } from "./dedupe.js";
+import type { IngestionRun } from "./ingestion-health.js";
 import type {
   AuditEntry,
   BidAnswer,
@@ -57,6 +58,7 @@ const memory = {
   bidDecisions: [] as BidDecisionRecord[],
   watchlist: [] as WatchlistEntry[],
   savedSearches: [] as SavedSearch[],
+  ingestionRuns: [] as IngestionRun[],
 };
 
 /**
@@ -716,6 +718,55 @@ export async function deleteSavedSearch(accountId: string, id: string) {
   }
   const result = await pool.query("DELETE FROM saved_searches WHERE account_id=$1 AND id=$2", [accountId, id]);
   return (result.rowCount ?? 0) > 0;
+}
+
+const toIngestionRun = (row: Record<string, unknown>): IngestionRun => ({
+  id: String(row.id), source: String(row.source),
+  noticesSeen: Number(row.notices_seen), noticesParsed: Number(row.notices_parsed),
+  fieldCoverage: (row.field_coverage ?? {}) as Record<string, number>,
+  alarms: (row.alarms ?? []) as string[],
+  createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/** Records what one source yielded on one run, alarms included. */
+export async function recordIngestionRun(input: Omit<IngestionRun, "id" | "createdAt">) {
+  const run: IngestionRun = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.ingestionRuns.push(run); return run; }
+  await pool.query(
+    `INSERT INTO ingestion_runs(id,source,notices_seen,notices_parsed,field_coverage,alarms)
+     VALUES($1,$2,$3,$4,$5,$6)`,
+    [run.id, run.source, run.noticesSeen, run.noticesParsed, JSON.stringify(run.fieldCoverage), JSON.stringify(run.alarms)],
+  );
+  return run;
+}
+
+/** Parsed counts from this source's recent runs, newest first. */
+export async function recentIngestionYields(source: string, limit = 10) {
+  if (!pool) {
+    return memory.ingestionRuns.filter((run) => run.source === source)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit)
+      .map((run) => run.noticesParsed);
+  }
+  const result = await pool.query(
+    "SELECT notices_parsed FROM ingestion_runs WHERE source=$1 ORDER BY created_at DESC LIMIT $2",
+    [source, limit],
+  );
+  return result.rows.map((row) => Number(row.notices_parsed));
+}
+
+/** The most recent run for each source, for /health. */
+export async function latestIngestionRuns(): Promise<IngestionRun[]> {
+  if (!pool) {
+    const bySource = new Map<string, IngestionRun>();
+    for (const run of [...memory.ingestionRuns].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+      bySource.set(run.source, run);
+    }
+    return [...bySource.values()];
+  }
+  const result = await pool.query(
+    `SELECT DISTINCT ON (source) * FROM ingestion_runs ORDER BY source, created_at DESC`,
+  );
+  return result.rows.map(toIngestionRun);
 }
 
 export async function addEvidence(accountId: string, input: Omit<EvidenceRecord, "id" | "accountId">) {
