@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "typecheck": "node scripts/typecheck.mjs",
     "check:conflicts": "node scripts/check-conflict-markers.mjs",
+    "backup:verify": "node scripts/backup/rehearse-restore.mjs",
     "seed:staging": "node scripts/seed-staging.mjs",
     "import:ogp": "node scripts/import-ogp.mjs"
   },

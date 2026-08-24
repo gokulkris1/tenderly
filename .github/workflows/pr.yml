@@ -95,6 +95,14 @@ jobs:
         if: hashFiles('server/package.json') != ''
         run: npm run test:integration --prefix server --if-present
 
+      # An untested backup is not a backup. Dumps the database the suite has
+      # just filled, restores it into a fresh one, and compares every table's
+      # row count and the bytes of a vault document. See docs/RUNBOOK_BACKUP.md.
+      - name: Restore rehearsal
+        id: restore-rehearsal
+        if: hashFiles('server/migrations/*.sql') != ''
+        run: node scripts/backup/rehearse-restore.mjs
+
       # Backlog is data the Phase 2 importer depends on — keep it valid on every PR.
       - name: Validate backlog
         run: node scripts/backlog-lint.mjs --no-csv
