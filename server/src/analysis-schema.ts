@@ -13,8 +13,10 @@ import type { BidAnswer, TenderAnalysis } from "./types.js";
  * 3 — aiUsePolicy: what the pack says about producing the response with AI
  *     (TLY-74). Absent on older analyses, which is why it reads as not-stated
  *     rather than unrestricted until the tender is analysed again.
+ * 4 — lots become structured records rather than bare strings, and gates and
+ *     questions carry the lot they belong to (TLY-41).
  */
-export const ANALYSIS_SCHEMA_VERSION = "3";
+export const ANALYSIS_SCHEMA_VERSION = "4";
 
 /**
  * Identifiers must be a function of the question itself, not of when it was
@@ -38,10 +40,29 @@ export const checklistItemId = (label: string, kind: string) => fingerprint("c",
  * Rewrites the model's identifiers to stable ones and stamps the schema version.
  * Run on every analysis, including the deterministic no-key fallback.
  */
+/**
+ * Before TLY-41 a lot was a bare string. Those are kept as a titled lot with no
+ * scope and an explicit marker for the value, rather than dropped: the pack did
+ * say the tender was divided, and losing that is worse than an incomplete row.
+ */
+function migrateLots(lots: TenderAnalysis["lots"] | string[] | undefined): TenderAnalysis["lots"] {
+  return (lots ?? []).map((lot, index) => {
+    if (typeof lot !== "string") return lot;
+    return {
+      id: lot.trim() || `Lot ${index + 1}`,
+      title: lot.trim(),
+      scope: "",
+      estimatedValue: "[INPUT NEEDED: lot value]",
+      evidence: { sourceDocument: "", quote: "", confidence: "LOW" as const },
+    };
+  });
+}
+
 export function withStableIds(analysis: TenderAnalysis): TenderAnalysis {
   return {
     ...analysis,
     schemaVersion: ANALYSIS_SCHEMA_VERSION,
+    lots: migrateLots(analysis.lots as TenderAnalysis["lots"] | string[] | undefined),
     questions: (analysis.questions ?? []).map((question) => ({
       ...question,
       id: questionId(question.title, question.prompt),

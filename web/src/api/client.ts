@@ -165,6 +165,11 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ confirmed: true }),
       }),
+    setSelectedLots: (tenderId: string, lotIds: string[]) =>
+      request<{ tender: Tender }>(`/api/tenders/${tenderId}/lots`, "Select lots", {
+        method: "PUT",
+        body: JSON.stringify({ lotIds }),
+      }),
     setNoAiMode: (tenderId: string, enabled: boolean) =>
       request<{ noAiMode: boolean; aiWrittenAnswers: string[] }>(`/api/tenders/${tenderId}/no-ai-mode`, "Set no-AI mode", {
         method: "PUT",

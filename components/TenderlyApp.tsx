@@ -19,6 +19,7 @@ import type {
   Formality,
   Gate,
   GateState,
+  Lot,
   NotificationItem,
   PersonItem,
   ProvenanceClass,
@@ -240,6 +241,41 @@ const aiPolicyCopy: Record<AiUsePolicy["state"], { label: string; tone: string; 
  * silence as permission: "not stated" is its own answer. Confirming or
  * dismissing records who decided to proceed, without changing what was found.
  */
+/**
+ * Which lots the user is bidding.
+ *
+ * Nothing is shown for an undivided tender: a selector with one entry would be
+ * a decision the pack never asked for. Selecting lots scopes the gates, the
+ * questions and the pack blockers to what the user is actually bidding.
+ */
+function LotSelector({ lots, selected, onChange, busy }: {
+  lots: Lot[]; selected: string[]; onChange: (lotIds: string[]) => void; busy: boolean;
+}) {
+  if (lots.length === 0) return null;
+  const toggle = (id: string) => onChange(selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]);
+  return (
+    <section className="panel lot-panel" data-testid="lot-selector">
+      <div className="panel-heading">
+        <div><h2>Lots</h2><p>This tender is divided. Pick the lots you are bidding — gates, questions and blockers follow your choice.</p></div>
+        {selected.length > 0 && <button className="text-action" onClick={() => onChange([])} disabled={busy}>Show all lots</button>}
+      </div>
+      <div className="lot-grid">
+        {lots.map((lot) => (
+          <label key={lot.id} className={selected.includes(lot.id) ? "lot-card selected" : "lot-card"} data-testid={`lot-${lot.id}`}>
+            <input type="checkbox" checked={selected.includes(lot.id)} onChange={() => toggle(lot.id)} disabled={busy} />
+            <span>
+              <strong>{lot.id}{lot.title && lot.title !== lot.id ? ` — ${lot.title}` : ""}</strong>
+              {lot.scope && <small>{lot.scope}</small>}
+              <em className={lot.estimatedValue.startsWith("[INPUT NEEDED") ? "lot-value missing" : "lot-value"}>{lot.estimatedValue}</em>
+            </span>
+          </label>
+        ))}
+      </div>
+      {selected.length === 0 && <p className="lot-note">No lot selected — everything in the pack is in scope.</p>}
+    </section>
+  );
+}
+
 function AiUsePolicyPanel({ policy, onAcknowledge, busy }: { policy?: AiUsePolicy; onAcknowledge: (action: "confirmed" | "dismissed") => void; busy: boolean }) {
   if (!policy) return null;
   const copy = aiPolicyCopy[policy.state];
@@ -696,6 +732,21 @@ export default function TenderlyApp() {
     }
   }
 
+  async function setSelectedLots(lotIds: string[]) {
+    if (!selected) return;
+    if (isDemo) { setToast(lotIds.length ? `Bidding ${lotIds.join(", ")}` : "All lots in scope"); return; }
+    try {
+      setLoading("lots");
+      const { tender } = await apiClient.setSelectedLots(selected.id, lotIds);
+      setTenders((items) => items.map((item) => (item.id === tender.id ? tender : item)));
+      setToast(lotIds.length ? `Bidding ${lotIds.join(", ")} · gates and questions scoped` : "All lots in scope");
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not change the lot selection");
+    } finally {
+      setLoading("");
+    }
+  }
+
   async function setNoAiMode(enabled: boolean) {
     if (!selected) return;
     if (isDemo) {
@@ -943,6 +994,7 @@ export default function TenderlyApp() {
             <BidList tenders={tenders} selectedId={selected.id} onSelect={setSelectedId} />
             <BidWorkspace
               acknowledgeAiPolicy={acknowledgeAiPolicy}
+              setSelectedLots={setSelectedLots}
               setNoAiMode={setNoAiMode}
               critiqueAnswer={critiqueAnswer}
               critique={critique}
@@ -1118,8 +1170,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, setNoAiMode, critiqueAnswer, critique, attestation, onAttest, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, setSelectedLots, setNoAiMode, critiqueAnswer, critique, attestation, onAttest, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -1158,6 +1210,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
               <span className={`hero-decision decision-${decisionSlug(tender.decision)}`}>{decisionLabel(tender.decision)}</span>
             </section>
 
+            <LotSelector lots={tender.lots ?? []} selected={tender.selectedLots ?? []} onChange={setSelectedLots} busy={loading === "lots"} />
             <AiUsePolicyPanel policy={tender.aiUsePolicy} onAcknowledge={acknowledgeAiPolicy} busy={loading === "ai-policy"} />
             <AwardHistory data={tender.awardIntelligence} />
             <AwardCriteria criteria={tender.awardCriteria ?? []} warning={tender.awardCriteriaWarning} />
