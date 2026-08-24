@@ -103,8 +103,32 @@ export function tenderCpv(tender: TenderRecord): TenderCpvWire | undefined {
   };
 }
 
+/**
+ * Which lots the user is bidding. Empty means the whole tender is in scope —
+ * an undivided tender and an unselected divided one behave identically.
+ */
+export function selectedLots(tender: TenderRecord): string[] {
+  const stored = tender.metadata.selectedLots;
+  return Array.isArray(stored) ? stored.map(String) : [];
+}
+
+/**
+ * True when an item applies to what the user is bidding.
+ *
+ * Items with no lot apply to the whole tender and are always in scope. A
+ * lot-specific item is in scope only while its lot is selected — which is the
+ * point of the story: failing a gate on a lot you are not bidding is not a
+ * reason to block your pack.
+ */
+export function inScope(lotId: string | undefined, selection: string[]) {
+  if (!lotId) return true;
+  if (selection.length === 0) return true;
+  return selection.includes(lotId);
+}
+
 export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [], evidence: EvidenceRecord[] = [], provenance: ProvenanceEntry[] = []): Tender {
   const analysis = tender.analysis;
+  const selection = selectedLots(tender);
   const answerMap = new Map(answers.map((answer) => [answer.questionId, answer]));
   const ledger = new Map<string, ProvenanceEntry[]>();
   for (const entry of provenance) {
@@ -129,18 +153,20 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
     framework: bidTypeLabel(analysis?.bidType ?? "UNKNOWN"),
     partnerNote: analysis?.partnerNeeded ? analysis.partnerGaps.join(" · ") : undefined,
     eligibility: analysis?.eligibility ?? "REVIEW",
-    gates: analysis?.fatalGates.map((gate) => ({
+    gates: analysis?.fatalGates.filter((gate) => inScope(gate.lotId, selection)).map((gate) => ({
       label: gate.requirement,
+      lotId: gate.lotId || undefined,
       state: gate.status === "FAIL" ? "fail" : gate.status === "REVIEW" ? "review" : "pass",
       bidder: gate.bidderEvidence,
       requirement: gate.action || gate.requirement,
       source: `${gate.evidence.sourceDocument}${gate.evidence.quote ? ` · “${gate.evidence.quote}”` : ""}`,
     })) ?? [{ label: "Tender pack review", state: "review", bidder: "Not analysed", requirement: "Import documents and run qualification", source: "eTenders notice" }],
-    questions: analysis?.questions.map((question) => {
+    questions: analysis?.questions.filter((question) => inScope(question.lotId, selection)).map((question) => {
       const saved = answerMap.get(question.id);
       return {
         id: question.id,
         title: question.title,
+        lotId: question.lotId || undefined,
         weight: question.weight,
         maxWords: question.maxWords,
         required: question.required,
@@ -194,6 +220,11 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
     requiredCertificates: certificateStatus(analysis?.requiredCertificates ?? [], evidence),
     aiUsePolicy: aiUsePolicy(analysis?.aiUsePolicy, tender.metadata.aiPolicyAcknowledgement),
     cpv: tenderCpv(tender),
+    lots: (analysis?.lots ?? []).map((lot) => ({
+      id: lot.id, title: lot.title, scope: lot.scope, estimatedValue: lot.estimatedValue,
+      source: lot.evidence.sourceDocument, quote: lot.evidence.quote,
+    })),
+    selectedLots: selection,
     noAiMode: tender.metadata.noAiMode === true,
   };
 }

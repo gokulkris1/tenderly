@@ -1,7 +1,8 @@
 import JSZip from "jszip";
 import PptxGenJS from "pptxgenjs";
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
-import { certificateStatus } from "./serializers.js";
+import { certificateStatus, inScope, selectedLots } from "./serializers.js";
+import { rollUpEligibility } from "./eligibility.js";
 import { attestationValid, provenanceSummaryFile, type Attestation } from "./attestation.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, ProvenanceEntry, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
 
@@ -141,10 +142,16 @@ export function submissionBlockers(tender: TenderRecord, analysis: TenderAnalysi
   for (const certificate of certificateStatus(analysis.requiredCertificates ?? [], evidence)) {
     if (certificate.mandatory && !certificate.satisfied) blockers.push(`${certificate.name} — missing`);
   }
-  if (analysis.eligibility !== "PASS") blockers.push(`Eligibility is ${analysis.eligibility}; resolve all mandatory gates before final pack`);
-  analysis.fatalGates.filter((gate) => gate.status === "FAIL" || gate.status === "REVIEW").forEach((gate) => blockers.push(`${gate.requirement}: ${gate.status.toLowerCase()}`));
+  // A gate on a lot the user is not bidding is not a reason to block their pack.
+  const selection = selectedLots(tender);
+  const gatesInScope = analysis.fatalGates.filter((gate) => inScope(gate.lotId, selection));
+  const eligibility = rollUpEligibility(gatesInScope);
+  if (gatesInScope.length > 0 ? eligibility !== "PASS" : analysis.eligibility !== "PASS") {
+    blockers.push(`Eligibility is ${gatesInScope.length > 0 ? eligibility : analysis.eligibility}; resolve all mandatory gates before final pack`);
+  }
+  gatesInScope.filter((gate) => gate.status === "FAIL" || gate.status === "REVIEW").forEach((gate) => blockers.push(`${gate.requirement}: ${gate.status.toLowerCase()}`));
   const answerMap = new Map(answers.map((answer) => [answer.questionId, answer]));
-  analysis.questions.filter((question) => question.required).forEach((question) => {
+  analysis.questions.filter((question) => question.required && inScope(question.lotId, selection)).forEach((question) => {
     const answer = answerMap.get(question.id);
     if (!answer?.response.trim() || answer.status !== "ready") blockers.push(`Required response not ready: ${question.title}`);
   });

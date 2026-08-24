@@ -9,7 +9,7 @@ const validAnalysis = {
   access: "OPEN_TO_QUALIFIED_BIDDERS", eligibility: "REVIEW", fitScore: 72, decision: "REVIEW",
   partnerNeeded: false, partnerGaps: [], deadline: "26/03/2026 12:00", clarificationDeadline: "",
   contractValue: "EUR 450,000", duration: "", lots: [],
-  fatalGates: [{ id: "tax", requirement: "Tax clearance", bidderEvidence: "None recorded", status: "REVIEW", action: "Upload certificate", evidence }],
+  fatalGates: [{ id: "tax", requirement: "Tax clearance", bidderEvidence: "None recorded", status: "REVIEW", action: "Upload certificate", lotId: "", evidence }],
   evaluationCriteria: [], questions: [], roles: [], clarificationQuestions: [], risks: [],
   submissionMethod: "eTenders", formalities: [], requiredCertificates: [], submissionChecklist: [], synopsisSlides: [],
   aiUsePolicy: { state: "not-stated", evidence: { sourceDocument: "", quote: "", confidence: "LOW" } },

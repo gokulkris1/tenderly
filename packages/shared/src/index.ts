@@ -33,6 +33,8 @@ export type SubmissionItemStatus = "READY" | "ACTION" | "VERIFY";
 
 export type Gate = {
   label: string;
+  /** The lot this gate applies to. Absent means the whole tender. */
+  lotId?: string;
   state: GateState;
   /** What the bidder can show for this requirement, or why nothing was found. */
   bidder: string;
@@ -58,6 +60,8 @@ export type ProvenanceEntry = {
 export type BidQuestion = {
   id: string;
   title: string;
+  /** The lot this question belongs to. Absent means the whole tender. */
+  lotId?: string;
   weight: number;
   maxWords: number;
   required?: boolean;
@@ -211,6 +215,17 @@ export type TenderCpv = {
   recognised: boolean;
 };
 
+/** One lot of a divided tender, as shown on the Qualify stage. */
+export type Lot = {
+  id: string;
+  title: string;
+  scope: string;
+  /** "[INPUT NEEDED: lot value]" when the pack states none. */
+  estimatedValue: string;
+  source: string;
+  quote: string;
+};
+
 export type SynopsisSlide = {
   title: string;
   bullets: string[];
@@ -253,6 +268,10 @@ export type Tender = {
   matchedBy?: MatchReason[];
   /** Which feed the notice came from, so a user can tell TED from eTenders. */
   noticeSource?: "eTenders" | "TED";
+  /** Lots the pack divides this tender into. Empty when it is undivided. */
+  lots?: Lot[];
+  /** Lot ids the user is bidding. Empty means the whole tender is in scope. */
+  selectedLots?: string[];
   /** The tender's CPV, normalised where the code is one we hold. */
   cpv?: TenderCpv;
   /** Why this notice scored what it did. Present on every scored notice. */

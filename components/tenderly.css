@@ -490,3 +490,14 @@ button:disabled { cursor: wait; opacity: .62; }
 .alternate-sources { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
 .alternate-sources a { color: var(--green-2); text-decoration: underline; }
 .alternate-sources small { font-size: 10px; }
+
+/* TLY-41 — a bidder who qualifies for one lot is not failing the tender. */
+.lot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 12px; }
+.lot-card { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; background: #fff; }
+.lot-card.selected { border-color: var(--green); background: var(--green-soft); }
+.lot-card span { display: grid; gap: 3px; }
+.lot-card strong { font-size: 13px; }
+.lot-card small { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.lot-value { font-size: 11px; font-style: normal; font-weight: 600; }
+.lot-value.missing { color: var(--amber); font-weight: 500; }
+.lot-note { margin: 12px 0 0; font-size: 12px; color: var(--muted); }

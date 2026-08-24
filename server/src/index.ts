@@ -492,6 +492,29 @@ app.post("/api/tenders/:id/attestation", async (req: AuthenticatedRequest, res) 
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
+/**
+ * Records which lots the user is bidding.
+ *
+ * The selection scopes the gates, questions and blockers shown downstream. An
+ * empty list means the whole tender, which is also what an undivided tender
+ * looks like — the two behave identically by design.
+ */
+app.put("/api/tenders/:id/lots", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender?.analysis) return res.status(404).json({ error: "Tender analysis not found" });
+    const { lotIds } = z.object({ lotIds: z.array(z.string().max(64)).max(50) }).parse(req.body);
+
+    const known = new Set(tender.analysis.lots.map((lot) => lot.id));
+    const unknown = lotIds.filter((id) => !known.has(id));
+    if (unknown.length) return res.status(400).json({ error: `Unknown lot: ${unknown.join(", ")}` });
+
+    await updateTenderMetadata(account, tender.id, { selectedLots: lotIds });
+    res.json({ tender: await tenderWithAnswers(account, (await getTender(account, tender.id))!) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
 /** True when this tender is in no-AI mode. Stored on the tender, not the account. */
 function noAiMode(tender: { metadata: Record<string, unknown> }) {
   return tender.metadata.noAiMode === true;

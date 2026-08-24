@@ -23,6 +23,8 @@ export const eligibilityGateSchema = z.object({
   bidderEvidence: z.string(),
   status: z.enum(["PASS", "REVIEW", "FAIL", "NOT_APPLICABLE"]),
   action: z.string(),
+  /** The lot id this gate applies to; empty string means the whole tender. */
+  lotId: z.string(),
   evidence: sourceEvidenceSchema,
 });
 
@@ -47,6 +49,8 @@ export const analysisQuestionSchema = z.object({
   maxWords: z.number().int(),
   required: z.boolean(),
   evidenceNeeded: z.array(z.string()),
+  /** The lot id this question belongs to; empty string means the whole tender. */
+  lotId: z.string(),
   source: sourceEvidenceSchema,
 });
 
@@ -59,6 +63,19 @@ export const requiredRoleSchema = z.object({
   bidderMatch: z.string(),
   status: z.enum(["PASS", "REVIEW", "FAIL"]),
   action: z.string(),
+  evidence: sourceEvidenceSchema,
+});
+
+/**
+ * One lot of a divided tender. estimatedValue carries the literal marker
+ * "[INPUT NEEDED: lot value]" when the pack states none — a figure is never
+ * invented to fill the field.
+ */
+export const tenderLotSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  scope: z.string(),
+  estimatedValue: z.string(),
   evidence: sourceEvidenceSchema,
 });
 
@@ -117,7 +134,7 @@ export const tenderAnalysisSchema = z.object({
   clarificationDeadline: z.string(),
   contractValue: z.string(),
   duration: z.string(),
-  lots: z.array(z.string()),
+  lots: z.array(tenderLotSchema),
   fatalGates: z.array(eligibilityGateSchema),
   evaluationCriteria: z.array(evaluationCriterionSchema),
   questions: z.array(analysisQuestionSchema),

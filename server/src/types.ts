@@ -7,12 +7,31 @@ export type SourceEvidence = {
   confidence: "HIGH" | "MEDIUM" | "LOW";
 };
 
+/**
+ * One lot of a divided tender.
+ *
+ * Irish framework and multi-region tenders are routinely split into lots with
+ * distinct scope, value and eligibility. Flattening them into one set of gates
+ * told a bidder who qualifies for lot 2 only that they fail the whole tender.
+ */
+export type TenderLot = {
+  /** The pack's own identifier: "Lot 1", "Lot 2A". */
+  id: string;
+  title: string;
+  scope: string;
+  /** "[INPUT NEEDED: lot value]" when the pack states none. Never invented. */
+  estimatedValue: string;
+  evidence: SourceEvidence;
+};
+
 export type EligibilityGate = {
   id: string;
   requirement: string;
   bidderEvidence: string;
   status: GateStatus;
   action: string;
+  /** The lot this applies to. Absent means it applies to the whole tender. */
+  lotId?: string;
   evidence: SourceEvidence;
 };
 
@@ -36,6 +55,8 @@ export type AnalysisQuestion = {
   maxWords: number;
   required: boolean;
   evidenceNeeded: string[];
+  /** The lot this question belongs to. Absent means the whole tender. */
+  lotId?: string;
   source: SourceEvidence;
 };
 
@@ -104,7 +125,7 @@ export type TenderAnalysis = {
   clarificationDeadline: string;
   contractValue: string;
   duration: string;
-  lots: string[];
+  lots: TenderLot[];
   fatalGates: EligibilityGate[];
   evaluationCriteria: EvaluationCriterion[];
   questions: AnalysisQuestion[];
