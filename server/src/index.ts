@@ -14,6 +14,7 @@ import { diffVersions } from "./versions.js";
 import { ESTIMATE_NOTICE, prioritisedGaps, scoreEvaluation } from "./evaluation.js";
 import { buildPortfolio } from "./portfolio.js";
 import { NO_ANSWER, chunkDocument, rankChunks } from "./retrieval.js";
+import { NO_CHANGES, describeChange, diffAnalyses, questionsNeedingReview } from "./analysis-diff.js";
 import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
@@ -47,6 +48,8 @@ import {
   initializeDatabase,
   knownBuyersFor,
   listAnswerVersions,
+  getAnalysisVersion,
+  listAnalysisVersions,
   listAnswers,
   latestAffirmation,
   latestIngestionRuns,
@@ -69,6 +72,7 @@ import {
   monthlyUsage,
   persistentDatabase,
   recordAffirmation,
+  recordAnalysisVersion,
   recordAnswerVersion,
   recordBidDecision,
   recordMockEvaluation,
@@ -253,7 +257,7 @@ async function tenderWithAnswers(account: string, tender: TenderRecord) {
   return serialized;
 }
 
-async function analyseSavedTender(account: string, tenderId: string) {
+async function analyseSavedTender(account: string, tenderId: string, actor = "") {
   const tender = await getTender(account, tenderId);
   if (!tender) throw new Error("TENDER_NOT_FOUND");
   const company = await getCompany(account);
@@ -264,7 +268,30 @@ async function analyseSavedTender(account: string, tenderId: string) {
   // front of a buyer that the company cannot actually field.
   const [people, evidence] = await Promise.all([listActivePeople(account), listEvidence(account)]);
   const analysis = await analyseTender(tender, company, sources, { people, evidence });
-  return saveTenderAnalysis(account, tender.id, analysis);
+
+  // What changed since the previous analysis, before the current one is
+  // replaced: a buyer's amendment is invisible otherwise.
+  const changes = diffAnalyses(tender.analysis, analysis);
+  const saved = await saveTenderAnalysis(account, tender.id, analysis);
+
+  await recordAnalysisVersion({
+    tenderId: tender.id, analysis,
+    promptVersion: analysis.promptVersion ?? "", schemaVersion: analysis.schemaVersion ?? "",
+    actor: actor || "system",
+  }).catch(() => undefined);
+
+  if (changes.length > 0) {
+    // Answers to changed questions are flagged, never invalidated: a person
+    // wrote them, and deciding on their behalf that they are worthless would
+    // throw away real work over a change they might judge immaterial.
+    const stale = questionsNeedingReview(changes);
+    await updateTenderMetadata(account, tender.id, {
+      lastAnalysisChanges: changes.map(describeChange),
+      questionsNeedingReview: stale,
+      lastAnalysisChangedAt: new Date().toISOString(),
+    });
+  }
+  return saved;
 }
 
 app.get("/health", async (_req, res) => {
@@ -480,7 +507,7 @@ app.post("/api/tenders/import", importLimiter, async (req: AuthenticatedRequest,
     }
     if (warnings.length) tender = await updateTenderMetadata(account, tender.id, { documentWarnings: warnings });
     let analysisError = "";
-    try { tender = await analyseSavedTender(account, tender.id); } catch (error) { analysisError = error instanceof Error ? error.message : "Analysis did not complete"; }
+    try { tender = await analyseSavedTender(account, tender.id, actorEmail(req)); } catch (error) { analysisError = error instanceof Error ? error.message : "Analysis did not complete"; }
     // Importing a watched notice promotes it: it is a bid now, not a maybe.
     if (tender.externalId) await removeFromWatchlist(account, tender.externalId).catch(() => false);
     res.status(201).json({ tender: await tenderWithAnswers(account, tender), warnings, analysisError });
@@ -517,7 +544,7 @@ app.post("/api/tenders/:id/documents", upload.single("file"), async (req: Authen
 app.post("/api/tenders/:id/analyse", analysisLimiter, analysisHourlyLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
-    const tender = await analyseSavedTender(account, routeParam(req.params.id));
+    const tender = await analyseSavedTender(account, routeParam(req.params.id), actorEmail(req));
     res.json({ tender: await tenderWithAnswers(account, tender) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
@@ -1252,6 +1279,37 @@ app.get("/api/tenders/:id/ask", async (req: AuthenticatedRequest, res) => {
     if (!tender) return res.status(404).json({ error: "Tender not found" });
     const documents = (await listDocuments(tender.id)).filter((document) => document.extractedText.trim().length > 0);
     res.json({ questions: await listPackQuestions(tender.id), searchable: documents.length > 0 });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * What changed between analyses, and the versions themselves.
+ *
+ * An earlier version is returned read-only: it is a record of what the pack
+ * said then, not something to edit into what we wish it had said.
+ */
+app.get("/api/tenders/:id/analysis-versions", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+
+    const versions = await listAnalysisVersions(tender.id);
+    const requested = z.string().max(64).catch("").parse(req.query.version);
+    const version = requested ? await getAnalysisVersion(account, requested) : null;
+    if (requested && !version) return res.status(404).json({ error: "Analysis version not found" });
+
+    const changes = (tender.metadata.lastAnalysisChanges ?? []) as string[];
+    res.json({
+      versions: versions.map((entry, index) => ({
+        id: entry.id, createdAt: entry.createdAt, actor: entry.actor,
+        promptVersion: entry.promptVersion, current: index === 0,
+      })),
+      changes,
+      note: changes.length === 0 ? NO_CHANGES : undefined,
+      changedAt: tender.metadata.lastAnalysisChangedAt ?? null,
+      analysis: version?.analysis ?? null,
+    });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
