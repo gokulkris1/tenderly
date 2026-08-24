@@ -2,7 +2,8 @@ import JSZip from "jszip";
 import PptxGenJS from "pptxgenjs";
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
 import { certificateStatus } from "./serializers.js";
-import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
+import { attestationValid, provenanceSummaryFile, type Attestation } from "./attestation.js";
+import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, ProvenanceEntry, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
 
 const INK = "17332B";
 const GREEN = "167A5A";
@@ -130,6 +131,11 @@ export async function createSynopsisDeck(tender: TenderRecord, analysis: TenderA
 
 export function submissionBlockers(tender: TenderRecord, analysis: TenderAnalysis, answers: BidAnswer[], documents: StoredDocument[], evidence: EvidenceRecord[] = []) {
   const blockers: string[] = [];
+  // A named person must state they have reviewed this exact content before the
+  // final pack leaves the system. Editing any answer invalidates that statement.
+  if (!attestationValid(tender.metadata.attestation as Attestation | undefined, answers)) {
+    blockers.push("Attestation not recorded");
+  }
   // A certificate the tender makes a condition of participation, with nothing
   // verified to show for it, is a hard blocker (TLY-43).
   for (const certificate of certificateStatus(analysis.requiredCertificates ?? [], evidence)) {
@@ -149,7 +155,7 @@ export function submissionBlockers(tender: TenderRecord, analysis: TenderAnalysi
   return [...new Set(blockers)];
 }
 
-export async function createSubmissionPack(args: { tender: TenderRecord; analysis: TenderAnalysis; answers: BidAnswer[]; documents: StoredDocument[]; company: CompanyProfile; people: PersonRecord[]; evidence: EvidenceRecord[]; draft: boolean }) {
+export async function createSubmissionPack(args: { tender: TenderRecord; analysis: TenderAnalysis; answers: BidAnswer[]; documents: StoredDocument[]; company: CompanyProfile; people: PersonRecord[]; evidence: EvidenceRecord[]; provenance?: ProvenanceEntry[]; draft: boolean }) {
   const blockers = submissionBlockers(args.tender, args.analysis, args.answers, args.documents, args.evidence);
   if (!args.draft && blockers.length) return { blockers, buffer: null as Buffer | null };
   const zip = new JSZip();
@@ -162,6 +168,11 @@ export async function createSubmissionPack(args: { tender: TenderRecord; analysi
     zip.file("_Tenderly_Internal/Bid_Synopsis.pptx", await createSynopsisDeck(args.tender, args.analysis, args.company));
     zip.file("_Tenderly_Internal/READINESS.txt", `TENDERLY DRAFT PACK — NOT READY FOR SUBMISSION\n\n${blockers.length ? blockers.map((blocker) => `- ${blocker}`).join("\n") : "No automated blockers detected. Human final review is still required."}\n`);
   } else {
+    // The record of how the response was produced leaves with the response.
+    zip.file("Provenance_Summary.txt", provenanceSummaryFile({
+      analysis: args.analysis, answers: args.answers, provenance: args.provenance ?? [],
+      attestation: args.tender.metadata.attestation as Attestation | undefined,
+    }));
     zip.file("Submission_Manifest.txt", `Tender: ${args.tender.title}\nTenderer: ${args.company.name}\nGenerated: ${new Date().toISOString()}\n\nThis manifest records pack assembly only. Final submission remains a human-controlled action on the buyer portal.\n`);
   }
   return { blockers, buffer: await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } }) };

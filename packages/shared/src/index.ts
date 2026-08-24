@@ -175,6 +175,27 @@ export type AwardIntelligence = {
   licenceNote: string;
 };
 
+/** A named person's statement that they reviewed this exact content. */
+export type Attestation = {
+  actor: string;
+  at: string;
+  contentVersion: string;
+};
+
+/** What the attester is being asked to stand behind. */
+export type AttestationState = {
+  summary: {
+    counts: { "ai-generated": number; "ai-assisted": number; human: number };
+    aiGeneratedSections: string[];
+    /** Set when the pack prohibits AI content and a section was written by one. */
+    conflict?: string;
+  };
+  attestation: Attestation | null;
+  /** The attestation no longer matches the content, so the pack is blocked again. */
+  invalidated: boolean;
+  blockers: string[];
+};
+
 export type SynopsisSlide = {
   title: string;
   bullets: string[];
