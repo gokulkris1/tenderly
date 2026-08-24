@@ -3,7 +3,19 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import pg from "pg";
 import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
-import type { BidAnswer, CompanyProfile, DiscoveryPreferences, EvidenceRecord, PersonRecord, ProvenanceEntry, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
+import type {
+  BidAnswer,
+  CompanyProfile,
+  DiscoveryPreferences,
+  EvidenceRecord,
+  PersonRecord,
+  ProvenanceEntry,
+  StoredDocument,
+  TenderAnalysis,
+  TenderRecord,
+  UsageEvent,
+  UsageTotals,
+} from "./types.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -32,6 +44,7 @@ const memory = {
   people: new Map<string, PersonRecord>(),
   notifications: new Map<string, NotificationRow>(),
   provenance: [] as ProvenanceEntry[],
+  usage: [] as UsageEvent[],
 };
 
 /**
@@ -322,6 +335,73 @@ export async function tenderProvenance(tenderId: string) {
     `SELECT p.* FROM answer_provenance p JOIN bid_answers a ON a.id = p.answer_id
      WHERE a.tender_id=$1 ORDER BY p.created_at, p.id`, [tenderId]);
   return result.rows.map(toProvenance);
+}
+
+/**
+ * Records one metered model call.
+ *
+ * Metering must never block or fail the user's request, so every caller wraps
+ * this in a catch and logs. A row that is lost costs us billing accuracy; a
+ * request that fails because metering did costs the user their work.
+ */
+export async function recordUsage(input: Omit<UsageEvent, "id" | "createdAt">) {
+  const event: UsageEvent = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.usage.push(event); return event; }
+  await pool.query(
+    `INSERT INTO usage_events(id,account_id,kind,model,input_tokens,output_tokens,request_id,tender_id)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [event.id, event.accountId, event.kind, event.model, event.inputTokens, event.outputTokens,
+     event.requestId ?? null, event.tenderId ?? null],
+  );
+  return event;
+}
+
+const monthStart = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+/** One account's model usage this calendar month. Never crosses accounts. */
+export async function monthlyUsage(accountId: string): Promise<UsageTotals> {
+  const since = monthStart();
+  const month = since.toISOString().slice(0, 7);
+  const rows = pool
+    ? (await pool.query(
+        `SELECT kind, count(*)::int AS actions, coalesce(sum(input_tokens),0)::int AS input_tokens,
+                coalesce(sum(output_tokens),0)::int AS output_tokens
+         FROM usage_events WHERE account_id=$1 AND created_at >= $2 GROUP BY kind ORDER BY kind`,
+        [accountId, since.toISOString()],
+      )).rows
+    : Object.values(memory.usage
+        .filter((event) => event.accountId === accountId && event.createdAt >= since.toISOString())
+        .reduce((acc, event) => {
+          const row = acc[event.kind] ?? { kind: event.kind, actions: 0, input_tokens: 0, output_tokens: 0 };
+          row.actions += 1; row.input_tokens += event.inputTokens; row.output_tokens += event.outputTokens;
+          acc[event.kind] = row;
+          return acc;
+        }, {} as Record<string, { kind: string; actions: number; input_tokens: number; output_tokens: number }>))
+        .sort((a, b) => a.kind.localeCompare(b.kind));
+
+  const byKind = rows.map((row) => ({
+    kind: String(row.kind), actions: Number(row.actions),
+    inputTokens: Number(row.input_tokens), outputTokens: Number(row.output_tokens),
+  }));
+  return {
+    month,
+    actions: byKind.reduce((sum, row) => sum + row.actions, 0),
+    inputTokens: byKind.reduce((sum, row) => sum + row.inputTokens, 0),
+    outputTokens: byKind.reduce((sum, row) => sum + row.outputTokens, 0),
+    byKind,
+  };
+}
+
+/** Every metered call for one account, newest first. */
+export async function listUsage(accountId: string) {
+  if (!pool) return memory.usage.filter((event) => event.accountId === accountId);
+  const result = await pool.query("SELECT * FROM usage_events WHERE account_id=$1 ORDER BY created_at DESC", [accountId]);
+  return result.rows.map((row) => ({
+    id: row.id, accountId: row.account_id, kind: row.kind, model: row.model,
+    inputTokens: row.input_tokens, outputTokens: row.output_tokens,
+    requestId: row.request_id ?? undefined, tenderId: row.tender_id ?? undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+  } as UsageEvent));
 }
 
 export async function addEvidence(accountId: string, input: Omit<EvidenceRecord, "id" | "accountId">) {

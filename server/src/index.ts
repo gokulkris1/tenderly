@@ -32,6 +32,7 @@ import {
   listProvenance,
   listTenders,
   migrateAnalysisSchema,
+  monthlyUsage,
   persistentDatabase,
   recordProvenance,
   saveAnswer,
@@ -397,6 +398,13 @@ app.post("/api/tenders/:id/ai-policy/acknowledge", async (req: AuthenticatedRequ
     const acknowledgement = { action, actor: actorEmail(req), at: new Date().toISOString() };
     await updateTenderMetadata(account, tender.id, { aiPolicyAcknowledgement: acknowledgement });
     res.json({ acknowledgement });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** This account's model usage for the current calendar month. */
+app.get("/api/usage", async (req: AuthenticatedRequest, res) => {
+  try {
+    res.json({ usage: await monthlyUsage(accountId(req)) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

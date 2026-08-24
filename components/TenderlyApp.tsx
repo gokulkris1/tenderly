@@ -24,6 +24,7 @@ import type {
   SectorPreset,
   SubmissionItem,
   Tender,
+  UsageTotals,
 } from "@tenderly/shared";
 
 // Screen navigation is local to the app, not part of the wire contract.
@@ -380,6 +381,7 @@ export default function TenderlyApp() {
   const [authReady, setAuthReady] = useState(!API_BASE);
   // The authoritative blocker list the API returns when it refuses a final pack.
   const [blockers, setBlockers] = useState<string[]>([]);
+  const [usage, setUsage] = useState<UsageTotals | null>(null);
   const [sectors, setSectors] = useState<SectorPreset[]>([]);
   const [preferences, setPreferences] = useState<DiscoveryPreferences>({ sectors: [], keywords: [], cpvCodes: [], valueMin: null, valueMax: null });
 
@@ -398,6 +400,14 @@ export default function TenderlyApp() {
     setToken(saved);
     setAuthReady(true);
   }, []);
+
+  // Read on entering Settings rather than on every render: the figures move
+  // only when the account makes an AI call.
+  useEffect(() => {
+    if (section !== "Settings" || isDemo || !API_BASE || !token) return;
+    apiClient.usage().then(({ usage: totals }) => setUsage(totals)).catch(() => setUsage(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, token]);
 
   useEffect(() => {
     if (!toast) return;
@@ -827,7 +837,7 @@ export default function TenderlyApp() {
           }} />}
           {section === "Evidence" && <EvidenceView tab={evidenceTab} setTab={setEvidenceTab} evidence={evidence} people={people} onUploadEvidence={uploadEvidenceFile} onUploadCv={uploadCvFile} onVerify={setEvidenceVerification} loading={loading} />}
           {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} loading={loading === "cv-upload"} />}
-          {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} />}
+          {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} usage={usage} />}
         </div>
       </main>
 
@@ -1162,7 +1172,36 @@ function TeamView({ people, onUploadCv, loading }: { people: PersonItem[]; onUpl
   return <div className="library-page"><div className="section-intro"><div><p className="eyebrow">TEAM & PARTNERS</p><h2>Know your bid shape before you write.</h2><p>Tenderly maps required roles to CV evidence and only flags a tie-up when a concrete capability, capacity or credential gap remains.</p></div><FileButton label={loading ? "Extracting…" : "＋ Add person / CV"} accept=".pdf,.docx,.txt" onFile={onUploadCv} /></div><div className="team-grid">{people.map((person) => <section className="panel team-card" key={person.id}><span className="cv-avatar">{person.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "CV"}</span><div><h3>{person.name}</h3><p>{person.title || "Parsed CV profile"}</p></div><strong>Available to match</strong><small>{person.skills.length ? person.skills.join(" · ") : "Tenderly will match requirements against the full extracted CV text."}</small></section>)}<section className="panel gap-card"><span>＋</span><h3>Build your partner bench</h3><p>Add trusted associates or partner CVs here. A tender analysis will identify exactly which required role or credential still lacks evidence.</p><FileButton label="Add partner CV" accept=".pdf,.docx,.txt" onFile={onUploadCv} /></section></div></div>;
 }
 
-function SettingsView({ isDemo, sectors, preferences, onSave, loading }: { isDemo: boolean; sectors: SectorPreset[]; preferences: DiscoveryPreferences; onSave: (preferences: DiscoveryPreferences) => void; loading: string }) {
+/**
+ * What this account has spent on model calls this month.
+ *
+ * The figures are the metered totals, not an estimate: every model call writes
+ * a row, and this reads them back. Only this account's rows are ever counted.
+ */
+function AiUsagePanel({ usage }: { usage: UsageTotals | null }) {
+  if (!usage) return null;
+  const label: Record<string, string> = { analysis: "Tender analyses", draft: "Answer drafts", critique: "Critiques" };
+  return (
+    <section className="panel settings-list" data-testid="ai-usage">
+      <div><span><strong>AI usage this month</strong><small>{usage.month} · what your account has used. Tokens are the unit AI is billed in.</small></span></div>
+      <div className="usage-totals">
+        <span><strong>{usage.actions}</strong><small>AI actions</small></span>
+        <span><strong>{usage.inputTokens.toLocaleString()}</strong><small>input tokens</small></span>
+        <span><strong>{usage.outputTokens.toLocaleString()}</strong><small>output tokens</small></span>
+      </div>
+      {usage.byKind.length > 0 && (
+        <ul className="usage-breakdown">
+          {usage.byKind.map((row) => (
+            <li key={row.kind}><strong>{label[row.kind] ?? row.kind}</strong><small>{row.actions} · {(row.inputTokens + row.outputTokens).toLocaleString()} tokens</small></li>
+          ))}
+        </ul>
+      )}
+      {usage.actions === 0 && <p className="usage-empty">No AI actions recorded this month.</p>}
+    </section>
+  );
+}
+
+function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage }: { isDemo: boolean; sectors: SectorPreset[]; preferences: DiscoveryPreferences; onSave: (preferences: DiscoveryPreferences) => void; loading: string; usage: UsageTotals | null }) {
   const [draft, setDraft] = useState<DiscoveryPreferences>(preferences);
   const [keywordText, setKeywordText] = useState(preferences.keywords.join(", "));
   const [cpvText, setCpvText] = useState(preferences.cpvCodes.join(", "));
@@ -1198,6 +1237,8 @@ function SettingsView({ isDemo, sectors, preferences, onSave, loading }: { isDem
 
   return <div className="settings-page">
     <div className="section-intro"><div><p className="eyebrow">SETTINGS</p><h2>What should Tenderly watch for?</h2><p>Pick the kind of work you bid for. Tenderly turns that into the CPV codes and keywords behind the scenes — you never have to go code-hunting on eTenders.</p></div></div>
+
+    <AiUsagePanel usage={usage} />
 
     <section className="panel settings-list" data-testid="discovery-preferences">
       <div><span><strong>Sectors you bid in</strong><small>Tick what applies. Discover shows only opportunities matching these.</small></span></div>
