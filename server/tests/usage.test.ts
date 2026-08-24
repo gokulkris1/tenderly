@@ -92,12 +92,19 @@ test("TLY-69 AC4: every model call goes through the metered wrapper", () => {
     "the single SDK call must live inside callModel, so no future capability can skip the meter");
 });
 
-test("TLY-69 AC6: the deterministic fallback makes no model call, so nothing is metered", async () => {
+test("TLY-69 AC6: the deterministic fallback makes no model call, so nothing is metered", async (t) => {
+  const { analyseTender, aiConfigured } = await import("../src/ai.js");
+  // The fallback only runs when no key is configured. Rather than assert the
+  // developer's environment — and rather than spend a real API call proving a
+  // point about the path that avoids one — skip and say why.
+  if (aiConfigured()) {
+    t.skip("ANTHROPIC_API_KEY is set, so the deterministic fallback cannot be exercised here");
+    return;
+  }
+
   // A fresh account, so the assertion is about this call and nothing else.
   const fresh = await makeAccount("usage-fallback");
   assert.equal((await listUsage(fresh.id)).length, 0);
-  const { analyseTender, aiConfigured } = await import("../src/ai.js");
-  assert.equal(aiConfigured(), false, "this suite runs without an API key");
 
   const record = { id: fresh.tenderId, accountId: fresh.id, source: "seed", externalId: "x", title: "T", authority: "A",
     procedure: "Open", deadline: "", estimatedValue: "", description: "", sourceUrl: "https://www.etenders.gov.ie/x",
