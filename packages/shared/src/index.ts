@@ -209,6 +209,11 @@ export type Tender = {
   requiredCertificates?: RequiredCertificateStatus[];
   /** What the pack says about producing the response with AI. */
   aiUsePolicy?: AiUsePolicy;
+  /**
+   * Generation is disabled for this tender: no drafting, no refinement, no
+   * template auto-fill. Analysis, checklists, gap analysis and critique remain.
+   */
+  noAiMode?: boolean;
 };
 
 export type EvidenceItem = {

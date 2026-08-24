@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { bidAnswerDraftSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
-import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, DRAFTING_PROMPT } from "./prompts/index.js";
+import { answerCritiqueSchema, bidAnswerDraftSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
+import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, CRITIQUE_PROMPT, DRAFTING_PROMPT } from "./prompts/index.js";
 import { withStableIds } from "./analysis-schema.js";
 import { reconcileGates, rollUpEligibility } from "./eligibility.js";
 import { recordUsage } from "./db.js";
@@ -191,6 +191,43 @@ export async function draftBidAnswer(args: {
     },
   });
   return parseToolResult(response, bidAnswerDraftSchema, "drafting") as BidAnswerDraft;
+}
+
+/**
+ * Critiques an answer a person wrote. This is the one model capability that
+ * survives no-AI mode: judging text is assistance, writing it is generation.
+ * The forced schema has no prose field, so a replacement answer cannot come back
+ * even if the model tried to offer one.
+ */
+export async function critiqueBidAnswer(args: {
+  tender: TenderRecord;
+  question: TenderAnalysis["questions"][number];
+  answer: string;
+  evidence: EvidenceRecord[];
+}) {
+  if (!client) {
+    return { strengths: [], gaps: ["Configure ANTHROPIC_API_KEY to critique this answer"], missingEvidence: [] };
+  }
+  const payload = {
+    question: args.question,
+    awardCriteria: args.tender.analysis?.evaluationCriteria ?? [],
+    answer: args.answer,
+    approvedEvidence: args.evidence.filter((item) => item.verified).map((item) => ({ name: item.name, kind: item.kind })),
+  };
+  const { tool, choice } = forcedTool("record_answer_critique", "Record a critique of the answer the bidder wrote. Never supply replacement prose.", answerCritiqueSchema);
+  const response = await callModel({
+    kind: "critique", accountId: args.tender.accountId, tenderId: args.tender.id,
+    request: {
+      model,
+      max_tokens: DRAFT_MAX_TOKENS,
+      system: CRITIQUE_PROMPT,
+      messages: [{ role: "user", content: JSON.stringify(payload) }],
+      tools: [tool],
+      tool_choice: choice,
+      output_config: { effort: "high" },
+    },
+  });
+  return parseToolResult(response, answerCritiqueSchema, "critique");
 }
 
 export function aiConfigured() { return Boolean(client); }
