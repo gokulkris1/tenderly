@@ -255,6 +255,8 @@ export type Tender = {
   noticeSource?: "eTenders" | "TED";
   /** The tender's CPV, normalised where the code is one we hold. */
   cpv?: TenderCpv;
+  /** Why this notice scored what it did. Present on every scored notice. */
+  scoreBreakdown?: ScoreBreakdown;
   /** Historical awards by this buyer under this CPV. Absent until analysed. */
   awardIntelligence?: AwardIntelligence;
   /** Award criteria with weightings, empty when the pack states none. */
@@ -351,6 +353,25 @@ export type DiscoveryPreferences = {
   cpvCodes: string[];
   valueMin: number | null;
   valueMax: number | null;
+};
+
+/**
+ * One reason a notice scored what it scored, with the profile fact behind it.
+ * The contributions sum to the displayed total, so the number is checkable.
+ */
+export type ScoreContribution = {
+  kind: "cpv-exact" | "cpv-ancestor" | "sector" | "keyword" | "value-band" | "buyer-known";
+  label: string;
+  points: number;
+  matched: string;
+};
+
+/** The full explanation of a notice's score. */
+export type ScoreBreakdown = {
+  total: number;
+  contributions: ScoreContribution[];
+  /** Shown instead of an empty list, so a zero is never left unexplained. */
+  note?: string;
 };
 
 /** Why a notice is in the list — shown so a user can correct their profile. */

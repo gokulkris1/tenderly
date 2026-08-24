@@ -24,6 +24,7 @@ import type {
   ProvenanceClass,
   ProvenanceEntry,
   RequiredCertificateStatus,
+  ScoreBreakdown,
   SectorPreset,
   SubmissionItem,
   Tender,
@@ -1015,6 +1016,32 @@ function BidList({ tenders, selectedId, onSelect }: { tenders: Tender[]; selecte
   );
 }
 
+/**
+ * Why a notice scored what it scored.
+ *
+ * The total is the sum of what is listed, so a user can check the number rather
+ * than take it on trust — and can see which profile fact to change. A notice
+ * that matched nothing shows the reason rather than a bare zero.
+ */
+function ScoreBreakdownDetail({ breakdown }: { breakdown?: ScoreBreakdown }) {
+  if (!breakdown) return null;
+  return (
+    <details className="score-breakdown" data-testid="score-breakdown" onClick={(event) => event.stopPropagation()}>
+      <summary>Why {breakdown.total}?</summary>
+      {breakdown.contributions.length === 0
+        ? <p className="score-note">{breakdown.note ?? "No profile facts matched"}</p>
+        : (
+          <ul>
+            {breakdown.contributions.map((item) => (
+              <li key={`${item.kind}-${item.matched}`}><span>{item.label}</span><b>+{item.points}</b></li>
+            ))}
+            <li className="score-total"><span>Total</span><b>{breakdown.total}</b></li>
+          </ul>
+        )}
+    </details>
+  );
+}
+
 function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid, setShowImport, hasPreferences, onOpenSettings }: {
   tenders: Tender[]; query: string; setQuery: (value: string) => void; refreshDiscovery: () => void; loading: boolean; openBid: (id: string) => void; setShowImport: (value: boolean) => void; hasPreferences: boolean; onOpenSettings: () => void;
 }) {
@@ -1067,6 +1094,7 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
                   {tender.matchedBy!.map((reason) => <i key={`${reason.sector}-${reason.keyword}`} title={`matched on "${reason.keyword}"`}>{reason.label}</i>)}
                 </div>
               )}
+              <ScoreBreakdownDetail breakdown={tender.scoreBreakdown} />
             </div>
             <div className="tender-decision">
               <span className={`decision-pill decision-${decisionSlug(tender.decision)}`}>{tender.decision === "GO" ? "✓" : tender.decision === "PARTNER" ? "↔" : tender.decision === "NO_GO" ? "×" : "!"} {decisionLabel(tender.decision)}</span>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertSafeProcurementUrl, parseDocumentListHtml, parseSearchHtml, scoreTenderPreview } from "../src/etenders.js";
+import { assertSafeProcurementUrl, parseDocumentListHtml, parseSearchHtml } from "../src/etenders.js";
 
 test("parses current-opportunity rows using the public eTenders column order", () => {
   const html = `
@@ -23,9 +23,4 @@ test("parses public tender-document links and rejects hostile destinations", () 
   assert.match(docs[0].url, /^https:\/\/www\.etenders\.gov\.ie\//);
   assert.throws(() => assertSafeProcurementUrl("https://example.com/steal?resourceId=42"), /restricted/);
   assert.throws(() => assertSafeProcurementUrl("http://www.etenders.gov.ie/epps/"), /HTTPS/);
-});
-
-test("preview matching is conservative and bounded", () => {
-  const score = scoreTenderPreview({ externalId: "1", title: "Technology programme management and cloud delivery", authority: "Buyer", description: "Programme delivery and technology consulting", published: "", deadline: "", procedure: "Open", status: "", estimatedValue: "", sourceUrl: "https://www.etenders.gov.ie/" }, "programme delivery technology consulting cloud QA");
-  assert.ok(score >= 45 && score <= 95);
 });

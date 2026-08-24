@@ -473,3 +473,15 @@ button:disabled { cursor: wait; opacity: .62; }
 
 /* TLY-31 — a code we do not hold keeps its own wording, marked as such. */
 .cpv-unknown { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 5px; background: var(--amber-soft); color: var(--amber); font-size: 10px; }
+
+/* TLY-36 — the score is checkable: the parts add up to the total. */
+.score-breakdown { margin-top: 10px; }
+.score-breakdown summary { cursor: pointer; font-size: 11px; color: var(--muted); list-style: none; }
+.score-breakdown summary::-webkit-details-marker { display: none; }
+.score-breakdown summary::before { content: "▸ "; }
+.score-breakdown[open] summary::before { content: "▾ "; }
+.score-breakdown ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; }
+.score-breakdown li { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line-soft); font-size: 12px; }
+.score-breakdown li b { font-variant-numeric: tabular-nums; }
+.score-breakdown .score-total { font-weight: 600; border-top: 1px solid var(--line); }
+.score-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }

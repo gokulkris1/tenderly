@@ -1,4 +1,4 @@
-import type { AiUsePolicy as AiUsePolicyWire, TenderCpv as TenderCpvWire, Tender } from "@tenderly/shared";
+import type { AiUsePolicy as AiUsePolicyWire, ScoreBreakdown, TenderCpv as TenderCpvWire, Tender } from "@tenderly/shared";
 import { ANALYSIS_SCHEMA_VERSION, orphanedAnswers } from "./analysis-schema.js";
 import { normaliseCpv } from "./cpv.js";
 import { badgeFor } from "./provenance.js";
@@ -198,7 +198,9 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
   };
 }
 
-export function serializePublicTender(tender: PublicTender, matchScore: number): Tender {
+export function serializePublicTender(tender: PublicTender, score: number | ScoreBreakdown): Tender {
+  const breakdown = typeof score === "number" ? undefined : score;
+  const matchScore = typeof score === "number" ? score : score.total;
   return {
     id: `public-${tender.externalId}`,
     resourceId: tender.externalId,
@@ -217,5 +219,6 @@ export function serializePublicTender(tender: PublicTender, matchScore: number):
     framework: /framework/i.test(tender.title) ? "Framework mentioned — import to classify" : "Import to classify",
     gates: [{ label: "Full eligibility", state: "review", bidder: "Not checked", requirement: "Import tender pack", source: "eTenders public listing" }],
     questions: [],
+    scoreBreakdown: breakdown,
   };
 }

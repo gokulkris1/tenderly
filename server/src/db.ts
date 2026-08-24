@@ -847,6 +847,28 @@ export async function awardIntelligence(authority: string, cpv: string, years = 
 }
 
 /** How many of this authority's awards name the company itself. */
+/**
+ * Authorities this company has won work from before, lower-cased for matching.
+ *
+ * Used only as a scoring signal, so an empty result is a normal answer rather
+ * than a failure: most companies have no award history in the dataset.
+ */
+export async function knownBuyersFor(companyName: string): Promise<string[]> {
+  const name = companyName.trim();
+  if (!name) return [];
+  if (!pool) {
+    return [...new Set([...memory.awards.values()]
+      .filter((entry) => String((entry as Record<string, unknown>).suppliers ?? "").toLowerCase().includes(name.toLowerCase()))
+      .map((entry) => String((entry as Record<string, unknown>).authority ?? "").toLowerCase())
+      .filter(Boolean))];
+  }
+  const result = await pool.query(
+    "SELECT DISTINCT lower(authority) AS authority FROM award_history WHERE lower(suppliers) LIKE lower($1)",
+    ["%" + name + "%"],
+  );
+  return result.rows.map((row) => String(row.authority)).filter(Boolean);
+}
+
 export async function companyWonBefore(authority: string, companyName: string): Promise<number> {
   const name = companyName.trim();
   if (!name || !authority.trim()) return 0;
