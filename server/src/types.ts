@@ -336,6 +336,14 @@ export type EvidenceRecord = {
   content: string;
   tags: string[];
   verified: boolean;
+  /** The original file, when one was uploaded. Text-only rows have none. */
+  filename?: string;
+  contentType?: string;
+  sizeBytes?: number;
+  /** Who issued the document, as the buyer would ask it. */
+  issuingBody?: string;
+  issuedOn?: string;
+  expiresOn?: string;
 };
 
 /** What a company wants to see in Discover. Sector presets expand to the rest. */

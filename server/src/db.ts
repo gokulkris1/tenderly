@@ -769,17 +769,75 @@ export async function latestIngestionRuns(): Promise<IngestionRun[]> {
   return result.rows.map(toIngestionRun);
 }
 
-export async function addEvidence(accountId: string, input: Omit<EvidenceRecord, "id" | "accountId">) {
+const toEvidence = (row: Record<string, unknown>): EvidenceRecord => ({
+  id: String(row.id), accountId: String(row.account_id), kind: String(row.kind), name: String(row.name),
+  content: String(row.content ?? ""), tags: (row.tags ?? []) as string[], verified: Boolean(row.verified),
+  filename: (row.filename as string | null) ?? undefined,
+  contentType: (row.content_type as string | null) ?? undefined,
+  sizeBytes: row.size_bytes === null || row.size_bytes === undefined ? undefined : Number(row.size_bytes),
+  issuingBody: (row.issuing_body as string | null) ?? undefined,
+  issuedOn: (row.issued_on as string | null) ?? undefined,
+  expiresOn: (row.expires_on as string | null) ?? undefined,
+});
+
+/**
+ * Adds a vault item. `bytes` is the original file when one was uploaded; a
+ * text-only item is still a valid item and simply has none.
+ */
+export async function addEvidence(
+  accountId: string,
+  input: Omit<EvidenceRecord, "id" | "accountId">,
+  bytes?: Buffer,
+) {
   const record: EvidenceRecord = { ...input, id: randomUUID(), accountId };
-  if (!pool) { memory.evidence.set(record.id, record); return record; }
-  await pool.query("INSERT INTO evidence_library(id,account_id,kind,name,content,tags,verified) VALUES($1,$2,$3,$4,$5,$6,$7)", [record.id, accountId, record.kind, record.name, record.content, JSON.stringify(record.tags), record.verified]);
+  if (!pool) {
+    memory.evidence.set(record.id, record);
+    if (bytes) memoryEvidenceFiles.set(record.id, bytes);
+    return record;
+  }
+  await pool.query(
+    `INSERT INTO evidence_library(id,account_id,kind,name,content,tags,verified,bytes,content_type,filename,size_bytes,issuing_body,issued_on,expires_on)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+    [record.id, accountId, record.kind, record.name, record.content, JSON.stringify(record.tags), record.verified,
+     bytes ?? null, record.contentType ?? null, record.filename ?? null, record.sizeBytes ?? null,
+     record.issuingBody ?? null, record.issuedOn ?? null, record.expiresOn ?? null],
+  );
   return record;
+}
+
+/** In-memory mode keeps files beside the rows; Postgres keeps them in the row. */
+const memoryEvidenceFiles = new Map<string, Buffer>();
+
+/**
+ * The original file for one vault item, scoped to its account.
+ *
+ * Returns null both when the item does not exist and when it belongs to someone
+ * else: a cross-tenant request must not be able to tell the difference.
+ */
+export async function evidenceFile(accountId: string, evidenceId: string) {
+  if (!pool) {
+    const record = memory.evidence.get(evidenceId);
+    if (!record || record.accountId !== accountId) return null;
+    const bytes = memoryEvidenceFiles.get(evidenceId);
+    return bytes ? { record, bytes } : null;
+  }
+  const result = await pool.query("SELECT * FROM evidence_library WHERE id=$1 AND account_id=$2", [evidenceId, accountId]);
+  const row = result.rows[0];
+  if (!row?.bytes) return null;
+  return { record: toEvidence(row), bytes: row.bytes as Buffer };
 }
 
 export async function listEvidence(accountId: string) {
   if (!pool) return [...memory.evidence.values()].filter((item) => item.accountId === accountId);
-  const result = await pool.query("SELECT * FROM evidence_library WHERE account_id=$1 ORDER BY updated_at DESC", [accountId]);
-  return result.rows.map((row) => ({ id: row.id, accountId: row.account_id, kind: row.kind, name: row.name, content: row.content, tags: row.tags ?? [], verified: row.verified } as EvidenceRecord));
+  // The file bytes are deliberately not selected: a list of twenty certificates
+  // would otherwise pull tens of megabytes through for a screen that shows names.
+  const result = await pool.query(
+    `SELECT id, account_id, kind, name, content, tags, verified, content_type, filename, size_bytes,
+            issuing_body, issued_on, expires_on
+       FROM evidence_library WHERE account_id=$1 ORDER BY updated_at DESC`,
+    [accountId],
+  );
+  return result.rows.map(toEvidence);
 }
 
 export async function setEvidenceVerified(accountId: string, evidenceId: string, verified: boolean) {

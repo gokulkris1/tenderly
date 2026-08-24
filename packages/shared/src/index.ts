@@ -388,6 +388,14 @@ export type EvidenceItem = {
   tags: string[];
   /** Only verified evidence is ever sent to the model or cited in an answer. */
   verified: boolean;
+  /** Present when an original file was uploaded. Text-only items have none. */
+  filename?: string;
+  contentType?: string;
+  sizeBytes?: number;
+  /** What a buyer asks about a certificate. */
+  issuingBody?: string;
+  issuedOn?: string;
+  expiresOn?: string;
 };
 
 export type PersonItem = {
