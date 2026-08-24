@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { answerCritiqueSchema, bidAnswerDraftSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
-import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, CRITIQUE_PROMPT, DRAFTING_PROMPT } from "./prompts/index.js";
+import { answerCritiqueSchema, bidAnswerDraftSchema, decisionRationaleSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
+import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, CRITIQUE_PROMPT, DRAFTING_PROMPT, RATIONALE_PROMPT } from "./prompts/index.js";
 import { withStableIds } from "./analysis-schema.js";
 import { reconcileGates, rollUpEligibility } from "./eligibility.js";
 import { recordUsage } from "./db.js";
@@ -228,6 +228,42 @@ export async function critiqueBidAnswer(args: {
     },
   });
   return parseToolResult(response, answerCritiqueSchema, "critique");
+}
+
+/**
+ * Writes the prose for a recommendation the rules already made.
+ *
+ * Returns null rather than throwing when there is no key or the call fails: the
+ * band is deterministic and must still be shown, with the rationale marked
+ * unavailable. A missing explanation is a smaller loss than a missing verdict.
+ */
+export async function draftDecisionRationale(args: {
+  accountId: string;
+  tenderId: string;
+  decision: string;
+  reason: string;
+  facts: string[];
+}): Promise<string | null> {
+  if (!client) return null;
+  const { tool, choice } = forcedTool("record_decision_rationale", "Explain a bid recommendation using only the facts supplied.", decisionRationaleSchema);
+  try {
+    const response = await callModel({
+      kind: "critique", accountId: args.accountId, tenderId: args.tenderId,
+      request: {
+        model,
+        max_tokens: 2000,
+        system: RATIONALE_PROMPT,
+        messages: [{ role: "user", content: JSON.stringify({ decision: args.decision, reason: args.reason, facts: args.facts }) }],
+        tools: [tool],
+        tool_choice: choice,
+        output_config: { effort: "low" },
+      },
+    });
+    return parseToolResult(response, decisionRationaleSchema, "rationale").rationale;
+  } catch (error) {
+    console.error("decision rationale failed:", error instanceof Error ? error.message : error);
+    return null;
+  }
 }
 
 export function aiConfigured() { return Boolean(client); }

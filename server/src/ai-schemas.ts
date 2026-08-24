@@ -160,6 +160,11 @@ export const answerCritiqueSchema = z.object({
   missingEvidence: z.array(z.string()),
 });
 
+/** The rationale prose only: the band is decided in code, not here. */
+export const decisionRationaleSchema = z.object({
+  rationale: z.string(),
+});
+
 export const bidAnswerDraftSchema = z.object({
   status: z.enum(["DRAFTED", "NEEDS_INPUT"]),
   answer: z.string(),

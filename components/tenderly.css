@@ -501,3 +501,22 @@ button:disabled { cursor: wait; opacity: .62; }
 .lot-value { font-size: 11px; font-style: normal; font-weight: 600; }
 .lot-value.missing { color: var(--amber); font-weight: 500; }
 .lot-note { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+
+/* TLY-47 / TLY-49 — the recommendation, and the room left to act on it. */
+.recommendation-rationale { margin: 12px 0 0; font-size: 13px; line-height: 1.7; }
+.recommendation-note { margin: 12px 0 0; font-size: 12px; color: var(--muted); font-style: italic; }
+.recommendation-facts { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 2px; }
+.recommendation-facts li { padding: 6px 0; border-top: 1px solid var(--line-soft); font-size: 12px; color: var(--ink-2); }
+.pressure-panel .panel-heading { align-items: flex-start; }
+.pressure-band { flex: none; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.pressure-band.low { background: var(--green-soft); color: var(--green-2); }
+.pressure-band.medium { background: var(--amber-soft); color: var(--amber); }
+.pressure-band.high { background: var(--red-soft); color: var(--red); }
+.pressure-days { margin: 10px 0 0; font-size: 13px; }
+.pressure-days strong { font-size: 19px; }
+.pressure-items { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.pressure-missing { margin: 10px 0 0; font-size: 12px; color: var(--amber); }
+.pressure-competing { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.pressure-competing strong { font-size: 12px; }
+.pressure-competing ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.pressure-competing li { font-size: 11px; color: var(--muted); padding: 3px 0; }

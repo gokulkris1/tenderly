@@ -13,6 +13,7 @@ import type {
   AwardIntelligence as AwardIntelligenceData,
   BidQuestion,
   CompanyProfile,
+  DeadlinePressure,
   Decision,
   DiscoveryPreferences,
   EvidenceItem,
@@ -24,6 +25,7 @@ import type {
   PersonItem,
   ProvenanceClass,
   ProvenanceEntry,
+  Recommendation,
   RequiredCertificateStatus,
   ScoreBreakdown,
   SectorPreset,
@@ -248,6 +250,61 @@ const aiPolicyCopy: Record<AiUsePolicy["state"], { label: string; tone: string; 
  * a decision the pack never asked for. Selecting lots scopes the gates, the
  * questions and the pack blockers to what the user is actually bidding.
  */
+/**
+ * Why Tenderly recommends what it does.
+ *
+ * The band comes from rules over facts on this same screen, so it is always
+ * shown — even when the prose could not be written. The facts are listed
+ * beneath the rationale so every claim in it can be checked against something.
+ */
+function RecommendationPanel({ recommendation }: { recommendation?: Recommendation }) {
+  if (!recommendation) return null;
+  return (
+    <section className="panel recommendation-panel" data-testid="recommendation">
+      <div className="panel-heading">
+        <div><h2>Why this recommendation</h2><p>{recommendation.reason}</p></div>
+        <span className={`decision-pill decision-${decisionSlug(recommendation.decision)}`}>{decisionLabel(recommendation.decision)}</span>
+      </div>
+      {recommendation.rationale
+        ? <p className="recommendation-rationale">{recommendation.rationale}</p>
+        : <p className="recommendation-note" data-testid="rationale-unavailable">{recommendation.note ?? "Rationale unavailable"}</p>}
+      <ul className="recommendation-facts">
+        {recommendation.facts.map((fact) => <li key={fact}>{fact}</li>)}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * How much room is left: working days, other bids closing the same week, and
+ * open mandatory items. A deadline we could not read shows no band at all.
+ */
+function PressurePanel({ pressure }: { pressure?: DeadlinePressure }) {
+  if (!pressure) return null;
+  return (
+    <section className="panel pressure-panel" data-testid="pressure">
+      <div className="panel-heading">
+        <div><h3>Deadline pressure</h3><p>Time, competing deadlines and unresolved work on this bid.</p></div>
+        {pressure.band && <span className={`pressure-band ${pressure.band.toLowerCase()}`}>{pressure.band}</span>}
+      </div>
+      {pressure.note
+        ? <p className="pressure-missing">{pressure.note}</p>
+        : (
+          <>
+            <p className="pressure-days"><strong>{pressure.workingDaysRemaining}</strong> working days remaining</p>
+            <p className="pressure-items">{pressure.unresolvedItems} unresolved mandatory item{pressure.unresolvedItems === 1 ? "" : "s"}</p>
+            {pressure.competingBids.length > 0 && (
+              <div className="pressure-competing">
+                <strong>{pressure.competingBids.length} other bid{pressure.competingBids.length > 1 ? "s" : ""} close in the same week</strong>
+                <ul>{pressure.competingBids.map((bid) => <li key={bid.id}>{bid.title} · {bid.deadline}</li>)}</ul>
+              </div>
+            )}
+          </>
+        )}
+    </section>
+  );
+}
+
 function LotSelector({ lots, selected, onChange, busy }: {
   lots: Lot[]; selected: string[]; onChange: (lotIds: string[]) => void; busy: boolean;
 }) {
@@ -1210,6 +1267,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
               <span className={`hero-decision decision-${decisionSlug(tender.decision)}`}>{decisionLabel(tender.decision)}</span>
             </section>
 
+            <RecommendationPanel recommendation={tender.recommendation} />
             <LotSelector lots={tender.lots ?? []} selected={tender.selectedLots ?? []} onChange={setSelectedLots} busy={loading === "lots"} />
             <AiUsePolicyPanel policy={tender.aiUsePolicy} onAcknowledge={acknowledgeAiPolicy} busy={loading === "ai-policy"} />
             <AwardHistory data={tender.awardIntelligence} />
@@ -1234,6 +1292,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
 
           <aside className="bid-aside">
             <section className="panel snapshot-card"><p className="eyebrow">AT A GLANCE</p><h3>Bid snapshot</h3><dl>{tender.cpv && <div><dt>CPV</dt><dd title={tender.cpv.recognised ? tender.cpv.ancestors?.map((a) => `${a.code} ${a.description}`).join(" · ") : undefined}>{tender.cpv.recognised ? `${tender.cpv.code} — ${tender.cpv.description}` : <>{tender.cpv.raw} <small className="cpv-unknown">Unrecognised CPV</small></>}</dd></div>}<div><dt>Procedure</dt><dd>{tender.procedure}</dd></div><div><dt>Competition</dt><dd>{tender.framework}</dd></div><div><dt>Access</dt><dd>{tender.access}</dd></div><div><dt>Est. value</dt><dd>{tender.value}</dd></div><div><dt>Deadline</dt><dd className="deadline">{tender.deadline}</dd></div></dl></section>
+            <PressurePanel pressure={tender.pressure} />
             <section className="panel attention-card"><span>!</span><div><strong>{reviewed ? `${reviewed} item${reviewed > 1 ? "s" : ""} need your input` : "No eligibility blockers"}</strong><p>{reviewed ? "Resolve review gates before changing this bid to final-ready." : "You can move into response drafting."}</p></div></section>
             {!!tender.roles?.length && <section className="panel role-match-card"><div className="role-match-head"><strong>Required people / CVs</strong><span>{tender.roles.length} role{tender.roles.length > 1 ? "s" : ""}</span></div>{tender.roles.slice(0, 4).map((role) => <div className="role-match-row" key={`${role.role}-${role.quantity}`}><div><strong>{role.quantity > 1 ? `${role.quantity}× ` : ""}{role.role}</strong><small>{role.bidderMatch || "No evidenced match"}</small></div><GatePill state={role.status === "PASS" ? "pass" : role.status === "FAIL" ? "fail" : "review"} /><p>{role.action || role.qualifications || role.experience}</p></div>)}</section>}
             <button className="continue-btn" onClick={() => setStage("Synopsis")}>Preview synopsis <span>→</span></button>
