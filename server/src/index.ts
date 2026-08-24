@@ -27,6 +27,7 @@ import {
   getUserById,
   initializeDatabase,
   listAnswers,
+  listAudit,
   listDocuments,
   listEvidence,
   listNotifications,
@@ -47,6 +48,7 @@ import {
   updateTenderMetadata,
   upsertTender,
 } from "./db.js";
+import { AUDIT_ACTIONS, audit } from "./audit.js";
 import { runDiscoveryJob } from "./jobs.js";
 import { createSubmissionPack, createSynopsisDeck, packFilename, submissionBlockers } from "./pack.js";
 import { attestationValid, contentVersion, provenanceSummary, type Attestation } from "./attestation.js";
@@ -320,6 +322,11 @@ app.post("/api/tenders/:id/documents", upload.single("file"), async (req: Authen
     const extracted = await extractDocumentText(req.file.originalname, req.file.buffer);
     const text = extracted.map((entry) => `[${entry.filename}]\n${entry.text}`).join("\n\n");
     const saved = await saveDocument({ tenderId: tender.id, filename: req.file.originalname, mimeType: req.file.mimetype, role, bytes: req.file.buffer, extractedText: text, extractionStatus: extracted.some((entry) => entry.status === "FAILED") ? "PARTIAL" : "EXTRACTED" });
+    await audit(req, {
+      action: AUDIT_ACTIONS.documentUploaded, subjectType: "document", subjectId: saved.id,
+      // The name and the size, never the contents or the extracted text.
+      subjectLabel: saved.filename, metadata: { role, bytes: req.file.size },
+    });
     res.status(201).json({ document: { ...saved, bytes: undefined }, extraction: extracted.map(({ text, ...entry }) => ({ ...entry, characters: text.length })) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
@@ -366,6 +373,10 @@ app.put("/api/tenders/:id/answers/:questionId", async (req: AuthenticatedRequest
     if (!tender.analysis.questions.some((question) => question.id === questionId)) return res.status(404).json({ error: "Scored question not found" });
     const input = z.object({ response: z.string().max(120_000), status: z.enum(["draft", "ready", "needs-input"]).default("draft") }).parse(req.body);
     const answer = await saveAnswer(tender.id, questionId, input.response, input.status);
+    if (input.status === "ready") {
+      const title = tender.analysis.questions.find((question) => question.id === questionId)?.title ?? questionId;
+      await audit(req, { action: AUDIT_ACTIONS.answerMarkedReady, subjectType: "answer", subjectId: answer.id, subjectLabel: title });
+    }
     // Editing text a model produced does not erase that a model produced it.
     const history = await listProvenance(answer.id);
     await recordProvenance({
@@ -452,6 +463,7 @@ app.post("/api/tenders/:id/attestation", async (req: AuthenticatedRequest, res) 
 
     const attestation: Attestation = { actor: actorEmail(req), at: new Date().toISOString(), contentVersion: contentVersion(answers) };
     await updateTenderMetadata(account, tender.id, { attestation });
+    await audit(req, { action: AUDIT_ACTIONS.attestationRecorded, subjectType: "tender", subjectId: tender.id, subjectLabel: tender.title });
     res.json({ attestation });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
@@ -488,6 +500,10 @@ app.put("/api/tenders/:id/no-ai-mode", async (req: AuthenticatedRequest, res) =>
       ? answers.filter((answer) => badgeFor(byAnswer.get(answer.id) ?? [])?.class !== "human" && (byAnswer.get(answer.id) ?? []).length > 0)
         .map((answer) => titleFor(answer.questionId))
       : [];
+    await audit(req, {
+      action: enabled ? AUDIT_ACTIONS.noAiModeEnabled : AUDIT_ACTIONS.noAiModeDisabled,
+      subjectType: "tender", subjectId: tender.id, subjectLabel: tender.title,
+    });
     res.json({ noAiMode: enabled, aiWrittenAnswers: generated });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
@@ -525,7 +541,27 @@ app.post("/api/tenders/:id/ai-policy/acknowledge", async (req: AuthenticatedRequ
     const { action } = z.object({ action: z.enum(["confirmed", "dismissed"]) }).parse(req.body);
     const acknowledgement = { action, actor: actorEmail(req), at: new Date().toISOString() };
     await updateTenderMetadata(account, tender.id, { aiPolicyAcknowledgement: acknowledgement });
+    await audit(req, {
+      action: AUDIT_ACTIONS.aiPolicyAcknowledged, subjectType: "tender", subjectId: tender.id,
+      subjectLabel: tender.title, metadata: { decision: action },
+    });
     res.json({ acknowledgement });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * This account's audit entries, newest first. Filterable by action and by how
+ * many days back to look, which is what a diligence question actually asks.
+ */
+app.get("/api/audit", async (req: AuthenticatedRequest, res) => {
+  try {
+    const query = z.object({
+      action: z.string().max(64).optional(),
+      days: z.coerce.number().int().min(1).max(365).optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+    }).parse(req.query);
+    const since = query.days ? new Date(Date.now() - query.days * 86_400_000) : undefined;
+    res.json({ entries: await listAudit(accountId(req), { action: query.action, since, limit: query.limit }) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
@@ -577,6 +613,11 @@ app.get("/api/tenders/:id/pack", async (req: AuthenticatedRequest, res) => {
     const [answers, documents, company, people, evidence] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id), getCompany(account), listPeople(account), listEvidence(account)]);
     const result = await createSubmissionPack({ tender, analysis: tender.analysis, answers, documents, company, people, evidence, provenance: await tenderProvenance(tender.id), draft });
     if (!result.buffer) return res.status(409).json({ error: "Final submission pack is blocked", blockers: result.blockers });
+    await audit(req, {
+      action: draft ? AUDIT_ACTIONS.packDraftDownloaded : AUDIT_ACTIONS.packFinalDownloaded,
+      subjectType: "tender", subjectId: tender.id, subjectLabel: tender.title,
+      metadata: { bytes: result.buffer.length },
+    });
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${packFilename(tender, draft)}"`);
     res.send(result.buffer);
@@ -616,6 +657,10 @@ app.put("/api/evidence/:id/verification", async (req: AuthenticatedRequest, res)
     const { verified } = z.object({ verified: z.boolean() }).parse(req.body);
     const item = await setEvidenceVerified(accountId(req), routeParam(req.params.id), verified);
     if (!item) return res.status(404).json({ error: "Evidence item not found" });
+    await audit(req, {
+      action: verified ? AUDIT_ACTIONS.evidenceVerified : AUDIT_ACTIONS.evidenceUnverified,
+      subjectType: "evidence", subjectId: item.id, subjectLabel: item.name,
+    });
     res.json({ item });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });

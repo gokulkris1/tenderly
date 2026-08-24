@@ -283,6 +283,22 @@ export type NotificationItem = {
   createdAt?: string;
 };
 
+/**
+ * One recorded action that changes what eventually leaves the company.
+ * Entries never carry document contents or secrets.
+ */
+export type AuditEntry = {
+  id: string;
+  actor: string;
+  /** Dotted action name: "evidence.verified", "pack.final.downloaded". */
+  action: string;
+  subjectType: string;
+  subjectId: string;
+  subjectLabel: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
 /** An account's model usage for one calendar month. */
 export type UsageTotals = {
   month: string;

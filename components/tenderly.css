@@ -460,3 +460,13 @@ button:disabled { cursor: wait; opacity: .62; }
 .attestation-confirm { display: grid; gap: 10px; margin-top: 12px; }
 .attestation-confirm label { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.6; }
 .attestation-confirm input { margin-top: 2px; }
+
+/* TLY-79 — who changed what, and when. */
+.audit-filters { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; }
+.audit-filters label { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+.audit-filters select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 13px; }
+.audit-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 2px; max-height: 420px; overflow-y: auto; }
+.audit-list li { display: grid; gap: 2px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.audit-list strong { font-size: 13px; }
+.audit-list span { font-size: 12px; color: var(--ink-2); }
+.audit-list small { font-size: 11px; color: var(--muted); }

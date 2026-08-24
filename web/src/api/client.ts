@@ -10,6 +10,7 @@ import type {
   AiPolicyAcknowledgement,
   Attestation,
   AttestationState,
+  AuditEntry,
   CompanyProfile,
   DiscoveryPreferences,
   EvidenceItem,
@@ -180,6 +181,13 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         body: JSON.stringify({ action }),
       }),
     usage: () => request<{ usage: UsageTotals }>("/api/usage", "Load AI usage"),
+    audit: (filter: { action?: string; days?: number } = {}) => {
+      const query = new URLSearchParams();
+      if (filter.action) query.set("action", filter.action);
+      if (filter.days) query.set("days", String(filter.days));
+      const suffix = query.toString();
+      return request<{ entries: AuditEntry[] }>(`/api/audit${suffix ? `?${suffix}` : ""}`, "Load audit log");
+    },
     setChecklistStatus: (tenderId: string, itemId: string, status: string) =>
       request<unknown>(`/api/tenders/${tenderId}/checklist/${itemId}`, "Update checklist", {
         method: "POST",

@@ -93,15 +93,17 @@ test("TLY-69 AC4: every model call goes through the metered wrapper", () => {
 });
 
 test("TLY-69 AC6: the deterministic fallback makes no model call, so nothing is metered", async () => {
-  const before = (await listUsage(a.id)).length;
+  // A fresh account, so the assertion is about this call and nothing else.
+  const fresh = await makeAccount("usage-fallback");
+  assert.equal((await listUsage(fresh.id)).length, 0);
   const { analyseTender, aiConfigured } = await import("../src/ai.js");
   assert.equal(aiConfigured(), false, "this suite runs without an API key");
 
-  const record = { id: a.tenderId, accountId: a.id, source: "seed", externalId: "x", title: "T", authority: "A",
+  const record = { id: fresh.tenderId, accountId: fresh.id, source: "seed", externalId: "x", title: "T", authority: "A",
     procedure: "Open", deadline: "", estimatedValue: "", description: "", sourceUrl: "https://www.etenders.gov.ie/x",
     published: "", status: "IMPORTED", metadata: {}, analysis: null };
   const company = { name: "Acme", registration: "", turnover: "", employees: "", services: "", cpv: "", certifications: "", insurance: "" };
   const analysis = await analyseTender(record, company, "");
   assert.equal(analysis.eligibility, "REVIEW", "the fallback still refuses to assert eligibility");
-  assert.equal((await listUsage(a.id)).length, before, "no model ran, so no usage may be recorded");
+  assert.equal((await listUsage(fresh.id)).length, 0, "no model ran, so no usage may be recorded");
 });
