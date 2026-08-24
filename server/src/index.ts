@@ -84,6 +84,7 @@ import {
 import { AUDIT_ACTIONS, audit } from "./audit.js";
 import { analysisHourlyLimiter, analysisLimiter, draftHourlyLimiter, draftLimiter, importLimiter, packLimiter } from "./limits.js";
 import { runDiscoveryJob } from "./jobs.js";
+import { log, requestId, requestLogging } from "./logging.js";
 import { createSubmissionPack, createSynopsisDeck, packFilename, submissionBlockers } from "./pack.js";
 import { attestationValid, contentVersion, provenanceSummary, type Attestation } from "./attestation.js";
 import { inScope, selectedLots, serializePublicTender, serializeTender } from "./serializers.js";
@@ -104,6 +105,8 @@ app.use(cors({
   exposedHeaders: ["Content-Disposition"],
 }));
 app.use(express.json({ limit: "2mb" }));
+// One JSON line per request, with the id echoed back so a user can quote it.
+app.use(requestLogging);
 
 const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 30, standardHeaders: "draft-8", legacyHeaders: false });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
@@ -128,6 +131,7 @@ function safeError(error: unknown) {
   if (["TENDER_NOT_FOUND", "AUTH_REQUIRED"].includes(message)) return { status: message === "TENDER_NOT_FOUND" ? 404 : 401, message: message === "TENDER_NOT_FOUND" ? "Tender not found" : "Sign in required" };
   return { status: 500, message: process.env.NODE_ENV === "production" ? "The request could not be completed" : message };
 }
+
 
 function routeParam(value: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -1232,8 +1236,16 @@ app.get("/api/notifications", async (req: AuthenticatedRequest, res) => {
   try { res.json({ items: await listNotifications(accountId(req)) }); } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
-app.use((error: unknown, _req: Request, res: Response, _next: unknown) => {
+app.use((error: unknown, req: Request, res: Response, _next: unknown) => {
   const mapped = safeError(error);
+  // Logged as an error line before it is answered, so an unhandled failure is
+  // traceable even though the caller is told almost nothing.
+  log("error", {
+    requestId: requestId(req as AuthenticatedRequest),
+    route: `${req.method} ${req.path}`,
+    status: mapped.status,
+    message: error instanceof Error ? error.message : "Unexpected error",
+  });
   res.status(mapped.status).json({ error: mapped.message });
 });
 
