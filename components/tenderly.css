@@ -520,3 +520,17 @@ button:disabled { cursor: wait; opacity: .62; }
 .pressure-competing strong { font-size: 12px; }
 .pressure-competing ul { list-style: none; margin: 6px 0 0; padding: 0; }
 .pressure-competing li { font-size: 11px; color: var(--muted); padding: 3px 0; }
+
+/* TLY-50 — Tenderly recommends; the company decides. */
+.decision-current { margin: 12px 0 0; padding: 10px 14px; background: var(--paper); border-radius: 8px; font-size: 13px; }
+.decision-current small { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.decision-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.decision-choice { display: flex; gap: 14px; }
+.decision-choice label { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.decision-form input[type="text"], .decision-form input:not([type]) { flex: 1; min-width: 220px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.decision-warning { margin: 10px 0 0; font-size: 12px; color: var(--red); }
+.decision-history { margin-top: 14px; }
+.decision-history summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.decision-history ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 2px; }
+.decision-history li { display: grid; gap: 2px; padding: 8px 0; border-top: 1px solid var(--line-soft); font-size: 12px; }
+.decision-history small { font-size: 11px; color: var(--muted); }

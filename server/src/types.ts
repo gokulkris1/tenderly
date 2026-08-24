@@ -218,6 +218,24 @@ export type ProvenanceEntry = {
 };
 
 /**
+ * What the company chose to do about a tender.
+ *
+ * The recommendation is advice; this is the decision. Recorded with who made it
+ * and what the recommendation said at the time, so a later re-analysis cannot
+ * rewrite what they were actually looking at.
+ */
+export type BidDecisionRecord = {
+  id: string;
+  tenderId: string;
+  decision: "BID" | "NO_BID";
+  /** Mandatory when the choice goes against the recommendation. */
+  reason: string;
+  decidedBy: string;
+  recommendationAtTheTime: string;
+  createdAt: string;
+};
+
+/**
  * One recorded action that changes what eventually leaves the company.
  *
  * Entries never contain document contents or secrets — only what was acted on,

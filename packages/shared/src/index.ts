@@ -231,6 +231,17 @@ export type Recommendation = {
   note?: string;
 };
 
+/** The company's own decision about a tender, and why. */
+export type BidDecisionRecord = {
+  id: string;
+  decision: "BID" | "NO_BID";
+  reason: string;
+  decidedBy: string;
+  /** The recommendation as it stood when the decision was made. */
+  recommendationAtTheTime: string;
+  createdAt: string;
+};
+
 /** How much room the bidder has: time, competing deadlines and open work. */
 export type DeadlinePressure = {
   /** Absent when the deadline could not be read — no band is claimed either. */
@@ -301,6 +312,8 @@ export type Tender = {
   pressure?: DeadlinePressure;
   /** The bid recommendation, decided in code, explained in prose. */
   recommendation?: Recommendation;
+  /** The company's own decisions, newest first. Empty until one is recorded. */
+  bidDecisions?: BidDecisionRecord[];
   /** Lot ids the user is bidding. Empty means the whole tender is in scope. */
   selectedLots?: string[];
   /** The tender's CPV, normalised where the code is one we hold. */
