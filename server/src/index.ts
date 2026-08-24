@@ -7,7 +7,7 @@ import multer from "multer";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { accountId, actorEmail, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
-import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer } from "./ai.js";
+import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer, draftDecisionRationale } from "./ai.js";
 import { badgeFor, classForHumanEdit } from "./provenance.js";
 import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
@@ -15,6 +15,8 @@ import { searchTed } from "./sources/ted.js";
 import { combineSourceText, extractDocumentText } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./etenders.js";
 import { mergeNotices } from "./dedupe.js";
+import { deadlinePressure } from "./pressure.js";
+import { decide, unsupportedFigures } from "./decision.js";
 import { parseContractValue, scoreNotice } from "./scoring.js";
 import {
   addEvidence,
@@ -58,7 +60,7 @@ import { analysisHourlyLimiter, analysisLimiter, draftHourlyLimiter, draftLimite
 import { runDiscoveryJob } from "./jobs.js";
 import { createSubmissionPack, createSynopsisDeck, packFilename, submissionBlockers } from "./pack.js";
 import { attestationValid, contentVersion, provenanceSummary, type Attestation } from "./attestation.js";
-import { serializePublicTender, serializeTender } from "./serializers.js";
+import { inScope, selectedLots, serializePublicTender, serializeTender } from "./serializers.js";
 import type { CompanyProfile, TenderRecord } from "./types.js";
 
 const app = express();
@@ -125,6 +127,50 @@ async function tenderWithAnswers(account: string, tender: TenderRecord) {
     }
   } catch {
     // leave it absent
+  }
+
+  // Deadline pressure needs the account's other live bids. Deterministic and
+  // cheap, but it must not break the page either.
+  try {
+    const documents = await listDocuments(tender.id);
+    const unresolved = tender.analysis
+      ? submissionBlockers(tender, tender.analysis, answers, documents, evidence).length
+      : 0;
+    const others = (await listTenders(account))
+      .filter((item) => item.id !== tender.id && item.status !== "SUBMITTED")
+      .map((item) => ({ id: item.id, title: item.title, deadline: item.analysis?.deadline || item.deadline }));
+    serialized.pressure = deadlinePressure({ deadline: serialized.deadline, unresolvedItems: unresolved, otherBids: others });
+  } catch {
+    // leave it absent
+  }
+
+  // The recommendation is decided in code from facts already on this screen, so
+  // it is always available. Only its prose depends on the model.
+  if (tender.analysis) {
+    const scoped = tender.analysis.fatalGates.filter((gate) => inScope(gate.lotId, selectedLots(tender)));
+    const result = decide({
+      gates: scoped,
+      fitScore: tender.analysis.fitScore,
+      pressure: serialized.pressure,
+      partnerCloseable: tender.analysis.partnerNeeded || tender.analysis.partnerGaps.length > 0,
+      awardCount: serialized.awardIntelligence?.awards,
+    });
+    const rationale = await draftDecisionRationale({
+      accountId: account, tenderId: tender.id,
+      decision: result.decision, reason: result.reason, facts: result.facts,
+    });
+    // A rationale that cites a figure it was not given is discarded, not shown.
+    const invented = rationale ? unsupportedFigures(rationale, result.facts) : [];
+    if (rationale && invented.length) {
+      console.error(`decision rationale cited unsupported figures (${invented.join(", ")}); discarded`);
+    }
+    const usable = rationale && invented.length === 0 ? rationale : undefined;
+    serialized.decision = result.decision;
+    serialized.recommendation = {
+      decision: result.decision, reason: result.reason, facts: result.facts,
+      rationale: usable,
+      note: usable ? undefined : "Rationale unavailable",
+    };
   }
   return serialized;
 }

@@ -215,6 +215,33 @@ export type TenderCpv = {
   recognised: boolean;
 };
 
+/**
+ * The bid recommendation and why. The band comes from deterministic rules; the
+ * rationale is prose over the same facts and may contain nothing else.
+ */
+export type Recommendation = {
+  decision: Decision;
+  /** Why the rules produced this band, in one line. */
+  reason: string;
+  /** Every fact the rationale is allowed to cite. */
+  facts: string[];
+  /** Absent when no key is configured or the call failed. */
+  rationale?: string;
+  /** Shown in place of the rationale when it could not be written. */
+  note?: string;
+};
+
+/** How much room the bidder has: time, competing deadlines and open work. */
+export type DeadlinePressure = {
+  /** Absent when the deadline could not be read — no band is claimed either. */
+  band?: "Low" | "Medium" | "High";
+  workingDaysRemaining: number | null;
+  unresolvedItems: number;
+  competingBids: { id: string; title: string; deadline: string }[];
+  /** "[INPUT NEEDED: submission deadline]" when there is no date to reason about. */
+  note?: string;
+};
+
 /** One lot of a divided tender, as shown on the Qualify stage. */
 export type Lot = {
   id: string;
@@ -270,6 +297,10 @@ export type Tender = {
   noticeSource?: "eTenders" | "TED";
   /** Lots the pack divides this tender into. Empty when it is undivided. */
   lots?: Lot[];
+  /** Working days left, other bids closing in the same week, and open items. */
+  pressure?: DeadlinePressure;
+  /** The bid recommendation, decided in code, explained in prose. */
+  recommendation?: Recommendation;
   /** Lot ids the user is bidding. Empty means the whole tender is in scope. */
   selectedLots?: string[];
   /** The tender's CPV, normalised where the code is one we hold. */
