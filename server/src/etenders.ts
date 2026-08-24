@@ -233,14 +233,3 @@ export async function fetchPublicTenderDocuments(resourceId: string) {
   return results;
 }
 
-export function scoreTenderPreview(tender: PublicTender, companyText: string) {
-  const stop = new Set(["and", "the", "for", "with", "from", "that", "this", "services", "service", "delivery", "company", "limited"]);
-  const tokens = (value: string) => new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length >= 4 && !stop.has(word)));
-  const bidder = tokens(companyText);
-  if (!bidder.size) return 0;
-  const opportunity = tokens(`${tender.title} ${tender.description}`);
-  let matches = 0;
-  for (const token of opportunity) if (bidder.has(token)) matches += 1;
-  const raw = Math.round((matches / Math.max(4, Math.min(opportunity.size, 18))) * 100);
-  return Math.max(0, Math.min(95, raw + (matches >= 2 ? 25 : matches ? 12 : 0)));
-}

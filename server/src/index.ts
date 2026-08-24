@@ -13,7 +13,8 @@ import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
 import { combineSourceText, extractDocumentText } from "./documents.js";
-import { discoverETenders, fetchPublicTenderDocuments, importETender, scoreTenderPreview } from "./etenders.js";
+import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./etenders.js";
+import { parseContractValue, scoreNotice } from "./scoring.js";
 import {
   addEvidence,
   addPerson,
@@ -26,6 +27,7 @@ import {
   getTender,
   getUserById,
   initializeDatabase,
+  knownBuyersFor,
   listAnswers,
   listAudit,
   listDocuments,
@@ -227,7 +229,10 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
     for (const item of crawledItems) sourceOf.set(item.externalId, "eTenders");
     for (const item of tedResult.items) if (!sourceOf.has(item.externalId)) sourceOf.set(item.externalId, "TED");
     const items = [...crawledItems, ...tedResult.items.filter((item) => sourceOf.get(item.externalId) === "TED")];
-    const profileText = `${company.services} ${company.cpv} ${company.certifications}`;
+    // Buyers this company has won from before are a real signal, and the query
+    // is cheap. It must never break discovery, so a failure just means no
+    // buyer-history contribution rather than no results.
+    const knownBuyers = await knownBuyersFor(company.name).catch(() => [] as string[]);
 
     // The eTenders listing carries no CPV, so the list is filtered on sector
     // keywords against title and description. CPV codes on the profile are
@@ -241,9 +246,11 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
 
     const withinBand = filtered.filter(({ item }) => {
       if (preferences.valueMin === null && preferences.valueMax === null) return true;
-      const digits = (item.estimatedValue || "").replace(/[^0-9]/g, "");
-      if (!digits) return true; // an unstated value is not a reason to hide an opportunity
-      const value = Number(digits);
+      // Parsed rather than digit-stripped: "250,000.00" with its punctuation
+      // removed reads as 25,000,000, which hid every real contract above the
+      // user's ceiling.
+      const value = parseContractValue(item.estimatedValue);
+      if (value === null) return true; // an unstated value is not a reason to hide an opportunity
       if (preferences.valueMin !== null && value < preferences.valueMin) return false;
       if (preferences.valueMax !== null && value > preferences.valueMax) return false;
       return true;
@@ -251,7 +258,7 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
 
     const serialised = withinBand
       .map(({ item, reasons }) => ({
-        ...serializePublicTender(item, scoreTenderPreview(item, profileText)),
+        ...serializePublicTender(item, scoreNotice({ tender: item, preferences, company, knownBuyers })),
         matchedBy: reasons,
         noticeSource: sourceOf.get(item.externalId) ?? "eTenders",
       }))
