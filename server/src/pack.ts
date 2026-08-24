@@ -4,6 +4,7 @@ import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } fro
 import { certificateStatus, inScope, selectedLots } from "./serializers.js";
 import { rollUpEligibility } from "./eligibility.js";
 import { attestationValid, provenanceSummaryFile, type Attestation } from "./attestation.js";
+import { buildRunbook, runbookText } from "./runbook.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, ProvenanceEntry, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
 
 const INK = "17332B";
@@ -197,6 +198,11 @@ export async function createSubmissionPack(args: { tender: TenderRecord; analysi
   zip.file(`${prefix}01_Tender_Response.docx`, await makeResponseDoc(args.tender, args.analysis, args.answers, args.company));
   for (const [index, person] of args.people.entries()) zip.file(`${prefix}${String(index + 2).padStart(2, "0")}_CV_${safeFilename(person.name)}.docx`, await makeCv(person));
   for (const document of args.documents.filter((item) => item.role === "submission" && item.bytes)) zip.file(safeFilename(document.filename), document.bytes!);
+
+  // The last mile travels with every pack, draft or final: whoever opens the
+  // ZIP is the person who has to do the uploading, and the draft is what a team
+  // rehearses with before the final one exists.
+  zip.file(`${prefix}Submission_Runbook.txt`, runbookText(args.tender, buildRunbook(args.tender, args.analysis)));
   if (args.draft) {
     zip.file("_Tenderly_Internal/Evidence_Register.docx", await makeEvidenceRegister(args.tender, args.evidence, args.answers));
     zip.file("_Tenderly_Internal/Bid_Synopsis.pptx", await createSynopsisDeck(args.tender, args.analysis, args.company));

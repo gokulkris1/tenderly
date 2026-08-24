@@ -721,3 +721,17 @@ button:disabled { cursor: wait; opacity: .62; }
 .task-due { padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 11px; }
 .tasks-done { margin-top: 12px; }
 .tasks-done summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+
+/* TLY-82 — the last mile, written down. Tenderly does not submit. */
+.runbook-facts { display: flex; gap: 32px; margin: 12px 0 0; }
+.runbook-facts div { display: grid; gap: 2px; }
+.runbook-facts dt { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.runbook-facts dd { margin: 0; font-size: 13px; font-weight: 600; }
+.runbook-generic { margin: 12px 0 0; font-size: 12px; color: var(--amber); }
+.runbook-steps { margin: 14px 0 0; padding-left: 0; list-style: none; counter-reset: step; display: grid; gap: 2px; }
+.runbook-steps li { padding: 10px 0; border-top: 1px solid var(--line-soft); counter-increment: step; }
+.runbook-steps li.done span { color: var(--muted); text-decoration: line-through; }
+.runbook-steps label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.runbook-steps span { display: grid; gap: 4px; font-size: 13px; line-height: 1.6; }
+.runbook-steps span::before { content: counter(step) "."; font-weight: 600; color: var(--muted); }
+.runbook-steps small { font-size: 11px; color: var(--muted); font-style: italic; }

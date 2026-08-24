@@ -13,6 +13,7 @@ import { badgeFor, classForHumanEdit } from "./provenance.js";
 import { diffVersions } from "./versions.js";
 import { ESTIMATE_NOTICE, prioritisedGaps, scoreEvaluation } from "./evaluation.js";
 import { buildPortfolio } from "./portfolio.js";
+import { buildRunbook } from "./runbook.js";
 import { NO_ANSWER, chunkDocument, rankChunks } from "./retrieval.js";
 import { NO_CHANGES, describeChange, diffAnalyses, questionsNeedingReview } from "./analysis-diff.js";
 import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
@@ -1474,6 +1475,49 @@ app.get("/api/my-tasks", async (req: AuthenticatedRequest, res) => {
       ...task, overdue: Boolean(task.dueOn) && task.dueOn < today,
     }));
     res.json({ tasks });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * The steps to take on the buyer's portal, in order.
+ *
+ * Ticks are stored on the tender, so the runbook a team half-worked-through
+ * yesterday is the one they come back to.
+ */
+app.get("/api/tenders/:id/runbook", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const runbook = buildRunbook(tender, tender.analysis);
+    const ticked = (tender.metadata.runbookTicks ?? []) as string[];
+    res.json({
+      runbook: {
+        ...runbook,
+        steps: runbook.steps.map((step) => ({ ...step, done: ticked.includes(step.id) })),
+      },
+      completed: runbook.steps.filter((step) => ticked.includes(step.id)).length,
+      total: runbook.steps.length,
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.post("/api/tenders/:id/runbook/:stepId", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const { done } = z.object({ done: z.boolean() }).parse(req.body);
+    const stepId = routeParam(req.params.stepId);
+
+    const runbook = buildRunbook(tender, tender.analysis);
+    if (!runbook.steps.some((step) => step.id === stepId)) {
+      return res.status(404).json({ error: "That step is not in this runbook" });
+    }
+    const ticked = new Set((tender.metadata.runbookTicks ?? []) as string[]);
+    if (done) ticked.add(stepId); else ticked.delete(stepId);
+    await updateTenderMetadata(account, tender.id, { runbookTicks: [...ticked] });
+    res.json({ stepId, done, completed: ticked.size, total: runbook.steps.length });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

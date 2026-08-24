@@ -29,6 +29,7 @@ import type {
   PersonFact,
   PersonItem,
   Portfolio,
+  Runbook,
   SavedSearch,
   SavedSearchFilter,
   SectorPreset,
@@ -125,6 +126,12 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       }),
 
     // --- workspace --------------------------------------------------------
+    runbook: (tenderId: string) =>
+      request<{ runbook: Runbook; completed: number; total: number }>(`/api/tenders/${tenderId}/runbook`, "Load runbook"),
+    tickRunbookStep: (tenderId: string, stepId: string, done: boolean) =>
+      request<{ completed: number; total: number }>(`/api/tenders/${tenderId}/runbook/${encodeURIComponent(stepId)}`, "Update runbook", {
+        method: "POST", body: JSON.stringify({ done }),
+      }),
     tasks: (tenderId: string) => request<{ tasks: BidTask[] }>(`/api/tenders/${tenderId}/tasks`, "Load tasks"),
     addTask: (tenderId: string, title: string, owner: string, dueOn: string) =>
       request<{ task: BidTask }>(`/api/tenders/${tenderId}/tasks`, "Add task", {
