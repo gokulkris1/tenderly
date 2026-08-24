@@ -7,9 +7,10 @@ import multer from "multer";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { accountId, actorEmail, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
-import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer, draftDecisionRationale, extractCvRecords } from "./ai.js";
+import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer, draftDecisionRationale, evaluateDraft, extractCvRecords } from "./ai.js";
 import { badgeFor, classForHumanEdit } from "./provenance.js";
 import { diffVersions } from "./versions.js";
+import { ESTIMATE_NOTICE, prioritisedGaps, scoreEvaluation } from "./evaluation.js";
 import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
@@ -52,6 +53,7 @@ import {
   listDeclarationAnswers,
   listDocuments,
   listEvidence,
+  listMockEvaluations,
   listNotifications,
   listActivePeople,
   listPeople,
@@ -65,6 +67,7 @@ import {
   recordAffirmation,
   recordAnswerVersion,
   recordBidDecision,
+  recordMockEvaluation,
   removeFromWatchlist,
   recordProvenance,
   saveAnswer,
@@ -1089,6 +1092,60 @@ app.get("/api/vault/completeness", async (req: AuthenticatedRequest, res) => {
 app.get("/api/usage", async (req: AuthenticatedRequest, res) => {
   try {
     res.json({ usage: await monthlyUsage(accountId(req)) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Scores the drafted response against the published criteria.
+ *
+ * Available in no-AI mode: scoring is assistance, not generation. A tender whose
+ * criteria could not be extracted produces no score at all rather than one
+ * against weights nobody published.
+ */
+app.post("/api/tenders/:id/mock-evaluation", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender?.analysis) return res.status(404).json({ error: "Tender analysis not found" });
+
+    const criteria = tender.analysis.evaluationCriteria ?? [];
+    if (criteria.length === 0) {
+      return res.status(409).json({ error: "No award criteria extracted", notice: ESTIMATE_NOTICE });
+    }
+
+    const answers = await listAnswers(tender.id);
+    const byQuestion = new Map(answers.map((answer) => [answer.questionId, answer]));
+    const questions = tender.analysis.questions.map((question) => ({
+      id: question.id, title: question.title, prompt: question.prompt,
+      answer: byQuestion.get(question.id)?.response ?? "",
+    }));
+
+    const scored = await evaluateDraft({
+      accountId: account, tenderId: tender.id,
+      criteria: criteria.map((criterion) => ({ name: criterion.name, weight: criterion.weight, maximum: 100 })),
+      questions,
+    });
+    if (!scored) return res.status(503).json({ error: "Mock evaluation is unavailable", notice: ESTIMATE_NOTICE });
+
+    const result = scoreEvaluation(scored.criteria, criteria);
+    const record = await recordMockEvaluation({
+      tenderId: tender.id, criteria: result.criteria, total: result.total, actor: actorEmail(req),
+    });
+    res.status(201).json({
+      evaluation: { ...record, notice: ESTIMATE_NOTICE },
+      gaps: prioritisedGaps(result.criteria, criteria),
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** Every run for this tender, newest first: the movement is the point. */
+app.get("/api/tenders/:id/mock-evaluation", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const runs = await listMockEvaluations(tender.id);
+    res.json({ evaluations: runs.map((run) => ({ ...run, notice: ESTIMATE_NOTICE })), notice: ESTIMATE_NOTICE });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

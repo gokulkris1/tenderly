@@ -646,3 +646,21 @@ button:disabled { cursor: wait; opacity: .62; }
 .version-diff { margin: 14px 0 0; padding: 12px 14px; background: var(--paper); border-radius: 8px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
 .version-diff .added { background: var(--green-soft); color: var(--green-2); }
 .version-diff .removed { background: var(--red-soft); color: var(--red); text-decoration: line-through; }
+
+/* TLY-78 — how the draft would score. An estimate, never a prediction. */
+.mock-evaluation { margin-top: 18px; }
+.mock-empty { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+.mock-notice { margin: 12px 0 0; padding: 8px 12px; background: var(--amber-soft); color: var(--amber); border-radius: 8px; font-size: 11px; }
+.mock-total { margin: 12px 0 0; display: flex; align-items: baseline; gap: 8px; }
+.mock-total strong { font-size: 27px; }
+.mock-total span { font-size: 12px; color: var(--muted); }
+.mock-criteria { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 2px; }
+.mock-criteria li { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.mock-criteria li.below-half strong { color: var(--red); }
+.mock-criteria div { display: grid; gap: 3px; }
+.mock-criteria strong { font-size: 13px; }
+.mock-criteria small { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.mock-criteria em { font-size: 11px; font-style: normal; color: var(--amber); }
+.mock-criteria span { flex: none; text-align: right; font-size: 13px; }
+.mock-criteria span small { display: block; color: var(--green-2); }
+.mock-worklist { margin: 12px 0 0; font-size: 12px; color: var(--ink-2); }

@@ -20,6 +20,7 @@ import type {
   DiffSegment,
   DiscoveryPreferences,
   EvidenceItem,
+  MockEvaluation,
   NotificationItem,
   PersonFact,
   PersonItem,
@@ -171,6 +172,11 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         "Draft answer",
         { method: "POST", body: "{}" },
       ),
+    runMockEvaluation: (tenderId: string) =>
+      request<{ evaluation: MockEvaluation; gaps: { criterion: string; gap: string; questionId: string; marksLost: number }[] }>(
+        `/api/tenders/${tenderId}/mock-evaluation`, "Run mock evaluation", { method: "POST", body: "{}" }),
+    mockEvaluations: (tenderId: string) =>
+      request<{ evaluations: MockEvaluation[]; notice: string }>(`/api/tenders/${tenderId}/mock-evaluation`, "Load mock evaluations"),
     answerVersions: (tenderId: string, questionId: string, compare?: { from: string; to: string }) => {
       const query = compare ? `?from=${encodeURIComponent(compare.from)}&to=${encodeURIComponent(compare.to)}` : "";
       return request<{ versions: AnswerVersion[]; diff?: DiffSegment[] }>(

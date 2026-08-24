@@ -7,6 +7,7 @@ import { allCpvCodes, cpvAncestors, normaliseCpv } from "./cpv.js";
 import { canonicalKey } from "./dedupe.js";
 import type { IngestionRun } from "./ingestion-health.js";
 import type { AnswerVersion } from "./versions.js";
+import type { MockEvaluation } from "./evaluation.js";
 import type { Affirmation, DeclarationAnswer } from "./declarations.js";
 import type {
   AuditEntry,
@@ -62,6 +63,7 @@ const memory = {
   watchlist: [] as WatchlistEntry[],
   personFacts: [] as PersonFact[],
   answerVersions: [] as AnswerVersion[],
+  mockEvaluations: [] as MockEvaluation[],
   savedSearches: [] as SavedSearch[],
   ingestionRuns: [] as IngestionRun[],
   declarations: new Map<string, DeclarationAnswer[]>(),
@@ -1077,6 +1079,37 @@ export async function getAnswerVersion(accountId: string, versionId: string) {
     [versionId, accountId],
   );
   return result.rows[0] ? toAnswerVersion(result.rows[0]) : null;
+}
+
+const toMockEvaluation = (row: Record<string, unknown>): MockEvaluation => ({
+  id: String(row.id), tenderId: String(row.tender_id),
+  criteria: (row.criteria ?? []) as MockEvaluation["criteria"],
+  total: Number(row.total), notice: "", actor: String(row.actor ?? ""),
+  createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/** Records one mock evaluation. Runs accumulate: the movement is the point. */
+export async function recordMockEvaluation(input: Omit<MockEvaluation, "id" | "createdAt" | "notice">) {
+  const record: MockEvaluation = { ...input, notice: "", id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.mockEvaluations.push(record); return record; }
+  await pool.query(
+    "INSERT INTO mock_evaluations(id,tender_id,criteria,total,actor) VALUES($1,$2,$3,$4,$5)",
+    [record.id, record.tenderId, JSON.stringify(record.criteria), record.total, record.actor],
+  );
+  return record;
+}
+
+/** One tender's evaluation runs, newest first. */
+export async function listMockEvaluations(tenderId: string) {
+  if (!pool) {
+    // Two runs can land in the same millisecond, so insertion order breaks the
+    // tie: reverse first, then sort stably, and the later run stays first.
+    return memory.mockEvaluations.filter((entry) => entry.tenderId === tenderId)
+      .reverse()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const result = await pool.query("SELECT * FROM mock_evaluations WHERE tender_id=$1 ORDER BY created_at DESC", [tenderId]);
+  return result.rows.map(toMockEvaluation);
 }
 
 export async function addEvidence(

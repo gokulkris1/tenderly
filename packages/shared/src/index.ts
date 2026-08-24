@@ -46,6 +46,29 @@ export type Gate = {
 /** How much of a response section a machine produced. */
 export type ProvenanceClass = "ai-generated" | "ai-assisted" | "human";
 
+/** One criterion's mock score, with the weakness costing the marks. */
+export type CriterionScore = {
+  name: string;
+  mark: number;
+  maximum: number;
+  reasoning: string;
+  gap: string;
+  /** The scored question whose answer caused the gap; empty when none. */
+  questionId: string;
+  weightedContribution: number;
+  belowHalf: boolean;
+};
+
+/** A mock evaluation run. The number is an estimate, never a prediction. */
+export type MockEvaluation = {
+  id: string;
+  criteria: CriterionScore[];
+  total: number;
+  notice: string;
+  actor: string;
+  createdAt: string;
+};
+
 /** One saved state of an answer. Restoring adds a version; it never rewinds. */
 export type AnswerVersion = {
   id: string;

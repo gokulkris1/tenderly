@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { answerCritiqueSchema, bidAnswerDraftSchema, cvExtractionSchema, decisionRationaleSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
-import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, CRITIQUE_PROMPT, CV_PROMPT, DRAFTING_PROMPT, RATIONALE_PROMPT } from "./prompts/index.js";
+import { answerCritiqueSchema, bidAnswerDraftSchema, cvExtractionSchema, decisionRationaleSchema, mockEvaluationSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
+import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, CRITIQUE_PROMPT, CV_PROMPT, DRAFTING_PROMPT, EVALUATION_PROMPT, RATIONALE_PROMPT } from "./prompts/index.js";
 import { withStableIds } from "./analysis-schema.js";
 import { exclusionNotes, partitionEvidence, resolveCitations } from "./citations.js";
 import { reconcileGates, rollUpEligibility } from "./eligibility.js";
@@ -317,6 +317,41 @@ export async function extractCvRecords(args: {
   } catch (error) {
     console.error("CV extraction failed:", error instanceof Error ? error.message : error);
     return empty;
+  }
+}
+
+/**
+ * Scores the drafted response against the published criteria.
+ *
+ * Runs in no-AI mode: scoring is assistance, not generation. The forced schema
+ * has no field for prose, so a "suggested rewrite" cannot come back even if the
+ * model tried to offer one.
+ */
+export async function evaluateDraft(args: {
+  accountId: string;
+  tenderId: string;
+  criteria: { name: string; weight: number; maximum: number }[];
+  questions: { id: string; title: string; prompt: string; answer: string }[];
+}) {
+  if (!client) return null;
+  const { tool, choice } = forcedTool("record_mock_evaluation", "Score the drafted response against the published award criteria.", mockEvaluationSchema);
+  try {
+    const response = await callModel({
+      kind: "critique", accountId: args.accountId, tenderId: args.tenderId,
+      request: {
+        model,
+        max_tokens: DRAFT_MAX_TOKENS,
+        system: EVALUATION_PROMPT,
+        messages: [{ role: "user", content: JSON.stringify({ criteria: args.criteria, questions: args.questions }) }],
+        tools: [tool],
+        tool_choice: choice,
+        output_config: { effort: "high" },
+      },
+    });
+    return parseToolResult(response, mockEvaluationSchema, "mock evaluation");
+  } catch (error) {
+    console.error("mock evaluation failed:", error instanceof Error ? error.message : error);
+    return null;
   }
 }
 
