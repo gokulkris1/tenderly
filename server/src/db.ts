@@ -28,6 +28,7 @@ const memory = {
   documents: new Map<string, StoredDocument>(),
   answers: new Map<string, BidAnswer>(),
   preferences: new Map<string, DiscoveryPreferences>(),
+  awards: new Map<string, Record<string, unknown>>(),
   evidence: new Map<string, EvidenceRecord>(),
   people: new Map<string, PersonRecord>(),
   notifications: new Map<string, NotificationRow>(),
@@ -422,4 +423,68 @@ export async function savePreferences(accountId: string, preferences: DiscoveryP
     [accountId, JSON.stringify(preferences.sectors), JSON.stringify(preferences.keywords), JSON.stringify(preferences.cpvCodes), preferences.valueMin, preferences.valueMax],
   );
   return preferences;
+}
+
+/**
+ * Award history is shared reference data, not tenant-scoped — see
+ * migrations/003_award_history.sql. Upserts on (source, external_id) so a
+ * re-import of the same quarterly file updates rather than duplicates.
+ */
+/**
+ * Award history is shared reference data, not tenant-scoped — see
+ * migrations/003_award_history.sql. Upserts on (source, external_id) so a
+ * re-import of the same quarterly file updates rather than duplicates.
+ *
+ * Rows are written in one multi-row statement per batch. One INSERT per row
+ * against a hosted database turns a 200,000-row quarterly file into hours of
+ * round trips.
+ */
+export async function saveAwards(records: import("./sources/ogp.js").AwardRecord[]): Promise<{ inserted: number; updated: number }> {
+  const counts = { inserted: 0, updated: 0 };
+  if (records.length === 0) return counts;
+  const { awardId, AWARD_DATA_ATTRIBUTION } = await import("./sources/ogp.js");
+
+  if (!pool) {
+    for (const r of records) {
+      const key = `ogp:${r.externalId}`;
+      if (memory.awards.has(key)) counts.updated++; else counts.inserted++;
+      memory.awards.set(key, { ...r, id: awardId(r.externalId), source: "ogp", licenceNote: AWARD_DATA_ATTRIBUTION });
+    }
+    return counts;
+  }
+
+  const COLUMNS = 16;
+  const values: unknown[] = [];
+  const tuples: string[] = [];
+  records.forEach((r, index) => {
+    const base = index * COLUMNS;
+    tuples.push(`($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8},$${base + 9},$${base + 10},$${base + 11},$${base + 12},$${base + 13},$${base + 14},$${base + 15},$${base + 16})`);
+    values.push(
+      awardId(r.externalId), "ogp", r.externalId, r.authority, r.title, r.cpv, r.cpvDescription,
+      r.procedure, r.publishedOn, r.awardedOn, r.awardedValue, r.estimatedValue, r.suppliers,
+      r.bidsReceived, r.smeBidsReceived, AWARD_DATA_ATTRIBUTION,
+    );
+  });
+
+  const result = await pool.query(
+    `INSERT INTO award_history(id,source,external_id,authority,title,cpv,cpv_description,procedure,published_on,awarded_on,awarded_value,estimated_value,suppliers,bids_received,sme_bids_received,licence_note)
+     VALUES ${tuples.join(",")}
+     ON CONFLICT (source, external_id) DO UPDATE SET
+       authority=EXCLUDED.authority, title=EXCLUDED.title, cpv=EXCLUDED.cpv,
+       cpv_description=EXCLUDED.cpv_description, procedure=EXCLUDED.procedure,
+       published_on=EXCLUDED.published_on, awarded_on=EXCLUDED.awarded_on,
+       awarded_value=EXCLUDED.awarded_value, estimated_value=EXCLUDED.estimated_value,
+       suppliers=EXCLUDED.suppliers, bids_received=EXCLUDED.bids_received,
+       sme_bids_received=EXCLUDED.sme_bids_received
+     RETURNING (xmax = 0) AS inserted`,
+    values,
+  );
+  for (const row of result.rows) { if (row.inserted) counts.inserted++; else counts.updated++; }
+  return counts;
+}
+
+export async function countAwards(): Promise<number> {
+  if (!pool) return memory.awards.size;
+  const result = await pool.query("SELECT count(*)::int AS n FROM award_history");
+  return result.rows[0]?.n ?? 0;
 }
