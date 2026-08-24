@@ -11,7 +11,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/index.js",
     "test": "node --import tsx --test tests/*.test.ts",
-    "job:discover": "node dist/src/job.js"
+    "job:discover": "node dist/src/job.js",
+    "retention": "node --import tsx src/retention-job.ts",
+    "retention:dry-run": "node --import tsx src/retention-job.ts --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.118.0",
