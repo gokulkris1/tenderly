@@ -3,8 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import pg from "pg";
 import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
-import type {
-  DiscoveryPreferences, BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
+import type { BidAnswer, CompanyProfile, DiscoveryPreferences, EvidenceRecord, PersonRecord, ProvenanceEntry, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -32,6 +31,7 @@ const memory = {
   evidence: new Map<string, EvidenceRecord>(),
   people: new Map<string, PersonRecord>(),
   notifications: new Map<string, NotificationRow>(),
+  provenance: [] as ProvenanceEntry[],
 };
 
 /**
@@ -275,6 +275,53 @@ export async function listAnswers(tenderId: string) {
   if (!pool) return [...memory.answers.values()].filter((item) => item.tenderId === tenderId);
   const result = await pool.query("SELECT * FROM bid_answers WHERE tender_id=$1 ORDER BY updated_at", [tenderId]);
   return result.rows.map((row) => ({ id: row.id, tenderId: row.tender_id, questionId: row.question_id, response: row.response, status: row.status, evidence: row.evidence_json ?? [] } as BidAnswer));
+}
+
+/**
+ * Appends one entry to an answer's provenance ledger.
+ *
+ * There is deliberately no update or delete counterpart: the ledger is
+ * append-only in the schema too, so a caller that tries to rewrite it gets a
+ * database error rather than a quiet success.
+ */
+export async function recordProvenance(input: Omit<ProvenanceEntry, "id" | "createdAt">) {
+  const entry: ProvenanceEntry = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.provenance.push(entry); return entry; }
+  const result = await pool.query(
+    `INSERT INTO answer_provenance(id,answer_id,section,class,model,prompt_version,evidence_ids,actor)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING created_at`,
+    [entry.id, entry.answerId, entry.section, entry.class, entry.model ?? null, entry.promptVersion ?? null,
+     JSON.stringify(entry.evidenceIds), entry.actor],
+  );
+  return { ...entry, createdAt: new Date(result.rows[0].created_at).toISOString() };
+}
+
+const toProvenance = (row: Record<string, unknown>): ProvenanceEntry => ({
+  id: String(row.id), answerId: String(row.answer_id), section: String(row.section),
+  class: row.class as ProvenanceEntry["class"],
+  model: (row.model as string | null) ?? undefined,
+  promptVersion: (row.prompt_version as string | null) ?? undefined,
+  evidenceIds: (row.evidence_ids as string[] | null) ?? [],
+  actor: String(row.actor), createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/** One answer's ledger, oldest first. */
+export async function listProvenance(answerId: string) {
+  if (!pool) return memory.provenance.filter((entry) => entry.answerId === answerId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const result = await pool.query("SELECT * FROM answer_provenance WHERE answer_id=$1 ORDER BY created_at, id", [answerId]);
+  return result.rows.map(toProvenance);
+}
+
+/** Every ledger entry for a tender, for the attestation and the pack summary. */
+export async function tenderProvenance(tenderId: string) {
+  if (!pool) {
+    const answerIds = new Set([...memory.answers.values()].filter((a) => a.tenderId === tenderId).map((a) => a.id));
+    return memory.provenance.filter((entry) => answerIds.has(entry.answerId)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  const result = await pool.query(
+    `SELECT p.* FROM answer_provenance p JOIN bid_answers a ON a.id = p.answer_id
+     WHERE a.tender_id=$1 ORDER BY p.created_at, p.id`, [tenderId]);
+  return result.rows.map(toProvenance);
 }
 
 export async function addEvidence(accountId: string, input: Omit<EvidenceRecord, "id" | "accountId">) {
