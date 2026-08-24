@@ -423,3 +423,15 @@ button:disabled { cursor: wait; opacity: .62; }
 .usage-breakdown li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line-soft); font-size: 13px; }
 .usage-breakdown small { color: var(--muted); font-size: 11px; }
 .usage-empty { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+
+/* TLY-75 — no-AI mode: assistance without generation. */
+.no-ai-banner { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; padding: 14px 18px; border: 1px solid var(--ink-2); background: var(--paper); border-radius: 12px; }
+.no-ai-banner strong { flex: none; font-size: 13px; color: var(--ink); }
+.no-ai-banner p { margin: 0; flex: 1; font-size: 12px; color: var(--muted); }
+.critique-panel { margin-top: 18px; }
+.critique-group { margin-top: 14px; }
+.critique-group strong { font-size: 12px; letter-spacing: .02em; }
+.critique-group ul { margin: 6px 0 0; padding-left: 20px; }
+.critique-group li { font-size: 13px; line-height: 1.6; }
+.critique-group.pass strong { color: var(--green-2); }
+.critique-group.review strong { color: var(--amber); }

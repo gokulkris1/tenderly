@@ -169,6 +169,7 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
     })),
     requiredCertificates: certificateStatus(analysis?.requiredCertificates ?? [], evidence),
     aiUsePolicy: aiUsePolicy(analysis?.aiUsePolicy, tender.metadata.aiPolicyAcknowledgement),
+    noAiMode: tender.metadata.noAiMode === true,
   };
 }
 
