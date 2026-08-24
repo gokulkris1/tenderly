@@ -27,6 +27,7 @@ import {
   createSavedSearch,
   deleteSavedSearch,
   createUser,
+  evidenceFile,
   findUserByEmail,
   getCompany,
   getPreferences,
@@ -899,20 +900,53 @@ app.post("/api/evidence", async (req: AuthenticatedRequest, res) => {
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
+/**
+ * Downloads the original file for a vault item.
+ *
+ * A missing file and another account's file are the same 404 by design: a
+ * cross-tenant probe must not be able to tell them apart.
+ */
+app.get("/api/evidence/:id/file", async (req: AuthenticatedRequest, res) => {
+  try {
+    const found = await evidenceFile(accountId(req), routeParam(req.params.id));
+    if (!found) return res.status(404).json({ error: "No file is stored for that evidence item" });
+    res.setHeader("Content-Type", found.record.contentType || "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="${(found.record.filename || found.record.name).replace(/[^\w.\- ]+/g, "_")}"`);
+    res.send(found.bytes);
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
 app.post("/api/evidence/upload", upload.single("file"), async (req: AuthenticatedRequest, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Choose an evidence file" });
     const extracted = await extractDocumentText(req.file.originalname, req.file.buffer);
     const content = extracted.map((entry) => entry.text).filter(Boolean).join("\n\n");
-    if (!content) return res.status(422).json({ error: "Tenderly could not extract text from this evidence file" });
+    // A scanned certificate has no text layer, and that is exactly the kind of
+    // document a buyer asks for. Refusing it would leave the vault unable to
+    // hold the files it exists to hold; the item is stored with no text and
+    // simply cannot be cited as written evidence until text is available.
+    const extractionWarnings = extracted.filter((entry) => entry.warning).map((entry) => entry.warning);
+    if (!content) extractionWarnings.push("No text could be read from this file, so it cannot yet be cited in a drafted answer");
     const item = await addEvidence(accountId(req), {
       kind: String(req.body.kind || "Document").slice(0, 100),
       name: String(req.body.name || req.file.originalname).slice(0, 300),
       content,
       tags: String(req.body.tags || "").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 30),
       verified: String(req.body.verified).toLowerCase() === "true",
+      // The original file is kept, not just the text pulled out of it: a buyer
+      // asking for the certificate needs the certificate.
+      filename: req.file.originalname.slice(0, 300),
+      contentType: req.file.mimetype,
+      sizeBytes: req.file.size,
+      issuingBody: String(req.body.issuingBody || "").slice(0, 300) || undefined,
+      issuedOn: String(req.body.issuedOn || "").slice(0, 40) || undefined,
+      expiresOn: String(req.body.expiresOn || "").slice(0, 40) || undefined,
+    }, req.file.buffer);
+    await audit(req, {
+      action: AUDIT_ACTIONS.documentUploaded, subjectType: "evidence", subjectId: item.id,
+      subjectLabel: item.name, metadata: { kind: item.kind, bytes: req.file.size },
     });
-    res.status(201).json({ item, extractionWarnings: extracted.filter((entry) => entry.warning).map((entry) => entry.warning) });
+    res.status(201).json({ item, extractionWarnings });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

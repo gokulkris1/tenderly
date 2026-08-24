@@ -227,6 +227,19 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       }),
 
     // --- evidence and people ---------------------------------------------
+    /** The download URL for a vault item's original file, token included. */
+    evidenceFileUrl: (evidenceId: string) => `${baseUrl}/api/evidence/${encodeURIComponent(evidenceId)}/file`,
+    downloadEvidenceFile: async (evidenceId: string, filename: string) => {
+      const response = await fetch(`${baseUrl}/api/evidence/${encodeURIComponent(evidenceId)}/file`, { headers: authHeaders() });
+      if (!response.ok) throw await failure(response, "Download evidence");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
     setEvidenceVerified: (itemId: string, verified: boolean) =>
       request<{ item: EvidenceItem }>(`/api/evidence/${itemId}/verification`, "Update evidence", {
         method: "PUT",
