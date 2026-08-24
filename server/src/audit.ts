@@ -20,6 +20,8 @@ export const AUDIT_ACTIONS = {
   aiPolicyAcknowledged: "ai_policy.acknowledged",
   bidDecisionRecorded: "bid_decision.recorded",
   declarationsAffirmed: "declarations.affirmed",
+  personArchived: "person.archived",
+  personReinstated: "person.reinstated",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

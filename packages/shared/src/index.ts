@@ -452,6 +452,13 @@ export type PersonItem = {
   title: string;
   cvText: string;
   skills: string[];
+  email?: string;
+  phone?: string;
+  /**
+   * Set once they have left. Archived people are excluded from role matching
+   * but still shown on the bids that cited them.
+   */
+  archivedAt?: string;
 };
 
 export type NotificationItem = {

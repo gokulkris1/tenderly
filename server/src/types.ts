@@ -326,6 +326,14 @@ export type PersonRecord = {
   title: string;
   cvText: string;
   skills: string[];
+  email?: string;
+  phone?: string;
+  /**
+   * When they were archived. An archived person is excluded from role matching
+   * but still shown on the bids that cited them — rewriting those would make
+   * the company's own submissions disagree with what the buyer received.
+   */
+  archivedAt?: string;
 };
 
 export type EvidenceRecord = {

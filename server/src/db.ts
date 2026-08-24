@@ -918,14 +918,81 @@ export async function setEvidenceVerified(accountId: string, evidenceId: string,
 export async function addPerson(accountId: string, input: Omit<PersonRecord, "id" | "accountId">) {
   const record: PersonRecord = { ...input, id: randomUUID(), accountId };
   if (!pool) { memory.people.set(record.id, record); return record; }
-  await pool.query("INSERT INTO people(id,account_id,name,title,cv_text,skills) VALUES($1,$2,$3,$4,$5,$6)", [record.id, accountId, record.name, record.title, record.cvText, JSON.stringify(record.skills)]);
+  await pool.query("INSERT INTO people(id,account_id,name,title,cv_text,skills,email,phone) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", [record.id, accountId, record.name, record.title, record.cvText, JSON.stringify(record.skills), record.email ?? null, record.phone ?? null]);
   return record;
 }
 
-export async function listPeople(accountId: string) {
-  if (!pool) return [...memory.people.values()].filter((item) => item.accountId === accountId);
-  const result = await pool.query("SELECT * FROM people WHERE account_id=$1 ORDER BY updated_at DESC", [accountId]);
-  return result.rows.map((row) => ({ id: row.id, accountId: row.account_id, name: row.name, title: row.title, cvText: row.cv_text, skills: row.skills ?? [] } as PersonRecord));
+const toPerson = (row: Record<string, unknown>): PersonRecord => ({
+  id: String(row.id), accountId: String(row.account_id), name: String(row.name), title: String(row.title ?? ""),
+  cvText: String(row.cv_text ?? ""), skills: (row.skills ?? []) as string[],
+  email: (row.email as string | null) ?? undefined,
+  phone: (row.phone as string | null) ?? undefined,
+  archivedAt: row.archived_at ? new Date(row.archived_at as string).toISOString() : undefined,
+});
+
+/**
+ * The people on this account.
+ *
+ * Archived people are included by default because the screens that list them
+ * need to show them as archived; matching filters them out explicitly, which
+ * keeps the exclusion visible at the point where it matters.
+ */
+export async function listPeople(accountId: string, options: { includeArchived?: boolean } = {}) {
+  const includeArchived = options.includeArchived ?? true;
+  if (!pool) {
+    return [...memory.people.values()]
+      .filter((item) => item.accountId === accountId)
+      .filter((item) => includeArchived || !item.archivedAt);
+  }
+  const result = await pool.query(
+    `SELECT * FROM people WHERE account_id=$1 ${includeArchived ? "" : "AND archived_at IS NULL"} ORDER BY updated_at DESC`,
+    [accountId],
+  );
+  return result.rows.map(toPerson);
+}
+
+/** People available for role matching: never the archived ones. */
+export const listActivePeople = (accountId: string) => listPeople(accountId, { includeArchived: false });
+
+/** Edits the fields a person's record carries. Returns null when not theirs. */
+export async function updatePerson(
+  accountId: string,
+  personId: string,
+  patch: { name?: string; title?: string; email?: string; phone?: string },
+) {
+  if (!isUuid(personId)) return null;
+  if (!pool) {
+    const record = memory.people.get(personId);
+    if (!record || record.accountId !== accountId) return null;
+    Object.assign(record, patch);
+    return record;
+  }
+  const result = await pool.query(
+    `UPDATE people SET name=COALESCE($3,name), title=COALESCE($4,title), email=COALESCE($5,email),
+            phone=COALESCE($6,phone), updated_at=now()
+      WHERE id=$1 AND account_id=$2 RETURNING *`,
+    [personId, accountId, patch.name ?? null, patch.title ?? null, patch.email ?? null, patch.phone ?? null],
+  );
+  return result.rows[0] ? toPerson(result.rows[0]) : null;
+}
+
+/**
+ * Archives or reinstates a person. Never deletes: a submitted bid named them,
+ * and the record of what the buyer received must stay intact.
+ */
+export async function setPersonArchived(accountId: string, personId: string, archived: boolean) {
+  if (!isUuid(personId)) return null;
+  if (!pool) {
+    const record = memory.people.get(personId);
+    if (!record || record.accountId !== accountId) return null;
+    record.archivedAt = archived ? new Date().toISOString() : undefined;
+    return record;
+  }
+  const result = await pool.query(
+    "UPDATE people SET archived_at=$3, updated_at=now() WHERE id=$1 AND account_id=$2 RETURNING *",
+    [personId, accountId, archived ? new Date().toISOString() : null],
+  );
+  return result.rows[0] ? toPerson(result.rows[0]) : null;
 }
 
 export async function saveNotification(accountId: string, externalId: string, title: string, sourceUrl: string, matchScore: number, payload: Record<string, unknown>) {

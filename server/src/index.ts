@@ -48,6 +48,7 @@ import {
   listDocuments,
   listEvidence,
   listNotifications,
+  listActivePeople,
   listPeople,
   listSavedSearches,
   listProvenance,
@@ -68,7 +69,9 @@ import {
   seedCpvCodes,
   setEvidenceVerified,
   tenderProvenance,
+  setPersonArchived,
   updateCompany,
+  updatePerson,
   updateTenderMetadata,
   upsertTender,
 } from "./db.js";
@@ -200,7 +203,9 @@ async function analyseSavedTender(account: string, tenderId: string) {
   const documents = await listDocuments(tender.id);
   const noticeText = String(tender.metadata.sourceText ?? tender.description ?? "");
   const sources = combineSourceText(noticeText, documents.map((document) => ({ filename: document.filename, extractedText: document.extractedText })));
-  const [people, evidence] = await Promise.all([listPeople(account), listEvidence(account)]);
+  // An archived person has left: proposing them for a role would put a name in
+  // front of a buyer that the company cannot actually field.
+  const [people, evidence] = await Promise.all([listActivePeople(account), listEvidence(account)]);
   const analysis = await analyseTender(tender, company, sources, { people, evidence });
   return saveTenderAnalysis(account, tender.id, analysis);
 }
@@ -472,7 +477,7 @@ app.post("/api/tenders/:id/answers/:questionId/draft", draftLimiter, draftHourly
     const questionId = routeParam(req.params.questionId);
     const question = tender.analysis.questions.find((item) => item.id === questionId);
     if (!question) return res.status(404).json({ error: "Scored question not found" });
-    const [company, evidence, people, answers] = await Promise.all([getCompany(account), listEvidence(account), listPeople(account), listAnswers(tender.id)]);
+    const [company, evidence, people, answers] = await Promise.all([getCompany(account), listEvidence(account), listActivePeople(account), listAnswers(tender.id)]);
 
     // Affirmed ESPD declarations are citable evidence: a person has stood
     // behind them. An unaffirmed or stale set is not offered, because citing it
@@ -968,6 +973,8 @@ app.get("/api/tenders/:id/pack", packLimiter, async (req: AuthenticatedRequest, 
     if (!tender) return res.status(404).json({ error: "Tender not found" });
     if (!tender.analysis) return res.status(409).json({ error: "Analyse the tender before building a pack" });
     const draft = String(req.query.draft).toLowerCase() === "true";
+    // The pack lists whoever this bid actually cites, archived or not: the CV
+    // that went to the buyer is part of what was submitted.
     const [answers, documents, company, people, evidence] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id), getCompany(account), listPeople(account), listEvidence(account)]);
     const result = await createSubmissionPack({ tender, analysis: tender.analysis, answers, documents, company, people, evidence, provenance: await tenderProvenance(tender.id), draft });
     if (!result.buffer) return res.status(409).json({ error: "Final submission pack is blocked", blockers: result.blockers });
@@ -1064,6 +1071,66 @@ app.post("/api/people", async (req: AuthenticatedRequest, res) => {
   try {
     const input = z.object({ name: z.string().min(1).max(300), title: z.string().max(300).default(""), cvText: z.string().max(200_000).default(""), skills: z.array(z.string().max(200)).max(100).default([]) }).parse(req.body);
     res.status(201).json({ person: await addPerson(accountId(req), input) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Live tenders whose analysis proposes this person for a role.
+ *
+ * Used to tell a user what archiving will actually change, rather than asking
+ * them to confirm something abstract.
+ */
+async function tendersProposing(account: string, person: { name: string }) {
+  const tenders = await listTenders(account);
+  const needle = person.name.trim().toLowerCase();
+  if (!needle) return [];
+  return tenders
+    .filter((tender) => tender.status !== "SUBMITTED")
+    .filter((tender) => (tender.analysis?.roles ?? []).some((role) => role.bidderMatch.toLowerCase().includes(needle)))
+    .map((tender) => ({ id: tender.id, title: tender.title }));
+}
+
+/** Corrects a person's record. Only their own account can touch it. */
+app.put("/api/people/:id", async (req: AuthenticatedRequest, res) => {
+  try {
+    const input = z.object({
+      name: z.string().min(1).max(300).optional(),
+      title: z.string().max(300).optional(),
+      email: z.string().max(320).optional(),
+      phone: z.string().max(60).optional(),
+    }).parse(req.body);
+    const person = await updatePerson(accountId(req), routeParam(req.params.id), input);
+    if (!person) return res.status(404).json({ error: "Person not found" });
+    res.json({ person });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Archives or reinstates a person.
+ *
+ * The response names the live tenders that currently propose them, so the
+ * confirmation the user sees is about consequences rather than a generic
+ * "are you sure". Nothing is deleted: a submitted bid named this person.
+ */
+app.post("/api/people/:id/archive", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const { archived } = z.object({ archived: z.boolean() }).parse(req.body);
+    const personId = routeParam(req.params.id);
+
+    const people = await listPeople(account);
+    const person = people.find((entry) => entry.id === personId);
+    if (!person) return res.status(404).json({ error: "Person not found" });
+
+    const affected = archived ? await tendersProposing(account, person) : [];
+    const updated = await setPersonArchived(account, personId, archived);
+    if (!updated) return res.status(404).json({ error: "Person not found" });
+
+    await audit(req, {
+      action: archived ? AUDIT_ACTIONS.personArchived : AUDIT_ACTIONS.personReinstated,
+      subjectType: "person", subjectId: person.id, subjectLabel: person.name,
+    });
+    res.json({ person: updated, affectedTenders: affected });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
