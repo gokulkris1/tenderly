@@ -54,6 +54,11 @@ jobs:
         if: hashFiles('server/package.json') != ''
         run: npm ci --prefix server
 
+      # Reads what git committed, not the working tree: a resolution fixed after
+      # the commit used to pass every other check here.
+      - name: No conflict markers
+        run: node scripts/check-conflict-markers.mjs
+
       - name: Lint
         if: hashFiles('package.json') != ''
         run: npm run lint
