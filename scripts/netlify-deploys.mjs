@@ -57,10 +57,12 @@ if (action === "status") {
 // No `scopes`: the free plan rejects scoped variables outright, and the
 // default scope covers builds, which is the only place this is read.
 const body = JSON.stringify([{ key: KEY, values: [{ context: "all", value: action }] }]);
+// PUT replaces the variable outright. PATCH is per-context and rejects "all",
+// which is the only context the free plan allows in the first place.
 if (current) {
   await api(`/accounts/${accountId}/env/${KEY}?site_id=${site.id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ context: "all", value: action }),
+    method: "PUT",
+    body: JSON.stringify({ key: KEY, values: [{ context: "all", value: action }] }),
   });
 } else {
   await api(`/accounts/${accountId}/env?site_id=${site.id}`, { method: "POST", body });

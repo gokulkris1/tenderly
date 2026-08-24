@@ -25,6 +25,7 @@ import type {
   Gate,
   GateState,
   Lot,
+  MockEvaluation,
   NotificationItem,
   PersonFact,
   PersonItem,
@@ -638,6 +639,7 @@ export default function TenderlyApp() {
   // A critique judges what the user wrote; it never carries replacement prose.
   const [critique, setCritique] = useState<AnswerCritique | null>(null);
   const [answerHistory, setAnswerHistory] = useState<AnswerHistory | null>(null);
+  const [evaluation, setEvaluation] = useState<EvaluationState | null>(null);
   const [attestationState, setAttestationState] = useState<AttestationState | null>(null);
   const [tenders, setTenders] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [discoveries, setDiscoveries] = useState<Tender[]>(API_BASE ? [] : demoTenders);
@@ -986,6 +988,23 @@ export default function TenderlyApp() {
       setToast("Attestation recorded · the final pack is released");
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not record the attestation");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function runMockEvaluation() {
+    if (!selected) return;
+    if (isDemo) { setToast("Mock evaluation is disabled in the demo"); return; }
+    try {
+      setLoading("evaluation");
+      const { evaluation: result, gaps } = await apiClient.runMockEvaluation(selected.id);
+      setEvaluation({ result, gaps });
+      setToast(`Estimated ${result.total}/100 against the published criteria`);
+    } catch (error) {
+      // "No award criteria extracted" is the server's wording and the honest
+      // answer; showing a score without weights would be worse than none.
+      setToast(error instanceof ApiError ? error.message : "Could not run the mock evaluation");
     } finally {
       setLoading("");
     }
@@ -1600,6 +1619,8 @@ export default function TenderlyApp() {
               setNoAiMode={setNoAiMode}
               critiqueAnswer={critiqueAnswer}
               critique={critique}
+              evaluation={evaluation}
+              runMockEvaluation={runMockEvaluation}
               answerHistory={answerHistory}
               selectVersion={selectVersion}
               compareVersions={compareVersions}
@@ -1901,8 +1922,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -1978,7 +1999,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
       )}
 
       {stage === "Synopsis" && <Synopsis tender={tender} onDownload={() => downloadAsset("deck")} onContinue={() => setStage("Respond")} loading={loading === "deck"} />}
-      {stage === "Respond" && <Respond tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
+      {stage === "Respond" && <Respond tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} evaluation={evaluation} onRunEvaluation={runMockEvaluation} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
       {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} attestation={attestation} onAttest={onAttest} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
       {stage === "Submit" && <Submit tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
     </div>
@@ -1998,6 +2019,11 @@ function Synopsis({ tender, onDownload, onContinue, loading }: { tender: Tender;
     </div>
   );
 }
+
+type EvaluationState = {
+  result: MockEvaluation;
+  gaps: { criterion: string; gap: string; questionId: string; marksLost: number }[];
+};
 
 type AnswerHistory = {
   questionId: string;
@@ -2108,7 +2134,65 @@ function VersionHistory({ versions, diff, selected, onSelect, onCompare, onResto
   );
 }
 
-function Respond({ tender, setNoAiMode, critiqueAnswer, critique, history, onSelectVersion, onCompareVersions, onRestoreVersion, onBackToQualify, onOpenCitation, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue }: { tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; history: AnswerHistory | null; onSelectVersion: (versionId: string) => void; onCompareVersions: () => void; onRestoreVersion: (versionId: string) => void; onBackToQualify: () => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
+/**
+ * How the drafted response would score against the published criteria.
+ *
+ * The number is an estimate, and the panel says so before it says anything
+ * else: we do not know the buyer's panel, the competing bids or the moderation.
+ * A generous mock score is worse than none, because it tells a company to stop
+ * working on a bid that will lose.
+ */
+function MockEvaluationPanel({ evaluation, gaps, onRun, onJumpToQuestion, busy }: {
+  evaluation: MockEvaluation | null;
+  gaps: { criterion: string; gap: string; questionId: string; marksLost: number }[];
+  onRun: () => void;
+  onJumpToQuestion: (questionId: string) => void;
+  busy: boolean;
+}) {
+  return (
+    <section className="panel mock-evaluation" data-testid="mock-evaluation">
+      <div className="panel-heading">
+        <div><h3>Mock evaluation</h3><p>Scored against the criteria the buyer published.</p></div>
+        <button className="quiet-btn" onClick={onRun} disabled={busy}>{busy ? "Scoring…" : evaluation ? "Re-run" : "Run"}</button>
+      </div>
+
+      {!evaluation
+        ? <p className="mock-empty">Run it once there is something drafted to score.</p>
+        : (
+          <>
+            <p className="mock-notice" data-testid="mock-notice">{evaluation.notice}</p>
+            <p className="mock-total"><strong>{evaluation.total}</strong><span>/ 100 estimated</span></p>
+
+            <ul className="mock-criteria">
+              {evaluation.criteria.map((criterion) => (
+                <li key={criterion.name} className={criterion.belowHalf ? "below-half" : ""}>
+                  <div>
+                    <strong>{criterion.name}</strong>
+                    <small>{criterion.reasoning}</small>
+                    {criterion.gap && (
+                      <em>
+                        {criterion.gap}
+                        {criterion.questionId && (
+                          <button className="text-action" onClick={() => onJumpToQuestion(criterion.questionId)}>Open the answer</button>
+                        )}
+                      </em>
+                    )}
+                  </div>
+                  <span>{criterion.mark}/{criterion.maximum}<small>+{criterion.weightedContribution}</small></span>
+                </li>
+              ))}
+            </ul>
+
+            {gaps.length > 0 && (
+              <p className="mock-worklist">Worst first: {gaps.map((gap) => `${gap.criterion} (−${gap.marksLost})`).join(", ")}</p>
+            )}
+          </>
+        )}
+    </section>
+  );
+}
+
+function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, onRunEvaluation, history, onSelectVersion, onCompareVersions, onRestoreVersion, onBackToQualify, onOpenCitation, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue }: { tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; onRunEvaluation: () => void; history: AnswerHistory | null; onSelectVersion: (versionId: string) => void; onCompareVersions: () => void; onRestoreVersion: (versionId: string) => void; onBackToQualify: () => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
   const [activeId, setActiveId] = useState(tender.questions[0]?.id ?? "");
   const active = tender.questions.find((question) => question.id === activeId) ?? tender.questions[0];
   if (!active) return <div className="no-questions panel"><span>◇</span><h2>Import the full tender pack first</h2><p>The notice gives Tenderly the opportunity metadata. The RFT / RFQ documents are needed to extract scored questions, word limits, mandatory roles and response templates.</p><FileButton label={loading === "upload" ? "Uploading…" : "Upload tender documents"} accept=".pdf,.docx,.xlsx,.xls,.pptx,.zip,.txt,.xml" onFile={(file) => uploadTenderFile(file, "source")} /></div>;
@@ -2156,6 +2240,13 @@ function Respond({ tender, setNoAiMode, critiqueAnswer, critique, history, onSel
         <div className="editor-foot"><span>{active.answer.trim() ? active.answer.trim().split(/\s+/).length : 0} / {active.maxWords || "—"} words</span><div>{active.status === "ready" ? <button className="ready-button" disabled>✓ Reviewed & ready</button> : <button className="quiet-btn" onClick={() => markAnswerReady(active.id)} disabled={loading === `ready-${active.id}`}>{loading === `ready-${active.id}` ? "Saving…" : "Mark reviewed & ready"}</button>}{tender.noAiMode
           ? <button className="quiet-btn" onClick={() => critiqueAnswer(active.id)} disabled={loading === `critique-${active.id}`}>{loading === `critique-${active.id}` ? "Reviewing…" : "◇ Critique what I wrote"}</button>
           : <button className="ai-draft" onClick={() => draftAnswer(active.id)} disabled={loading === active.id}>{loading === active.id ? "Drafting…" : "✦ Draft from evidence"}</button>}</div></div>
+        <MockEvaluationPanel
+          evaluation={evaluation?.result ?? null}
+          gaps={evaluation?.gaps ?? []}
+          onRun={onRunEvaluation}
+          onJumpToQuestion={setActiveId}
+          busy={loading === "evaluation"}
+        />
         {critique?.questionId === active.id && <CritiquePanel critique={critique} />}
         {history?.questionId === active.id && (
           <VersionHistory

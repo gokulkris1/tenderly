@@ -186,6 +186,25 @@ export const cvExtractionSchema = z.object({
   experience: z.array(personRecordSchema),
 });
 
+/**
+ * One criterion's mock score. There is no field for prose the bidder could
+ * paste: mock evaluation runs in no-AI mode, and supplying wording there would
+ * smuggle generation into a tender that prohibits it.
+ */
+export const criterionScoreSchema = z.object({
+  name: z.string(),
+  mark: z.number(),
+  maximum: z.number(),
+  reasoning: z.string(),
+  gap: z.string(),
+  /** The scored question whose answer caused the gap; empty when none. */
+  questionId: z.string(),
+});
+
+export const mockEvaluationSchema = z.object({
+  criteria: z.array(criterionScoreSchema),
+});
+
 export const bidAnswerDraftSchema = z.object({
   status: z.enum(["DRAFTED", "NEEDS_INPUT"]),
   answer: z.string(),
