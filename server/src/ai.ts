@@ -74,6 +74,8 @@ function sourceFallback(tender: TenderRecord, company: CompanyProfile): TenderAn
     fatalGates: [{ id: "source-review", requirement: "Complete qualification review", bidderEvidence: company.services ? "Company profile loaded" : "Company profile incomplete", status: "REVIEW", action: "Configure ANTHROPIC_API_KEY and re-run analysis", evidence }],
     evaluationCriteria: [], questions: [], roles: [], clarificationQuestions: [], risks: ["Full tender-document qualification has not run"],
     submissionMethod: "Verify in tender documents", formalities: [], requiredCertificates: [], submissionChecklist: [],
+    // Nothing has read the pack, so nothing can be said about its AI policy.
+    aiUsePolicy: { state: "not-stated", evidence: { sourceDocument: "", quote: "", confidence: "LOW" } },
     synopsisSlides: [{ title: "Opportunity", bullets: [tender.title, tender.authority, `Deadline: ${tender.deadline || "not found"}`] }],
   });
 }

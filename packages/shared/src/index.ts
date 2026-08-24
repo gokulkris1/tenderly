@@ -115,6 +115,28 @@ export type RequiredCertificateStatus = {
   quote: string;
 };
 
+/**
+ * What the pack says about producing the response with AI.
+ *
+ * `not-stated` is deliberately distinct from `unrestricted`: a pack that is
+ * silent has not given permission, and the UI says so rather than assuming.
+ */
+export type AiUsePolicy = {
+  state: "prohibited" | "disclosure-required" | "unrestricted" | "not-stated";
+  source: string;
+  quote: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  /** Set once a person has confirmed or dismissed the flag. */
+  acknowledgement?: AiPolicyAcknowledgement;
+};
+
+/** Who confirmed or dismissed the AI-use flag, and when. */
+export type AiPolicyAcknowledgement = {
+  action: "confirmed" | "dismissed";
+  actor: string;
+  at: string;
+};
+
 export type SynopsisSlide = {
   title: string;
   bullets: string[];
@@ -165,6 +187,8 @@ export type Tender = {
   formalities?: Formality[];
   /** Certificates the tender requires, each with whether the company evidences it. */
   requiredCertificates?: RequiredCertificateStatus[];
+  /** What the pack says about producing the response with AI. */
+  aiUsePolicy?: AiUsePolicy;
 };
 
 export type EvidenceItem = {

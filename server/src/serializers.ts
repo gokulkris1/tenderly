@@ -1,6 +1,6 @@
-import type { Tender } from "@tenderly/shared";
+import type { AiUsePolicy as AiUsePolicyWire, Tender } from "@tenderly/shared";
 import { ANALYSIS_SCHEMA_VERSION, orphanedAnswers } from "./analysis-schema.js";
-import type { BidAnswer, EvidenceRecord, PublicTender, RequiredCertificate, TenderRecord } from "./types.js";
+import type { BidAnswer, EvidenceRecord, PublicTender, RequiredCertificate, TenderAnalysis, TenderRecord } from "./types.js";
 
 function accessLabel(access: TenderRecord["analysis"] extends infer _T ? string : never) {
   return access === "OPEN_TO_QUALIFIED_BIDDERS" ? "Open to qualified bidders" : access === "FRAMEWORK_MEMBERS_ONLY" ? "Framework members only" : access === "INVITED_ONLY" ? "Invited bidders only" : "Needs source review";
@@ -55,6 +55,27 @@ export function certificateStatus(certificates: RequiredCertificate[], evidence:
       quote: certificate.evidence.quote,
     };
   });
+}
+
+/**
+ * An analysis that predates TLY-74 has no policy at all. It reads as not-stated
+ * rather than unrestricted: we have not looked, so we cannot say we were allowed.
+ */
+export function aiUsePolicy(
+  policy: TenderAnalysis["aiUsePolicy"],
+  acknowledgement: unknown,
+): AiUsePolicyWire {
+  const ack = acknowledgement as AiUsePolicyWire["acknowledgement"] | undefined;
+  if (!policy) {
+    return { state: "not-stated", source: "", quote: "", confidence: "LOW", acknowledgement: ack };
+  }
+  return {
+    state: policy.state,
+    source: policy.evidence.sourceDocument,
+    quote: policy.evidence.quote,
+    confidence: policy.evidence.confidence,
+    acknowledgement: ack,
+  };
 }
 
 export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [], evidence: EvidenceRecord[] = []): Tender {
@@ -141,6 +162,7 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
       quote: formality.evidence.quote,
     })),
     requiredCertificates: certificateStatus(analysis?.requiredCertificates ?? [], evidence),
+    aiUsePolicy: aiUsePolicy(analysis?.aiUsePolicy, tender.metadata.aiPolicyAcknowledgement),
   };
 }
 

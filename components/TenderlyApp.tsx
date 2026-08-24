@@ -5,19 +5,20 @@ import { ApiError, createApiClient } from "../web/src/api/client";
 import "./tenderly.css";
 
 import type {
+  AiUsePolicy,
   AwardCriterion,
   BidQuestion,
-  Formality,
-  RequiredCertificateStatus,
   CompanyProfile,
-  DiscoveryPreferences,
-  SectorPreset,
   Decision,
+  DiscoveryPreferences,
   EvidenceItem,
+  Formality,
   Gate,
   GateState,
   NotificationItem,
   PersonItem,
+  RequiredCertificateStatus,
+  SectorPreset,
   SubmissionItem,
   Tender,
 } from "@tenderly/shared";
@@ -192,6 +193,42 @@ function decisionLabel(decision: Decision) {
   if (decision === "NO_GO") return "No-go";
   if (decision === "REVIEW") return "Review";
   return "Go";
+}
+
+const aiPolicyCopy: Record<AiUsePolicy["state"], { label: string; tone: string; detail: string }> = {
+  prohibited: { label: "AI-generated content prohibited", tone: "fail", detail: "Drafting this response with AI risks disqualification. Switch this tender to no-AI mode before writing." },
+  "disclosure-required": { label: "Disclosure required", tone: "review", detail: "You may use AI, but the pack requires you to declare it. The provenance ledger records what to declare." },
+  unrestricted: { label: "No restriction stated", tone: "pass", detail: "The pack explicitly permits AI assistance." },
+  "not-stated": { label: "Not stated in the pack", tone: "review", detail: "The pack says nothing about AI. Silence is not permission — check with the buyer if it matters to you." },
+};
+
+/**
+ * What the pack says about producing the response with AI.
+ *
+ * The panel never asserts a prohibition the pack did not make, and never reads
+ * silence as permission: "not stated" is its own answer. Confirming or
+ * dismissing records who decided to proceed, without changing what was found.
+ */
+function AiUsePolicyPanel({ policy, onAcknowledge, busy }: { policy?: AiUsePolicy; onAcknowledge: (action: "confirmed" | "dismissed") => void; busy: boolean }) {
+  if (!policy) return null;
+  const copy = aiPolicyCopy[policy.state];
+  const flagged = policy.state !== "unrestricted";
+  return (
+    <section className={`panel ai-policy-panel ${copy.tone}`} data-testid="ai-policy-panel">
+      <div className="panel-heading">
+        <div><h2>AI use policy</h2><p>{copy.detail}</p></div>
+        <span className={`ai-policy-flag ${copy.tone}`}>{copy.label}</span>
+      </div>
+      {policy.quote
+        ? <blockquote className="ai-policy-quote">“{policy.quote}”<cite>{policy.source || "Tender pack"} · confidence {policy.confidence}</cite></blockquote>
+        : <p className="ai-policy-quote empty">No clause found in the supplied documents.</p>}
+      {flagged && (
+        policy.acknowledgement
+          ? <p className="ai-policy-ack" data-testid="ai-policy-ack">{policy.acknowledgement.action === "confirmed" ? "Confirmed" : "Dismissed"} by {policy.acknowledgement.actor} on {new Date(policy.acknowledgement.at).toLocaleString()}</p>
+          : <div className="ai-policy-actions"><button className="quiet-btn" onClick={() => onAcknowledge("confirmed")} disabled={busy}>Confirm</button><button className="text-action" onClick={() => onAcknowledge("dismissed")} disabled={busy}>Dismiss</button></div>
+      )}
+    </section>
+  );
 }
 
 function AwardCriteria({ criteria, warning }: { criteria: AwardCriterion[]; warning?: string }) {
@@ -504,6 +541,26 @@ export default function TenderlyApp() {
     }
   }
 
+  async function acknowledgeAiPolicy(action: "confirmed" | "dismissed") {
+    if (!selected) return;
+    if (isDemo) {
+      setToast(action === "confirmed" ? "AI use policy confirmed" : "AI use policy dismissed");
+      return;
+    }
+    try {
+      setLoading("ai-policy");
+      const { acknowledgement } = await apiClient.acknowledgeAiPolicy(selected.id, action);
+      setTenders((items) => items.map((item) => item.id !== selected.id || !item.aiUsePolicy
+        ? item
+        : { ...item, aiUsePolicy: { ...item.aiUsePolicy, acknowledgement } }));
+      setToast(`AI use policy ${action} · recorded against your account`);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not record the acknowledgement");
+    } finally {
+      setLoading("");
+    }
+  }
+
   async function draftAnswer(questionId: string) {
     if (!selected) return;
     if (isDemo) {
@@ -706,6 +763,7 @@ export default function TenderlyApp() {
             <>
             <BidList tenders={tenders} selectedId={selected.id} onSelect={setSelectedId} />
             <BidWorkspace
+              acknowledgeAiPolicy={acknowledgeAiPolicy}
               tender={selected}
               stage={stage}
               setStage={setStage}
@@ -833,8 +891,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -873,6 +931,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
               <span className={`hero-decision decision-${decisionSlug(tender.decision)}`}>{decisionLabel(tender.decision)}</span>
             </section>
 
+            <AiUsePolicyPanel policy={tender.aiUsePolicy} onAcknowledge={acknowledgeAiPolicy} busy={loading === "ai-policy"} />
             <AwardCriteria criteria={tender.awardCriteria ?? []} warning={tender.awardCriteriaWarning} />
             <Formalities formalities={tender.formalities ?? []} certificates={tender.requiredCertificates ?? []} />
             <section className="panel gate-panel">
@@ -945,6 +1004,12 @@ function Respond({ tender, draftAnswer, markAnswerReady, uploadTenderFile, loadi
         )}
       </aside>
       <section className="answer-editor">
+        {tender.aiUsePolicy?.state === "prohibited" && (
+          <div className="ai-policy-prompt" data-testid="no-ai-prompt">
+            <strong>This tender prohibits AI-generated content.</strong>
+            <p>“{tender.aiUsePolicy.quote}” — {tender.aiUsePolicy.source || "tender pack"}. Enable no-AI mode for this tender before using any draft control.</p>
+          </div>
+        )}
         <div className="answer-head"><div><p className="eyebrow">SCORED QUESTION · {active.weight}%</p><h2>{active.title}</h2><p>{active.prompt}</p></div><div className="mark-badge"><strong>{active.weight}</strong><small>marks</small></div></div>
         <div className="answer-brief"><div><span>✦</span><p><strong>Tenderly writing brief</strong><small>Answer the question directly, lead with the outcome, evidence every material claim, and reserve ~10% of words for measurable controls and assurance.</small></p></div><button>View scoring logic</button></div>
         <div className="editor-toolbar"><button><b>B</b></button><button><i>I</i></button><button>≡</button><button>• list</button><span /><button>Insert evidence ⌄</button></div>
