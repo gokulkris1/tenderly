@@ -1,6 +1,10 @@
 [build]
   command = "npm run build:netlify"
   publish = "dist-netlify"
+  # Builds are off unless TENDERLY_NETLIFY_DEPLOYS=on. Every pull request was
+  # triggering a deploy preview, which ran the account into a build-credit
+  # block. See scripts/netlify-should-build.sh.
+  ignore = "bash scripts/netlify-should-build.sh"
 
 [build.environment]
   NODE_VERSION = "22"
