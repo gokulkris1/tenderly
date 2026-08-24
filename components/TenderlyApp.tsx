@@ -18,6 +18,8 @@ import type {
   GateState,
   NotificationItem,
   PersonItem,
+  ProvenanceClass,
+  ProvenanceEntry,
   RequiredCertificateStatus,
   SectorPreset,
   SubmissionItem,
@@ -1022,6 +1024,28 @@ function Synopsis({ tender, onDownload, onContinue, loading }: { tender: Tender;
   );
 }
 
+const provenanceLabels: Record<ProvenanceClass, string> = {
+  "ai-generated": "AI-generated",
+  "ai-assisted": "AI-assisted",
+  human: "Human",
+};
+
+/**
+ * How this section came to exist. Buyers ask, and some prohibit AI-generated
+ * content outright, so the badge states the class plainly rather than hiding it.
+ * An answer with no ledger shows nothing — it makes no claim about itself.
+ */
+function ProvenanceBadge({ entry }: { entry?: ProvenanceEntry }) {
+  if (!entry) return null;
+  const detail = entry.model ? `${entry.model} · ${entry.promptVersion ?? "prompt version not recorded"}` : `Written by ${entry.actor}`;
+  return (
+    <p className={`provenance-badge ${entry.class}`} data-testid="provenance-badge" title={detail}>
+      <span>{provenanceLabels[entry.class]}</span>
+      <small>{detail}</small>
+    </p>
+  );
+}
+
 function Respond({ tender, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue }: { tender: Tender; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
   const [activeId, setActiveId] = useState(tender.questions[0]?.id ?? "");
   const active = tender.questions.find((question) => question.id === activeId) ?? tender.questions[0];
@@ -1049,7 +1073,7 @@ function Respond({ tender, draftAnswer, markAnswerReady, uploadTenderFile, loadi
             <p>“{tender.aiUsePolicy.quote}” — {tender.aiUsePolicy.source || "tender pack"}. Enable no-AI mode for this tender before using any draft control.</p>
           </div>
         )}
-        <div className="answer-head"><div><p className="eyebrow">SCORED QUESTION · {active.weight}%</p><h2>{active.title}</h2><p>{active.prompt}</p></div><div className="mark-badge"><strong>{active.weight}</strong><small>marks</small></div></div>
+        <div className="answer-head"><div><p className="eyebrow">SCORED QUESTION · {active.weight}%</p><h2>{active.title}</h2><p>{active.prompt}</p><ProvenanceBadge entry={active.provenance} /></div><div className="mark-badge"><strong>{active.weight}</strong><small>marks</small></div></div>
         <div className="answer-brief"><div><span>✦</span><p><strong>Tenderly writing brief</strong><small>Answer the question directly, lead with the outcome, evidence every material claim, and reserve ~10% of words for measurable controls and assurance.</small></p></div><button>View scoring logic</button></div>
         <div className="editor-toolbar"><button><b>B</b></button><button><i>I</i></button><button>≡</button><button>• list</button><span /><button>Insert evidence ⌄</button></div>
         <textarea value={active.answer} onChange={(event) => updateQuestion(active.id, event.target.value)} placeholder="Draft your response here, or ask Tenderly to build a first draft from verified evidence…" />

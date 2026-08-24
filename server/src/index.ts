@@ -8,14 +8,41 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { accountId, actorEmail, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
 import { aiConfigured, aiModel, analyseTender, draftBidAnswer } from "./ai.js";
+import { classForHumanEdit } from "./provenance.js";
+import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
 import { combineSourceText, extractDocumentText } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender, scoreTenderPreview } from "./etenders.js";
 import {
-  addEvidence, addPerson, createUser, findUserByEmail, getCompany, getPreferences, getTender, getUserById, initializeDatabase, migrateAnalysisSchema, savePreferences,
-  listAnswers, listDocuments, listEvidence, listNotifications, listPeople, listTenders, persistentDatabase, saveAnswer,
-  saveDocument, saveTenderAnalysis, setEvidenceVerified, updateCompany, updateTenderMetadata, upsertTender,
+  addEvidence,
+  addPerson,
+  createUser,
+  findUserByEmail,
+  getCompany,
+  getPreferences,
+  getTender,
+  getUserById,
+  initializeDatabase,
+  listAnswers,
+  listDocuments,
+  listEvidence,
+  listNotifications,
+  listPeople,
+  listProvenance,
+  listTenders,
+  migrateAnalysisSchema,
+  persistentDatabase,
+  recordProvenance,
+  saveAnswer,
+  saveDocument,
+  savePreferences,
+  saveTenderAnalysis,
+  setEvidenceVerified,
+  tenderProvenance,
+  updateCompany,
+  updateTenderMetadata,
+  upsertTender,
 } from "./db.js";
 import { runDiscoveryJob } from "./jobs.js";
 import { createSubmissionPack, createSynopsisDeck, packFilename, submissionBlockers } from "./pack.js";
@@ -68,8 +95,8 @@ function routeParam(value: string | string[]) {
 
 async function tenderWithAnswers(account: string, tender: TenderRecord) {
   // Evidence decides whether a required certificate is satisfied.
-  const [answers, evidence] = await Promise.all([listAnswers(tender.id), listEvidence(account)]);
-  return serializeTender(tender, answers, evidence);
+  const [answers, evidence, provenance] = await Promise.all([listAnswers(tender.id), listEvidence(account), tenderProvenance(tender.id)]);
+  return serializeTender(tender, answers, evidence, provenance);
 }
 
 async function analyseSavedTender(account: string, tenderId: string) {
@@ -294,7 +321,13 @@ app.post("/api/tenders/:id/answers/:questionId/draft", async (req: Authenticated
     if (!question) return res.status(404).json({ error: "Scored question not found" });
     const [company, evidence, people, answers] = await Promise.all([getCompany(account), listEvidence(account), listPeople(account), listAnswers(tender.id)]);
     const draft = await draftBidAnswer({ tender, company, question, evidence, people, existingAnswers: answers });
-    await saveAnswer(tender.id, question.id, draft.answer, draft.missingInputs.length ? "needs-input" : "draft", draft.evidenceUsed);
+    const saved = await saveAnswer(tender.id, question.id, draft.answer, draft.missingInputs.length ? "needs-input" : "draft", draft.evidenceUsed);
+    // The ledger records that a model wrote this text, and which one.
+    await recordProvenance({
+      answerId: saved.id, section: "body", class: "ai-generated",
+      model: aiModel(), promptVersion: DRAFTING_PROMPT_VERSION,
+      evidenceIds: draft.evidenceUsed, actor: actorEmail(req),
+    });
     res.json(draft);
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
@@ -308,7 +341,31 @@ app.put("/api/tenders/:id/answers/:questionId", async (req: AuthenticatedRequest
     if (!tender.analysis.questions.some((question) => question.id === questionId)) return res.status(404).json({ error: "Scored question not found" });
     const input = z.object({ response: z.string().max(120_000), status: z.enum(["draft", "ready", "needs-input"]).default("draft") }).parse(req.body);
     const answer = await saveAnswer(tender.id, questionId, input.response, input.status);
+    // Editing text a model produced does not erase that a model produced it.
+    const history = await listProvenance(answer.id);
+    await recordProvenance({
+      answerId: answer.id, section: "body", class: classForHumanEdit(history),
+      evidenceIds: answer.evidence, actor: actorEmail(req),
+    });
     res.json({ answer });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * The full ledger for one answer, oldest first. There is no counterpart that
+ * writes here: entries are only ever appended as a side effect of drafting or
+ * saving, and the table itself refuses updates.
+ */
+app.get("/api/tenders/:id/answers/:questionId/provenance", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const questionId = routeParam(req.params.questionId);
+    const answers = await listAnswers(tender.id);
+    const answer = answers.find((item) => item.questionId === questionId);
+    if (!answer) return res.status(404).json({ error: "No saved answer for this question" });
+    res.json({ entries: await listProvenance(answer.id) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

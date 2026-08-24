@@ -395,3 +395,22 @@ button:disabled { cursor: wait; opacity: .62; }
 .ai-policy-prompt { margin-bottom: 18px; padding: 14px 18px; border: 1px solid var(--red); background: var(--red-soft); border-radius: 12px; }
 .ai-policy-prompt strong { display: block; color: var(--red); font-size: 13px; }
 .ai-policy-prompt p { margin: 6px 0 0; font-size: 12px; color: var(--ink-2); }
+
+/* TLY-73 — how a response section came to exist. */
+.provenance-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.provenance-badge span { font-weight: 600; letter-spacing: 0.02em; }
+.provenance-badge small { color: var(--muted); font-size: 11px; }
+.provenance-badge.ai-generated { border-color: var(--amber); background: var(--amber-soft); color: var(--amber); }
+.provenance-badge.ai-assisted { border-color: var(--line); background: var(--paper); color: var(--ink-2); }
+.provenance-badge.human { border-color: var(--green); background: var(--green-soft); color: var(--green-2); }

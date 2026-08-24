@@ -173,6 +173,25 @@ export type BidAnswer = {
   evidence: string[];
 };
 
+/** How much of a response section a machine produced. See src/provenance.ts. */
+export type ProvenanceClass = "ai-generated" | "ai-assisted" | "human";
+
+/** One append-only ledger entry against a saved answer. */
+export type ProvenanceEntry = {
+  id: string;
+  answerId: string;
+  /** Which part of the answer this covers. Whole-answer entries use "body". */
+  section: string;
+  class: ProvenanceClass;
+  /** Absent for human entries — nothing generated the text. */
+  model?: string;
+  promptVersion?: string;
+  evidenceIds: string[];
+  /** The email of the account that caused the entry. */
+  actor: string;
+  createdAt: string;
+};
+
 export type PersonRecord = {
   id: string;
   accountId: string;
