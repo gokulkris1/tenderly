@@ -1,5 +1,6 @@
-import type { AiUsePolicy as AiUsePolicyWire, Tender } from "@tenderly/shared";
+import type { AiUsePolicy as AiUsePolicyWire, TenderCpv as TenderCpvWire, Tender } from "@tenderly/shared";
 import { ANALYSIS_SCHEMA_VERSION, orphanedAnswers } from "./analysis-schema.js";
+import { normaliseCpv } from "./cpv.js";
 import { badgeFor } from "./provenance.js";
 import type { BidAnswer, EvidenceRecord, ProvenanceEntry, PublicTender, RequiredCertificate, TenderAnalysis, TenderRecord } from "./types.js";
 
@@ -76,6 +77,29 @@ export function aiUsePolicy(
     quote: policy.evidence.quote,
     confidence: policy.evidence.confidence,
     acknowledgement: ack,
+  };
+}
+
+/**
+ * How a tender's CPV is presented.
+ *
+ * A code we hold is shown canonically with its description. Anything else is
+ * shown exactly as the source wrote it, marked unrecognised — inventing a
+ * description for a code we do not have would be a guess presented as a fact.
+ */
+export function tenderCpv(tender: TenderRecord): TenderCpvWire | undefined {
+  const raw = ["CPV Codes", "cpv", "CPV", "classification-cpv"]
+    .map((key) => tender.metadata[key])
+    .find((value) => typeof value === "string" && value.trim().length > 0) as string | undefined;
+  if (!raw) return undefined;
+  const normalised = normaliseCpv(raw);
+  if (!normalised) return { raw, recognised: false };
+  return {
+    raw,
+    code: normalised.code,
+    description: normalised.description,
+    ancestors: normalised.ancestors.map((entry) => ({ code: entry.code, description: entry.description })),
+    recognised: true,
   };
 }
 
@@ -169,6 +193,7 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
     })),
     requiredCertificates: certificateStatus(analysis?.requiredCertificates ?? [], evidence),
     aiUsePolicy: aiUsePolicy(analysis?.aiUsePolicy, tender.metadata.aiPolicyAcknowledgement),
+    cpv: tenderCpv(tender),
     noAiMode: tender.metadata.noAiMode === true,
   };
 }

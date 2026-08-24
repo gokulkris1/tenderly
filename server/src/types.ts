@@ -148,6 +148,8 @@ export type TenderRecord = PublicTender & {
   id: string;
   accountId: string;
   source: string;
+  /** Canonical eight-digit CPV, absent when the notice carries no readable code. */
+  cpvNormalised?: string;
   metadata: Record<string, unknown>;
   analysis: TenderAnalysis | null;
 };
