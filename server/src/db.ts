@@ -1394,6 +1394,7 @@ const toAnswerVersion = (row: Record<string, unknown>): AnswerVersion => ({
   provenanceClass: row.provenance_class as AnswerVersion["provenanceClass"],
   actor: String(row.actor ?? ""),
   restoredFrom: (row.restored_from as string | null) ?? undefined,
+  steering: String(row.steering ?? "") || undefined,
   createdAt: new Date(row.created_at as string).toISOString(),
 });
 
@@ -1407,9 +1408,10 @@ export async function recordAnswerVersion(input: Omit<AnswerVersion, "id" | "cre
   const version: AnswerVersion = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
   if (!pool) { memory.answerVersions.push(version); return version; }
   await pool.query(
-    `INSERT INTO answer_versions(id,answer_id,response,status,provenance_class,actor,restored_from)
-     VALUES($1,$2,$3,$4,$5,$6,$7)`,
-    [version.id, version.answerId, version.response, version.status, version.provenanceClass, version.actor, version.restoredFrom ?? null],
+    `INSERT INTO answer_versions(id,answer_id,response,status,provenance_class,actor,restored_from,steering)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [version.id, version.answerId, version.response, version.status, version.provenanceClass, version.actor,
+     version.restoredFrom ?? null, version.steering ?? ""],
   );
   return version;
 }

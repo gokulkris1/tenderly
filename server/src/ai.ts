@@ -1,11 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { answerCritiqueSchema, bidAnswerDraftSchema, cvExtractionSchema, decisionRationaleSchema, mockEvaluationSchema, packAnswerSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
-import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, ASK_PROMPT, CRITIQUE_PROMPT, CV_PROMPT, DRAFTING_PROMPT, EVALUATION_PROMPT, RATIONALE_PROMPT } from "./prompts/index.js";
+import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, ASK_PROMPT, CRITIQUE_PROMPT, CV_PROMPT, DRAFTING_PROMPT, EVALUATION_PROMPT, RATIONALE_PROMPT, REFINE_PROMPT } from "./prompts/index.js";
 import { withStableIds } from "./analysis-schema.js";
 import { exclusionNotes, partitionEvidence, resolveCitations } from "./citations.js";
 import { reconcileGates, rollUpEligibility } from "./eligibility.js";
 import { partialJsonString } from "./streaming.js";
+import { neutraliseEnvelopeMarkers } from "./documents.js";
 import { recordUsage } from "./db.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, TenderAnalysis, TenderRecord, UsageEvent } from "./types.js";
 
@@ -287,6 +288,56 @@ export async function streamBidAnswer(args: {
   }
 
   const draft = parseToolResult(response, bidAnswerDraftSchema, "drafting") as BidAnswerDraft;
+  return { ...draft, citations: resolveCitations(draft.evidenceUsed, citable) };
+}
+
+/** The envelope the steering instruction travels in. It is data, not instruction. */
+export const STEERING_OPEN = "<<<STEERING_INSTRUCTION>>>";
+export const STEERING_CLOSE = "<<<END_STEERING_INSTRUCTION>>>";
+
+/**
+ * Revises an answer according to an instruction the bidder wrote.
+ *
+ * The instruction is untrusted input and is wrapped like a tender document,
+ * with anything imitating a marker neutralised first — otherwise an instruction
+ * could close its own envelope and the rest would read as a system rule.
+ */
+export async function refineBidAnswer(args: {
+  tender: TenderRecord;
+  company: CompanyProfile;
+  question: TenderAnalysis["questions"][number];
+  answer: string;
+  steering: string;
+  evidence: EvidenceRecord[];
+  people: PersonRecord[];
+}) {
+  if (!client) throw new Error("Configure ANTHROPIC_API_KEY to refine bid responses");
+
+  const { citable, excluded } = partitionEvidence(args.evidence);
+  const steering = `${STEERING_OPEN}\n${neutraliseEnvelopeMarkers(args.steering.slice(0, 4000))}\n${STEERING_CLOSE}`;
+  const payload = {
+    tender: { title: args.tender.title, authority: args.tender.authority },
+    question: args.question,
+    currentAnswer: args.answer,
+    bidderProfile: args.company,
+    approvedEvidence: citable.map((item) => ({ name: item.name, kind: item.kind, content: item.content })),
+    evidenceHeldButUnusable: exclusionNotes(excluded),
+    people: args.people,
+  };
+  const { tool, choice } = forcedTool("record_bid_answer", "Record the revised answer to this scored question.", bidAnswerDraftSchema);
+  const response = await callModel({
+    kind: "draft", accountId: args.tender.accountId, tenderId: args.tender.id,
+    request: {
+      model,
+      max_tokens: DRAFT_MAX_TOKENS,
+      system: REFINE_PROMPT,
+      messages: [{ role: "user", content: `${JSON.stringify(payload)}\n\n${steering}` }],
+      tools: [tool],
+      tool_choice: choice,
+      output_config: { effort: "high" },
+    },
+  });
+  const draft = parseToolResult(response, bidAnswerDraftSchema, "refinement") as BidAnswerDraft;
   return { ...draft, citations: resolveCitations(draft.evidenceUsed, citable) };
 }
 

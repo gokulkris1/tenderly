@@ -22,6 +22,13 @@ export type AnswerVersion = {
   actor: string;
   /** Set when this version was produced by restoring an earlier one. */
   restoredFrom?: string;
+  /**
+   * The steering instruction that produced this version, when one did.
+   *
+   * "Shorten to 150 words" is why this version differs from the one before it,
+   * and a history showing four timestamps and no reasons is one nobody reads.
+   */
+  steering?: string;
   createdAt: string;
 };
 

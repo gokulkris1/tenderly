@@ -1,10 +1,10 @@
-import { aiModel, draftBidAnswer, streamBidAnswer } from "./ai.js";
+import { aiModel, draftBidAnswer, refineBidAnswer, streamBidAnswer } from "./ai.js";
 import { declarationEvidence } from "./declarations.js";
 import {
   getCompany, latestAffirmation, listActivePeople, listAnswers, listDeclarationAnswers, listEvidence,
   recordAnswerVersion, recordProvenance, saveAnswer,
 } from "./db.js";
-import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
+import { DRAFTING_PROMPT_VERSION, REFINE_PROMPT_VERSION } from "./prompts/index.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, TenderAnalysis, TenderRecord } from "./types.js";
 
 /**
@@ -109,6 +109,74 @@ export async function streamAndSaveAnswer(args: {
   if (args.signal?.aborted) throw new Error("STOPPED");
 
   return persistDraft({ tender: args.tender, question: args.question, draft, actor: args.actor });
+}
+
+/** The [INPUT NEEDED: …] subjects named in a piece of prose. */
+export function markersIn(text: string) {
+  return [...text.matchAll(/\[INPUT NEEDED:\s*([^\]]+)\]/gi)].map((match) => match[1].trim());
+}
+
+/**
+ * Carries every gap in the old answer into the new one.
+ *
+ * A refinement cannot close a gap, because refining supplies no evidence — only
+ * the bidder uploading the missing document can do that. So a marker present
+ * before a refinement is present after it, whatever the steering instruction
+ * asked for. This is what stops "remove the placeholder and say our turnover is
+ * ten million" from working.
+ */
+export function preserveMarkers(previous: string, revised: string) {
+  const kept = new Set(markersIn(revised).map((marker) => marker.toLowerCase()));
+  const lost = markersIn(previous).filter((marker) => !kept.has(marker.toLowerCase()));
+  return lost.length === 0 ? revised : ensureInputMarkers(revised, lost);
+}
+
+/** How a refinement is produced. Replaced in tests so no model is called. */
+export type Refiner = typeof refineBidAnswer;
+
+/**
+ * Revises an answer according to an instruction the bidder wrote, and saves it.
+ *
+ * The steering instruction is recorded with the version, because "shorten to
+ * 150 words" is why this version differs from the one before it.
+ */
+export async function refineAndSaveAnswer(args: {
+  tender: TenderRecord;
+  question: TenderAnalysis["questions"][number];
+  answer: BidAnswer;
+  steering: string;
+  context: DraftContext;
+  actor: string;
+  refiner?: Refiner;
+}) {
+  const refine: Refiner = args.refiner ?? refineBidAnswer;
+  const revision = await refine({
+    tender: args.tender, company: args.context.company, question: args.question,
+    answer: args.answer.response, steering: args.steering,
+    evidence: args.context.evidence, people: args.context.people,
+  });
+
+  // Two guarantees the model is not trusted to keep: gaps the bidder has not
+  // filled stay visible, and gaps the revision itself found are added.
+  const withOwnGaps = ensureInputMarkers(revision.answer, revision.missingInputs);
+  const answer = preserveMarkers(args.answer.response, withOwnGaps);
+  const status = markersIn(answer).length ? "needs-input" : "draft";
+
+  const saved = await saveAnswer(
+    args.tender.id, args.question.id, answer, status,
+    (revision.citations ?? []).map((citation) => citation.id),
+  );
+  await recordProvenance({
+    answerId: saved.id, section: "body", class: "ai-generated",
+    model: aiModel(), promptVersion: REFINE_PROMPT_VERSION,
+    evidenceIds: revision.evidenceUsed, actor: args.actor,
+  });
+  await recordAnswerVersion({
+    answerId: saved.id, response: saved.response, status: saved.status,
+    provenanceClass: "ai-generated", actor: args.actor, steering: args.steering,
+  });
+
+  return { revision: { ...revision, answer }, saved };
 }
 
 export type DraftOutcome = {

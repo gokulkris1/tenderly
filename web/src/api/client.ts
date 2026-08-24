@@ -253,6 +253,19 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       return done;
     },
 
+    /**
+     * Revises an answer according to an instruction the user wrote.
+     *
+     * The instruction steers style, length and emphasis; the server refuses to
+     * let it supply a fact or remove an [INPUT NEEDED] placeholder.
+     */
+    refineAnswer: (tenderId: string, questionId: string, steering: string) =>
+      request<{
+        answer: string; status: string; words: number; missingInputs: string[];
+        citations: { id: string; name: string; hasFile: boolean }[]; claimsToVerify: string[];
+      }>(`/api/tenders/${tenderId}/answers/${encodeURIComponent(questionId)}/refine`, "Refine",
+        { method: "POST", body: JSON.stringify({ steering }) }),
+
     /** Starts a run and returns immediately; progress comes from draftRun. */
     draftAll: (tenderId: string) =>
       request<{ run: DraftRun; summary: DraftRunState["summary"] }>(
