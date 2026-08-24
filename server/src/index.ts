@@ -33,6 +33,7 @@ import {
   knownBuyersFor,
   listAnswers,
   listAudit,
+  listBidDecisions,
   listDocuments,
   listEvidence,
   listNotifications,
@@ -43,6 +44,7 @@ import {
   migrateAnalysisSchema,
   monthlyUsage,
   persistentDatabase,
+  recordBidDecision,
   recordProvenance,
   saveAnswer,
   saveDocument,
@@ -172,6 +174,7 @@ async function tenderWithAnswers(account: string, tender: TenderRecord) {
       note: usable ? undefined : "Rationale unavailable",
     };
   }
+  serialized.bidDecisions = await listBidDecisions(tender.id).catch(() => []);
   return serialized;
 }
 
@@ -558,6 +561,43 @@ app.put("/api/tenders/:id/lots", async (req: AuthenticatedRequest, res) => {
 
     await updateTenderMetadata(account, tender.id, { selectedLots: lotIds });
     res.json({ tender: await tenderWithAnswers(account, (await getTender(account, tender.id))!) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Records the company's decision about a tender.
+ *
+ * The recommendation is advice. Where the human goes against it, a reason is
+ * required — not to argue with them, but so that the choice can be understood
+ * later by someone who was not in the room.
+ */
+app.post("/api/tenders/:id/decision", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const input = z.object({
+      decision: z.enum(["BID", "NO_BID"]),
+      reason: z.string().max(2000).default(""),
+    }).parse(req.body);
+
+    const serialized = await tenderWithAnswers(account, tender);
+    const recommendation = serialized.recommendation?.decision ?? serialized.decision;
+    const overriding = (input.decision === "BID" && (recommendation === "NO_GO" || recommendation === "REVIEW"))
+      || (input.decision === "NO_BID" && recommendation === "GO");
+    if (overriding && !input.reason.trim()) {
+      return res.status(400).json({ error: "A reason is required when overriding the recommendation" });
+    }
+
+    const record = await recordBidDecision({
+      tenderId: tender.id, decision: input.decision, reason: input.reason.trim(),
+      decidedBy: actorEmail(req), recommendationAtTheTime: recommendation,
+    });
+    await audit(req, {
+      action: AUDIT_ACTIONS.bidDecisionRecorded, subjectType: "tender", subjectId: tender.id,
+      subjectLabel: tender.title, metadata: { decision: record.decision, recommendation },
+    });
+    res.status(201).json({ decision: record });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

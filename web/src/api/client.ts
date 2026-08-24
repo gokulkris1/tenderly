@@ -11,6 +11,7 @@ import type {
   Attestation,
   AttestationState,
   AuditEntry,
+  BidDecisionRecord,
   CompanyProfile,
   DiscoveryPreferences,
   EvidenceItem,
@@ -108,6 +109,7 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
 
     // --- workspace --------------------------------------------------------
     listTenders: () => request<{ items: Tender[] }>("/api/tenders", "Load bids"),
+    tender: (tenderId: string) => request<{ tender: Tender }>(`/api/tenders/${tenderId}`, "Load bid"),
     getCompany: () => request<{ company: CompanyProfile }>("/api/company", "Load company profile"),
     saveCompany: (company: CompanyProfile) =>
       request<{ company: CompanyProfile }>("/api/company", "Save company profile", {
@@ -164,6 +166,11 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       request<{ attestation: Attestation }>(`/api/tenders/${tenderId}/attestation`, "Record attestation", {
         method: "POST",
         body: JSON.stringify({ confirmed: true }),
+      }),
+    recordBidDecision: (tenderId: string, decision: "BID" | "NO_BID", reason: string) =>
+      request<{ decision: BidDecisionRecord }>(`/api/tenders/${tenderId}/decision`, "Record bid decision", {
+        method: "POST",
+        body: JSON.stringify({ decision, reason }),
       }),
     setSelectedLots: (tenderId: string, lotIds: string[]) =>
       request<{ tender: Tender }>(`/api/tenders/${tenderId}/lots`, "Select lots", {

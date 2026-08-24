@@ -18,6 +18,7 @@ export const AUDIT_ACTIONS = {
   noAiModeEnabled: "no_ai_mode.enabled",
   noAiModeDisabled: "no_ai_mode.disabled",
   aiPolicyAcknowledged: "ai_policy.acknowledged",
+  bidDecisionRecorded: "bid_decision.recorded",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

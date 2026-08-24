@@ -257,6 +257,74 @@ const aiPolicyCopy: Record<AiUsePolicy["state"], { label: string; tone: string; 
  * shown — even when the prose could not be written. The facts are listed
  * beneath the rationale so every claim in it can be checked against something.
  */
+/**
+ * The company's own decision.
+ *
+ * The recommendation is advice and this is the answer to it. Going against the
+ * recommendation needs a reason — not to argue, but so the choice can be
+ * understood later by someone who was not in the room. Changing your mind adds
+ * an entry rather than replacing one: the history is the point.
+ */
+function BidDecisionPanel({ tender, onRecord, busy }: {
+  tender: Tender; onRecord: (decision: "BID" | "NO_BID", reason: string) => void; busy: boolean;
+}) {
+  const [choice, setChoice] = useState<"BID" | "NO_BID">("BID");
+  const [reason, setReason] = useState("");
+  const history = tender.bidDecisions ?? [];
+  const latest = history[0];
+  const recommendation = tender.recommendation?.decision ?? tender.decision;
+  const overriding = (choice === "BID" && (recommendation === "NO_GO" || recommendation === "REVIEW"))
+    || (choice === "NO_BID" && recommendation === "GO");
+
+  return (
+    <section className="panel decision-panel" data-testid="bid-decision">
+      <div className="panel-heading">
+        <div><h2>Your decision</h2><p>Tenderly recommends; the company decides. Going against the recommendation needs a reason.</p></div>
+        {latest && <span className={`decision-pill decision-${latest.decision === "BID" ? "go" : "no-go"}`}>Decision: {latest.decision === "BID" ? "Bid" : "No bid"}</span>}
+      </div>
+
+      {latest && (
+        <p className="decision-current" data-testid="current-decision">
+          <strong>{latest.decision === "BID" ? "Bid" : "No bid"}</strong>
+          {latest.reason && <span> — {latest.reason}</span>}
+          <small> {latest.decidedBy} · {new Date(latest.createdAt).toLocaleString()}</small>
+        </p>
+      )}
+
+      <div className="decision-form">
+        <div className="decision-choice">
+          <label><input type="radio" name="bid-decision" checked={choice === "BID"} onChange={() => setChoice("BID")} /> Bid</label>
+          <label><input type="radio" name="bid-decision" checked={choice === "NO_BID"} onChange={() => setChoice("NO_BID")} /> No bid</label>
+        </div>
+        <input
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder={overriding ? "Required: why go against the recommendation?" : "Reason (optional)"}
+        />
+        <button className="quiet-btn" onClick={() => onRecord(choice, reason)} disabled={busy || (overriding && !reason.trim())}>
+          {busy ? "Saving…" : latest ? "Change decision" : "Record decision"}
+        </button>
+      </div>
+      {overriding && !reason.trim() && <p className="decision-warning">A reason is required when overriding the recommendation</p>}
+
+      {history.length > 1 && (
+        <details className="decision-history" data-testid="decision-history">
+          <summary>{history.length} decisions recorded</summary>
+          <ul>
+            {history.map((entry) => (
+              <li key={entry.id}>
+                <strong>{entry.decision === "BID" ? "Bid" : "No bid"}</strong>
+                {entry.reason && <span>{entry.reason}</span>}
+                <small>{entry.decidedBy} · {new Date(entry.createdAt).toLocaleString()} · recommended {entry.recommendationAtTheTime}</small>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
+  );
+}
+
 function RecommendationPanel({ recommendation }: { recommendation?: Recommendation }) {
   if (!recommendation) return null;
   return (
@@ -789,6 +857,22 @@ export default function TenderlyApp() {
     }
   }
 
+  async function recordBidDecision(decision: "BID" | "NO_BID", reason: string) {
+    if (!selected) return;
+    if (isDemo) { setToast(`Decision recorded: ${decision === "BID" ? "Bid" : "No bid"}`); return; }
+    try {
+      setLoading("decision");
+      await apiClient.recordBidDecision(selected.id, decision, reason);
+      const { tender } = await apiClient.tender(selected.id);
+      setTenders((items) => items.map((item) => (item.id === tender.id ? tender : item)));
+      setToast(`Decision recorded: ${decision === "BID" ? "Bid" : "No bid"}`);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not record the decision");
+    } finally {
+      setLoading("");
+    }
+  }
+
   async function setSelectedLots(lotIds: string[]) {
     if (!selected) return;
     if (isDemo) { setToast(lotIds.length ? `Bidding ${lotIds.join(", ")}` : "All lots in scope"); return; }
@@ -1052,6 +1136,7 @@ export default function TenderlyApp() {
             <BidWorkspace
               acknowledgeAiPolicy={acknowledgeAiPolicy}
               setSelectedLots={setSelectedLots}
+              recordBidDecision={recordBidDecision}
               setNoAiMode={setNoAiMode}
               critiqueAnswer={critiqueAnswer}
               critique={critique}
@@ -1227,8 +1312,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, setSelectedLots, setNoAiMode, critiqueAnswer, critique, attestation, onAttest, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, attestation, onAttest, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -1268,6 +1353,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
             </section>
 
             <RecommendationPanel recommendation={tender.recommendation} />
+            <BidDecisionPanel tender={tender} onRecord={recordBidDecision} busy={loading === "decision"} />
             <LotSelector lots={tender.lots ?? []} selected={tender.selectedLots ?? []} onChange={setSelectedLots} busy={loading === "lots"} />
             <AiUsePolicyPanel policy={tender.aiUsePolicy} onAcknowledge={acknowledgeAiPolicy} busy={loading === "ai-policy"} />
             <AwardHistory data={tender.awardIntelligence} />
@@ -1302,7 +1388,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
       )}
 
       {stage === "Synopsis" && <Synopsis tender={tender} onDownload={() => downloadAsset("deck")} onContinue={() => setStage("Respond")} loading={loading === "deck"} />}
-      {stage === "Respond" && <Respond tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
+      {stage === "Respond" && <Respond tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} onBackToQualify={() => setStage("Qualify")} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
       {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} attestation={attestation} onAttest={onAttest} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
       {stage === "Submit" && <Submit tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
     </div>
@@ -1366,7 +1452,7 @@ function ProvenanceBadge({ entry }: { entry?: ProvenanceEntry }) {
   );
 }
 
-function Respond({ tender, setNoAiMode, critiqueAnswer, critique, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue }: { tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
+function Respond({ tender, setNoAiMode, critiqueAnswer, critique, onBackToQualify, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue }: { tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; onBackToQualify: () => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
   const [activeId, setActiveId] = useState(tender.questions[0]?.id ?? "");
   const active = tender.questions.find((question) => question.id === activeId) ?? tender.questions[0];
   if (!active) return <div className="no-questions panel"><span>◇</span><h2>Import the full tender pack first</h2><p>The notice gives Tenderly the opportunity metadata. The RFT / RFQ documents are needed to extract scored questions, word limits, mandatory roles and response templates.</p><FileButton label={loading === "upload" ? "Uploading…" : "Upload tender documents"} accept=".pdf,.docx,.xlsx,.xls,.pptx,.zip,.txt,.xml" onFile={(file) => uploadTenderFile(file, "source")} /></div>;
@@ -1387,6 +1473,13 @@ function Respond({ tender, setNoAiMode, critiqueAnswer, critique, draftAnswer, m
         )}
       </aside>
       <section className="answer-editor">
+        {(tender.bidDecisions?.length ?? 0) === 0 && (
+          <div className="ai-policy-prompt" data-testid="decision-required">
+            <strong>Record your bid decision first.</strong>
+            <p>Tenderly recommends; the company decides. Go back to Qualify and record whether you are bidding before writing the response.</p>
+            <button className="quiet-btn" onClick={onBackToQualify}>Back to Qualify</button>
+          </div>
+        )}
         {tender.noAiMode ? (
           <div className="no-ai-banner" data-testid="no-ai-banner">
             <strong>No-AI mode: generation disabled for this tender</strong>

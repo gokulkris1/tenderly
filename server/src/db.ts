@@ -8,6 +8,7 @@ import { canonicalKey } from "./dedupe.js";
 import type {
   AuditEntry,
   BidAnswer,
+  BidDecisionRecord,
   CompanyProfile,
   DiscoveryPreferences,
   EvidenceRecord,
@@ -50,6 +51,7 @@ const memory = {
   provenance: [] as ProvenanceEntry[],
   usage: [] as UsageEvent[],
   audit: [] as AuditEntry[],
+  bidDecisions: [] as BidDecisionRecord[],
 };
 
 /**
@@ -559,6 +561,36 @@ export async function listAudit(accountId: string, filter: { action?: string; si
     metadata: row.metadata ?? {}, requestId: row.request_id ?? undefined,
     createdAt: new Date(row.created_at).toISOString(),
   } as AuditEntry));
+}
+
+/**
+ * Records the company's decision. Append-only by construction: changing your
+ * mind adds an entry, it does not overwrite the earlier one — the history is
+ * the point.
+ */
+export async function recordBidDecision(input: Omit<BidDecisionRecord, "id" | "createdAt">) {
+  const record: BidDecisionRecord = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.bidDecisions.push(record); return record; }
+  await pool.query(
+    `INSERT INTO bid_decisions(id,tender_id,decision,reason,decided_by,recommendation_at_the_time)
+     VALUES($1,$2,$3,$4,$5,$6)`,
+    [record.id, record.tenderId, record.decision, record.reason, record.decidedBy, record.recommendationAtTheTime],
+  );
+  return record;
+}
+
+/** The decision history for one tender, newest first. */
+export async function listBidDecisions(tenderId: string) {
+  if (!pool) {
+    return memory.bidDecisions.filter((entry) => entry.tenderId === tenderId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const result = await pool.query("SELECT * FROM bid_decisions WHERE tender_id=$1 ORDER BY created_at DESC, id", [tenderId]);
+  return result.rows.map((row) => ({
+    id: row.id, tenderId: row.tender_id, decision: row.decision, reason: row.reason,
+    decidedBy: row.decided_by, recommendationAtTheTime: row.recommendation_at_the_time,
+    createdAt: new Date(row.created_at).toISOString(),
+  } as BidDecisionRecord));
 }
 
 export async function addEvidence(accountId: string, input: Omit<EvidenceRecord, "id" | "accountId">) {
