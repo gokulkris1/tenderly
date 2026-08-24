@@ -7,12 +7,13 @@
  * from here rather than calling fetch.
  */
 import type {
+  AiPolicyAcknowledgement,
   CompanyProfile,
   DiscoveryPreferences,
-  SectorPreset,
   EvidenceItem,
   NotificationItem,
   PersonItem,
+  SectorPreset,
   Tender,
 } from "@tenderly/shared";
 
@@ -152,6 +153,11 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       request<unknown>(`/api/tenders/${tenderId}/answers/${questionId}`, "Save answer", {
         method: "PUT",
         body: JSON.stringify({ response, status }),
+      }),
+    acknowledgeAiPolicy: (tenderId: string, action: "confirmed" | "dismissed") =>
+      request<{ acknowledgement: AiPolicyAcknowledgement }>(`/api/tenders/${tenderId}/ai-policy/acknowledge`, "Acknowledge AI policy", {
+        method: "POST",
+        body: JSON.stringify({ action }),
       }),
     setChecklistStatus: (tenderId: string, itemId: string, status: string) =>
       request<unknown>(`/api/tenders/${tenderId}/checklist/${itemId}`, "Update checklist", {

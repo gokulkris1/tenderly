@@ -75,6 +75,17 @@ export const requiredCertificateSchema = z.object({
   evidence: sourceEvidenceSchema,
 });
 
+/**
+ * What the pack says about using AI to produce the response.
+ *
+ * `not-stated` is its own state, distinct from `unrestricted`: silence is not
+ * permission, and the difference matters to a bidder deciding whether to draft.
+ */
+export const aiUsePolicySchema = z.object({
+  state: z.enum(["prohibited", "disclosure-required", "unrestricted", "not-stated"]),
+  evidence: sourceEvidenceSchema,
+});
+
 export const submissionChecklistItemSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -116,6 +127,7 @@ export const tenderAnalysisSchema = z.object({
   submissionMethod: z.string(),
   formalities: z.array(submissionFormalitySchema),
   requiredCertificates: z.array(requiredCertificateSchema),
+  aiUsePolicy: aiUsePolicySchema,
   submissionChecklist: z.array(submissionChecklistItemSchema),
   synopsisSlides: z.array(z.object({ title: z.string(), bullets: z.array(z.string()) })),
 });

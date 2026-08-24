@@ -380,3 +380,18 @@ button:disabled { cursor: wait; opacity: .62; }
 .notice-source { font-weight: 600; border-radius: 5px; padding: 1px 6px; font-size: 11px; }
 .notice-source.etenders { background: var(--green-soft); color: var(--green-2); }
 .notice-source.ted { background: #e7eefb; color: #23477f; }
+
+/* TLY-74 — what the pack says about producing the response with AI. */
+.ai-policy-panel .panel-heading { align-items: flex-start; }
+.ai-policy-flag { flex: none; padding: 6px 12px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+.ai-policy-flag.fail { background: var(--red-soft); color: var(--red); border: 1px solid var(--red); }
+.ai-policy-flag.review { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber); }
+.ai-policy-flag.pass { background: var(--green-soft); color: var(--green-2); border: 1px solid var(--green); }
+.ai-policy-quote { margin: 14px 0 0; padding: 12px 16px; border-left: 3px solid var(--line); background: var(--paper); border-radius: 0 8px 8px 0; font-size: 13px; }
+.ai-policy-quote.empty { color: var(--muted); font-style: italic; }
+.ai-policy-quote cite { display: block; margin-top: 8px; font-size: 11px; font-style: normal; color: var(--muted); }
+.ai-policy-actions { display: flex; gap: 10px; margin-top: 14px; }
+.ai-policy-ack { margin: 14px 0 0; font-size: 12px; color: var(--muted); }
+.ai-policy-prompt { margin-bottom: 18px; padding: 14px 18px; border: 1px solid var(--red); background: var(--red-soft); border-radius: 12px; }
+.ai-policy-prompt strong { display: block; color: var(--red); font-size: 13px; }
+.ai-policy-prompt p { margin: 6px 0 0; font-size: 12px; color: var(--ink-2); }

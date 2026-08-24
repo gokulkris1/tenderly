@@ -31,3 +31,9 @@ export function accountId(req: AuthenticatedRequest) {
   if (!req.auth?.accountId) throw new Error("AUTH_REQUIRED");
   return req.auth.accountId;
 }
+
+/** The acting user's email, recorded when a person acknowledges or attests. */
+export function actorEmail(req: AuthenticatedRequest) {
+  if (!req.auth?.email) throw new Error("AUTH_REQUIRED");
+  return req.auth.email;
+}

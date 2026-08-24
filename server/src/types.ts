@@ -68,6 +68,15 @@ export type RequiredCertificate = {
   evidence: SourceEvidence;
 };
 
+/**
+ * What the pack says about using AI to produce the response. `not-stated` is
+ * deliberately distinct from `unrestricted`: silence is not permission.
+ */
+export type AiUsePolicy = {
+  state: "prohibited" | "disclosure-required" | "unrestricted" | "not-stated";
+  evidence: SourceEvidence;
+};
+
 export type SubmissionChecklistItem = {
   id: string;
   label: string;
@@ -105,6 +114,7 @@ export type TenderAnalysis = {
   submissionMethod: string;
   formalities: SubmissionFormality[];
   requiredCertificates: RequiredCertificate[];
+  aiUsePolicy?: AiUsePolicy;
   submissionChecklist: SubmissionChecklistItem[];
   synopsisSlides: Array<{ title: string; bullets: string[] }>;
 };

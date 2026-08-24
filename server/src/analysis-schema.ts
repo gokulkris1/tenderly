@@ -10,8 +10,11 @@ import type { BidAnswer, TenderAnalysis } from "./types.js";
  *
  * 1 — original, unversioned: question ids invented by the model on every run.
  * 2 — question and checklist ids derived from their own text (TLY-40).
+ * 3 — aiUsePolicy: what the pack says about producing the response with AI
+ *     (TLY-74). Absent on older analyses, which is why it reads as not-stated
+ *     rather than unrestricted until the tender is analysed again.
  */
-export const ANALYSIS_SCHEMA_VERSION = "2";
+export const ANALYSIS_SCHEMA_VERSION = "3";
 
 /**
  * Identifiers must be a function of the question itself, not of when it was

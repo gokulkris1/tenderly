@@ -6,7 +6,7 @@ import rateLimit from "express-rate-limit";
 import multer from "multer";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { accountId, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
+import { accountId, actorEmail, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
 import { aiConfigured, aiModel, analyseTender, draftBidAnswer } from "./ai.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
@@ -323,6 +323,23 @@ app.post("/api/tenders/:id/checklist/:itemId", async (req: AuthenticatedRequest,
     const overrides = { ...((tender.metadata.checklistOverrides ?? {}) as Record<string, string>), [itemId]: status };
     await updateTenderMetadata(account, tender.id, { checklistOverrides: overrides });
     res.json({ itemId, status });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Records that a person has seen the AI-use flag. Dismissing it does not change
+ * what the pack says — the state and its quote stay exactly as extracted — it
+ * only records who decided to proceed and when.
+ */
+app.post("/api/tenders/:id/ai-policy/acknowledge", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender?.analysis) return res.status(404).json({ error: "Tender analysis not found" });
+    const { action } = z.object({ action: z.enum(["confirmed", "dismissed"]) }).parse(req.body);
+    const acknowledgement = { action, actor: actorEmail(req), at: new Date().toISOString() };
+    await updateTenderMetadata(account, tender.id, { aiPolicyAcknowledgement: acknowledgement });
+    res.json({ acknowledgement });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

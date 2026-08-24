@@ -12,6 +12,7 @@ const validAnalysis = {
   fatalGates: [{ id: "tax", requirement: "Tax clearance", bidderEvidence: "None recorded", status: "REVIEW", action: "Upload certificate", evidence }],
   evaluationCriteria: [], questions: [], roles: [], clarificationQuestions: [], risks: [],
   submissionMethod: "eTenders", formalities: [], requiredCertificates: [], submissionChecklist: [], synopsisSlides: [],
+  aiUsePolicy: { state: "not-stated", evidence: { sourceDocument: "", quote: "", confidence: "LOW" } },
 };
 
 test("TLY-64: a well-formed analysis validates", () => {
