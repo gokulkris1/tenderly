@@ -7,12 +7,12 @@ import multer from "multer";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { accountId, actorEmail, requireAuth, signToken, type AuthenticatedRequest } from "./auth.js";
-import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer, draftDecisionRationale } from "./ai.js";
+import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer, draftDecisionRationale, extractCvRecords } from "./ai.js";
 import { badgeFor, classForHumanEdit } from "./provenance.js";
 import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
-import { combineSourceText, extractDocumentText } from "./documents.js";
+import { DOCUMENT_CLOSE, DOCUMENT_OPEN, combineSourceText, extractDocumentText, neutraliseEnvelopeMarkers } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./etenders.js";
 import { mergeNotices } from "./dedupe.js";
 import { deadlinePressure, parseDeadline } from "./pressure.js";
@@ -73,6 +73,10 @@ import {
   updateCompany,
   updatePerson,
   updateTenderMetadata,
+  confirmAllPersonFacts,
+  listPersonFacts,
+  replacePersonFacts,
+  updatePersonFact,
   upsertTender,
 } from "./db.js";
 import { AUDIT_ACTIONS, audit } from "./audit.js";
@@ -1141,8 +1145,62 @@ app.post("/api/people/upload", upload.single("file"), async (req: AuthenticatedR
     const cvText = extracted.map((entry) => entry.text).filter(Boolean).join("\n\n");
     if (!cvText) return res.status(422).json({ error: "Tenderly could not extract text from this CV" });
     const fallbackName = req.file.originalname.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
-    const person = await addPerson(accountId(req), { name: String(req.body.name || fallbackName).slice(0, 300), title: String(req.body.title || "").slice(0, 300), cvText, skills: [] });
-    res.status(201).json({ person, extractionWarnings: extracted.filter((entry) => entry.warning).map((entry) => entry.warning) });
+    const account = accountId(req);
+    const person = await addPerson(account, { name: String(req.body.name || fallbackName).slice(0, 300), title: String(req.body.title || "").slice(0, 300), cvText, skills: [] });
+
+    // Parsing runs once, here, rather than on every analysis call. A CV is a
+    // file someone else wrote, so it goes through the same untrusted-document
+    // envelope a tender pack does.
+    const enveloped = `${DOCUMENT_OPEN(`CV: ${person.name}`)}\n${neutraliseEnvelopeMarkers(cvText.slice(0, 120_000))}\n${DOCUMENT_CLOSE}`;
+    const parsed = await extractCvRecords({ accountId: account, envelopedText: enveloped });
+    const facts = [
+      ...parsed.skills.map((record) => ({ ...record, type: "skill" as const })),
+      ...parsed.roles.map((record) => ({ ...record, type: "role" as const })),
+      ...parsed.certifications.map((record) => ({ ...record, type: "certification" as const })),
+      ...parsed.experience.map((record) => ({ ...record, type: "experience" as const })),
+    ].filter((record) => record.value.trim().length > 0);
+    const records = await replacePersonFacts(person.id, facts).catch(() => [] as Awaited<ReturnType<typeof replacePersonFacts>>);
+
+    res.status(201).json({
+      person, records,
+      extractionWarnings: extracted.filter((entry) => entry.warning).map((entry) => entry.warning),
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** The parsed records for one person, unconfirmed until a human accepts them. */
+app.get("/api/people/:id/records", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const personId = routeParam(req.params.id);
+    const people = await listPeople(account);
+    if (!people.some((person) => person.id === personId)) return res.status(404).json({ error: "Person not found" });
+    res.json({ records: await listPersonFacts(personId) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** Corrects or confirms one parsed record. */
+app.put("/api/people/records/:factId", async (req: AuthenticatedRequest, res) => {
+  try {
+    const input = z.object({
+      value: z.string().min(1).max(500).optional(),
+      detail: z.string().max(500).optional(),
+      confirmed: z.boolean().optional(),
+    }).parse(req.body);
+    const record = await updatePersonFact(accountId(req), routeParam(req.params.factId), input);
+    if (!record) return res.status(404).json({ error: "Record not found" });
+    res.json({ record });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** Confirms every parsed record for a person in one action. */
+app.post("/api/people/:id/records/confirm", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const personId = routeParam(req.params.id);
+    const people = await listPeople(account);
+    if (!people.some((person) => person.id === personId)) return res.status(404).json({ error: "Person not found" });
+    res.json({ records: await confirmAllPersonFacts(account, personId) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

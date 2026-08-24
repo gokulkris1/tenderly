@@ -19,6 +19,7 @@ import type {
   DiscoveryPreferences,
   EvidenceItem,
   NotificationItem,
+  PersonFact,
   PersonItem,
   SavedSearch,
   SavedSearchFilter,
@@ -263,6 +264,16 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         `/api/people/${encodeURIComponent(personId)}/archive`, "Archive person",
         { method: "POST", body: JSON.stringify({ archived }) },
       ),
+    personRecords: (personId: string) =>
+      request<{ records: PersonFact[] }>(`/api/people/${encodeURIComponent(personId)}/records`, "Load CV records"),
+    updatePersonRecord: (factId: string, patch: { value?: string; detail?: string; confirmed?: boolean }) =>
+      request<{ record: PersonFact }>(`/api/people/records/${encodeURIComponent(factId)}`, "Update CV record", {
+        method: "PUT", body: JSON.stringify(patch),
+      }),
+    confirmPersonRecords: (personId: string) =>
+      request<{ records: PersonFact[] }>(`/api/people/${encodeURIComponent(personId)}/records/confirm`, "Confirm CV records", {
+        method: "POST", body: "{}",
+      }),
     setEvidenceVerified: (itemId: string, verified: boolean) =>
       request<{ item: EvidenceItem }>(`/api/evidence/${itemId}/verification`, "Update evidence", {
         method: "PUT",

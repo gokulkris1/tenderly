@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { answerCritiqueSchema, bidAnswerDraftSchema, decisionRationaleSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
-import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, CRITIQUE_PROMPT, DRAFTING_PROMPT, RATIONALE_PROMPT } from "./prompts/index.js";
+import { answerCritiqueSchema, bidAnswerDraftSchema, cvExtractionSchema, decisionRationaleSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
+import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, CRITIQUE_PROMPT, CV_PROMPT, DRAFTING_PROMPT, RATIONALE_PROMPT } from "./prompts/index.js";
 import { withStableIds } from "./analysis-schema.js";
 import { reconcileGates, rollUpEligibility } from "./eligibility.js";
 import { recordUsage } from "./db.js";
@@ -263,6 +263,43 @@ export async function draftDecisionRationale(args: {
   } catch (error) {
     console.error("decision rationale failed:", error instanceof Error ? error.message : error);
     return null;
+  }
+}
+
+/**
+ * Reads a CV into structured records.
+ *
+ * The text arrives inside the same untrusted-document envelope a tender pack
+ * uses: a CV is a file someone else wrote, and is exactly where an instruction
+ * would be smuggled in.
+ *
+ * Returns empty lists rather than throwing when there is no key, so uploading a
+ * CV still works — it simply produces nothing to review yet.
+ */
+export async function extractCvRecords(args: {
+  accountId: string;
+  envelopedText: string;
+}) {
+  const empty = { skills: [], roles: [], certifications: [], experience: [] };
+  if (!client) return empty;
+  const { tool, choice } = forcedTool("record_cv_facts", "Record only what the CV actually says about this person.", cvExtractionSchema);
+  try {
+    const response = await callModel({
+      kind: "critique", accountId: args.accountId,
+      request: {
+        model,
+        max_tokens: DRAFT_MAX_TOKENS,
+        system: CV_PROMPT,
+        messages: [{ role: "user", content: args.envelopedText }],
+        tools: [tool],
+        tool_choice: choice,
+        output_config: { effort: "medium" },
+      },
+    });
+    return parseToolResult(response, cvExtractionSchema, "CV extraction");
+  } catch (error) {
+    console.error("CV extraction failed:", error instanceof Error ? error.message : error);
+    return empty;
   }
 }
 

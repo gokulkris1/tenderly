@@ -165,6 +165,27 @@ export const decisionRationaleSchema = z.object({
   rationale: z.string(),
 });
 
+/**
+ * One fact read from a CV, with the line it came from.
+ *
+ * There is no field for anything derived: a reviewer has to be able to check
+ * every record against the quote beside it.
+ */
+export const personRecordSchema = z.object({
+  value: z.string(),
+  detail: z.string(),
+  period: z.string(),
+  quote: z.string(),
+  confidence: z.enum(["HIGH", "MEDIUM", "LOW"]),
+});
+
+export const cvExtractionSchema = z.object({
+  skills: z.array(personRecordSchema),
+  roles: z.array(personRecordSchema),
+  certifications: z.array(personRecordSchema),
+  experience: z.array(personRecordSchema),
+});
+
 export const bidAnswerDraftSchema = z.object({
   status: z.enum(["DRAFTED", "NEEDS_INPUT"]),
   answer: z.string(),

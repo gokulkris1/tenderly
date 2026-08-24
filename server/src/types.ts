@@ -336,6 +336,29 @@ export type PersonRecord = {
   archivedAt?: string;
 };
 
+/**
+ * One fact read from a CV.
+ *
+ * Unconfirmed until a person accepts it: a parsed claim about a named
+ * individual is a suggestion, not a fact, and it is that individual's
+ * credibility on the line in front of a buyer.
+ */
+export type PersonFact = {
+  id: string;
+  personId: string;
+  type: "skill" | "role" | "certification" | "experience";
+  value: string;
+  /** Issuing body for a certification, employer for an experience entry. */
+  detail: string;
+  /** Year or date range exactly as the CV writes it. */
+  period: string;
+  /** The line in the CV this was read from. */
+  quote: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  confirmed: boolean;
+  createdAt: string;
+};
+
 export type EvidenceRecord = {
   id: string;
   accountId: string;
