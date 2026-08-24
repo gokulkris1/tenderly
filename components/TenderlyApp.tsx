@@ -30,6 +30,7 @@ import type {
   ProvenanceEntry,
   Recommendation,
   RequiredCertificateStatus,
+  RoleMatch,
   SavedSearch,
   SavedSearchFilter,
   ScoreBreakdown,
@@ -379,6 +380,56 @@ function PressurePanel({ pressure }: { pressure?: DeadlinePressure }) {
             )}
           </>
         )}
+    </section>
+  );
+}
+
+/**
+ * Who can fill each role the tender requires, and what is missing.
+ *
+ * A candidate is shown with the facts that actually satisfied the requirement,
+ * so the proposal can be checked rather than trusted. A role nobody can fill is
+ * a named gap, because a silent blank is how a bid goes out short a role.
+ */
+function RoleMatches({ matches, onAssign, busy }: {
+  matches: RoleMatch[]; onAssign: (role: string, personId: string | null) => void; busy: boolean;
+}) {
+  if (matches.length === 0) return null;
+  return (
+    <section className="panel role-matches" data-testid="role-matches">
+      <div className="panel-heading"><div><h2>Required people</h2><p>Matched against confirmed CV records. Tenderly proposes; you choose who is named.</p></div></div>
+      {matches.map((match) => (
+        <div className="role-match" key={match.role} data-testid={`role-${match.role}`}>
+          <p><strong>{match.quantity > 1 ? `${match.quantity}× ` : ""}{match.role}</strong></p>
+
+          {match.candidates.length === 0
+            ? <p className="role-gap">{match.gaps[0] ?? `No team member can fill: ${match.role}`}</p>
+            : (
+              <ul className="role-candidates">
+                {match.candidates.map((candidate) => (
+                  <li key={candidate.personId} className={match.assignedPersonId === candidate.personId ? "assigned" : ""}>
+                    <div>
+                      <strong>{candidate.name}</strong>
+                      <small>{candidate.matched.map((entry) => entry.evidence).join(" · ")}</small>
+                    </div>
+                    <button
+                      className="text-action"
+                      disabled={busy}
+                      onClick={() => onAssign(match.role, match.assignedPersonId === candidate.personId ? null : candidate.personId)}
+                    >{match.assignedPersonId === candidate.personId ? "Assigned ✓" : "Assign"}</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+          {match.gaps.length > 0 && match.candidates.length > 0 && (
+            <p className="role-gap">{match.gaps.join(" · ")}</p>
+          )}
+          {match.unconfirmedEvidence && (
+            <p className="role-unconfirmed" data-testid={`role-unconfirmed-${match.role}`}>Unconfirmed evidence — review required</p>
+          )}
+        </div>
+      ))}
     </section>
   );
 }
@@ -1068,6 +1119,21 @@ export default function TenderlyApp() {
     }
   }
 
+  async function assignRole(role: string, personId: string | null) {
+    if (!selected) return;
+    if (isDemo) { setToast("Assignment is disabled in the demo"); return; }
+    try {
+      setLoading("assign-role");
+      const { tender } = await apiClient.assignRole(selected.id, role, personId);
+      setTenders((items) => items.map((item) => (item.id === tender.id ? tender : item)));
+      setToast(personId ? `Assigned to ${role}` : `Cleared the assignment for ${role}`);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not change that assignment");
+    } finally {
+      setLoading("");
+    }
+  }
+
   async function setSelectedLots(lotIds: string[]) {
     if (!selected) return;
     if (isDemo) { setToast(lotIds.length ? `Bidding ${lotIds.join(", ")}` : "All lots in scope"); return; }
@@ -1446,6 +1512,7 @@ export default function TenderlyApp() {
             <BidList tenders={tenders} selectedId={selected.id} onSelect={setSelectedId} />
             <BidWorkspace
               acknowledgeAiPolicy={acknowledgeAiPolicy}
+              assignRole={assignRole}
               setSelectedLots={setSelectedLots}
               recordBidDecision={recordBidDecision}
               setNoAiMode={setNoAiMode}
@@ -1748,8 +1815,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, attestation, onAttest, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, assignRole, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, attestation, onAttest, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -1790,6 +1857,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
 
             <RecommendationPanel recommendation={tender.recommendation} />
             <BidDecisionPanel tender={tender} onRecord={recordBidDecision} busy={loading === "decision"} />
+            <RoleMatches matches={tender.roleMatches ?? []} onAssign={assignRole} busy={loading === "assign-role"} />
             <LotSelector lots={tender.lots ?? []} selected={tender.selectedLots ?? []} onChange={setSelectedLots} busy={loading === "lots"} />
             <AiUsePolicyPanel policy={tender.aiUsePolicy} onAcknowledge={acknowledgeAiPolicy} busy={loading === "ai-policy"} />
             <AwardHistory data={tender.awardIntelligence} />

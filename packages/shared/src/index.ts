@@ -89,6 +89,25 @@ export type BidRole = {
   source: string;
 };
 
+/** One fact that satisfied one stated requirement of a role. */
+export type MatchedFact = {
+  requirement: string;
+  evidence: string;
+  kind: "skill" | "role" | "certification" | "experience";
+};
+
+/** Who can fill a required role, and what is missing when nobody can. */
+export type RoleMatch = {
+  role: string;
+  quantity: number;
+  /** Best first, by how many stated requirements they actually satisfy. */
+  candidates: { personId: string; name: string; matched: MatchedFact[] }[];
+  gaps: string[];
+  /** A record would have matched, but nobody has confirmed it. */
+  unconfirmedEvidence: boolean;
+  assignedPersonId?: string;
+};
+
 export type SubmissionItem = {
   id: string;
   label: string;
@@ -325,6 +344,8 @@ export type Tender = {
   questions: BidQuestion[];
   eligibility?: EligibilityState;
   roles?: BidRole[];
+  /** Who on the team can fill each required role, with the matched facts. */
+  roleMatches?: RoleMatch[];
   submissionChecklist?: SubmissionItem[];
   risks?: string[];
   synopsisSlides?: SynopsisSlide[];

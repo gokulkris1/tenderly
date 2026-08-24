@@ -18,6 +18,7 @@ import { mergeNotices } from "./dedupe.js";
 import { deadlinePressure, parseDeadline } from "./pressure.js";
 import { vaultCompleteness } from "./vault.js";
 import { skillMatrix, skillMatrixCsv } from "./skills.js";
+import { matchRoles, roleBlockers } from "./role-matching.js";
 import { DECLARATIONS, affirmationProblems, declarationEvidence, needsReaffirmation } from "./declarations.js";
 import { decide, unsupportedFigures } from "./decision.js";
 import { parseContractValue, scoreNotice } from "./scoring.js";
@@ -137,6 +138,26 @@ function routeParam(value: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+/**
+ * Mandatory roles nobody on the team can fill.
+ *
+ * Never throws: a failure to read the people tables must not decide that a pack
+ * is blocked, so it answers "nothing unfillable" and the other blockers stand.
+ */
+async function unfillableRoles(account: string, tender: TenderRecord) {
+  if (!tender.analysis?.roles?.length) return [];
+  try {
+    const [people, facts] = await Promise.all([listPeople(account), listAccountPersonFacts(account)]);
+    const matches = matchRoles({
+      roles: tender.analysis.roles, people, facts,
+      assignments: (tender.metadata.roleAssignments ?? {}) as Record<string, string>,
+    });
+    return roleBlockers(matches, tender.analysis.roles);
+  } catch {
+    return [];
+  }
+}
+
 async function tenderWithAnswers(account: string, tender: TenderRecord) {
   // Evidence decides whether a required certificate is satisfied.
   const [answers, evidence, provenance, company] = await Promise.all([
@@ -157,6 +178,20 @@ async function tenderWithAnswers(account: string, tender: TenderRecord) {
     }
   } catch {
     // leave it absent
+  }
+
+  // Which of our people can fill each required role, with the facts that
+  // satisfied it. Never breaks the page: a failure means no matches shown.
+  if (tender.analysis?.roles?.length) {
+    try {
+      const [people, facts] = await Promise.all([listPeople(account), listAccountPersonFacts(account)]);
+      serialized.roleMatches = matchRoles({
+        roles: tender.analysis.roles, people, facts,
+        assignments: (tender.metadata.roleAssignments ?? {}) as Record<string, string>,
+      });
+    } catch {
+      // leave it absent
+    }
   }
 
   // Deadline pressure needs the account's other live bids. Deterministic and
@@ -677,6 +712,38 @@ app.post("/api/tenders/:id/decision", async (req: AuthenticatedRequest, res) => 
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
+/**
+ * Assigns a person to a required role, or clears the assignment.
+ *
+ * The match proposes candidates; the company chooses. Storing the choice means
+ * a re-analysis proposing someone else does not silently change who is named in
+ * the bid.
+ */
+app.put("/api/tenders/:id/roles/:role/assignment", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender?.analysis) return res.status(404).json({ error: "Tender analysis not found" });
+    const role = decodeURIComponent(routeParam(req.params.role));
+    if (!tender.analysis.roles.some((entry) => entry.role === role)) {
+      return res.status(404).json({ error: "That role is not in this tender" });
+    }
+    const { personId } = z.object({ personId: z.string().max(64).nullable() }).parse(req.body);
+
+    if (personId) {
+      const people = await listPeople(account);
+      const person = people.find((entry) => entry.id === personId);
+      if (!person) return res.status(404).json({ error: "Person not found" });
+      if (person.archivedAt) return res.status(409).json({ error: "That person is archived and cannot be assigned" });
+    }
+
+    const assignments = { ...((tender.metadata.roleAssignments ?? {}) as Record<string, string>) };
+    if (personId) assignments[role] = personId; else delete assignments[role];
+    await updateTenderMetadata(account, tender.id, { roleAssignments: assignments });
+    res.json({ tender: await tenderWithAnswers(account, (await getTender(account, tender.id))!) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
 /** True when this tender is in no-AI mode. Stored on the tender, not the account. */
 function noAiMode(tender: { metadata: Record<string, unknown> }) {
   return tender.metadata.noAiMode === true;
@@ -952,7 +1019,7 @@ app.get("/api/tenders/:id/red-team", async (req: AuthenticatedRequest, res) => {
     if (!tender) return res.status(404).json({ error: "Tender not found" });
     if (!tender.analysis) return res.status(409).json({ error: "Analyse the tender first" });
     const [answers, documents] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id)]);
-    const issues = submissionBlockers(tender, tender.analysis, answers, documents, await listEvidence(account)).map((message) => ({ severity: "BLOCKER", message }));
+    const issues = submissionBlockers(tender, tender.analysis, answers, documents, await listEvidence(account), await unfillableRoles(account, tender)).map((message) => ({ severity: "BLOCKER", message }));
     for (const question of tender.analysis.questions) {
       const answer = answers.find((item) => item.questionId === question.id);
       const words = answer?.response.trim() ? answer.response.trim().split(/\s+/).length : 0;
@@ -986,7 +1053,8 @@ app.get("/api/tenders/:id/pack", packLimiter, async (req: AuthenticatedRequest, 
     // The pack lists whoever this bid actually cites, archived or not: the CV
     // that went to the buyer is part of what was submitted.
     const [answers, documents, company, people, evidence] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id), getCompany(account), listPeople(account), listEvidence(account)]);
-    const result = await createSubmissionPack({ tender, analysis: tender.analysis, answers, documents, company, people, evidence, provenance: await tenderProvenance(tender.id), draft });
+    const unfillable = await unfillableRoles(account, tender);
+    const result = await createSubmissionPack({ tender, analysis: tender.analysis, answers, documents, company, people, evidence, provenance: await tenderProvenance(tender.id), unfillableRoles: unfillable, draft });
     if (!result.buffer) return res.status(409).json({ error: "Final submission pack is blocked", blockers: result.blockers });
     await audit(req, {
       action: draft ? AUDIT_ACTIONS.packDraftDownloaded : AUDIT_ACTIONS.packFinalDownloaded,
