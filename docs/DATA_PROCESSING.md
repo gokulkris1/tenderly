@@ -72,10 +72,39 @@ npm run retention --prefix server           # applies the policy
 The dry run names every tender it would remove. Deleting customer data is the
 one operation where "run it and see" is not acceptable.
 
-## Deletion on request
+## Export and deletion on request
 
-Account deletion and data export are handled separately (TLY-97) and are not
-the same thing as retention: retention is what happens without anyone asking.
+Retention is what happens without anyone asking. These two are what happens
+when somebody does, and both are self-service: a legal right answered by a
+support queue is a legal right answered badly.
+
+**Export.** `GET /api/account/export` returns a ZIP holding one JSON file per
+data type — account, tenders (with their documents, answers, provenance,
+decisions, clarifications and tasks), people, evidence, declarations, watchlist
+and activity — plus the original vault files under `vault/`, as themselves
+rather than base64 inside a field. Owner only.
+
+**Deletion.** `POST /api/account/deletion` schedules it. The owner must type
+`DELETE MY ACCOUNT`, and the account then keeps working for a grace period of
+seven days, which is the entire point of having one — `DELETE /api/account/deletion`
+cancels it inside that window and nothing has been touched. When the period
+expires the job runs:
+
+```
+npm run deletions:dry-run --prefix server   # lists what is due, deletes nothing
+npm run deletions --prefix server           # runs the due deletions
+```
+
+The deletion is a single `DELETE FROM users`. Every table holding an account's
+data has a foreign key to `users` with `ON DELETE CASCADE`, so there is no list
+here to fall out of date, and no other organisation's rows are reachable from
+it. `award_history` is shared reference data with no account column and is
+untouched by construction.
+
+One record survives: a row in `deletion_log` naming the account id, who asked
+and when it completed. It has no foreign key back to `users` precisely so the
+cascade cannot take it — a deletion nobody can evidence is a compliance problem
+of its own. It holds nothing else about the person.
 
 ## Changes to this page
 

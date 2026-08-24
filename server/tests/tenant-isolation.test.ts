@@ -181,6 +181,10 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     "POST /api/evidence", "POST /api/evidence/upload", "GET /api/people",
     "POST /api/people", "POST /api/people/upload", "GET /api/notifications",
     "POST /api/tenders/:id/documents",
+    // Export and deletion act on the caller's own account and nothing else;
+    // server/tests/account-erasure.test.ts proves the archive holds one tenant.
+    "GET /api/account/export",
+    "GET /api/account/deletion", "POST /api/account/deletion", "DELETE /api/account/deletion",
   ];
   const covered = new Set([
     ...ownScopeOnly,

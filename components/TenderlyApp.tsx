@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ApiError, createApiClient } from "../web/src/api/client";
+import { ApiError, createApiClient, type AccountDeletionState } from "../web/src/api/client";
 import "./tenderly.css";
 
 import type {
@@ -3344,6 +3344,69 @@ function AuditLogPanel({ entries, action, days, onFilter, loading }: {
   );
 }
 
+/**
+ * Your data: take it away, or have it destroyed.
+ *
+ * Both are legal rights rather than product features, so neither is buried
+ * behind a support request. Deletion asks for the phrase to be typed and then
+ * waits a week, and says out loud how long is left — a destructive action with
+ * no visible countdown is a trap.
+ */
+function YourDataPanel() {
+  const [state, setState] = useState<AccountDeletionState | null>(null);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+
+  const refresh = () => apiClient.deletionState().then(setState).catch(() => setState(null));
+  useEffect(() => { void refresh(); }, []);
+
+  async function run(action: "export" | "delete" | "cancel") {
+    setBusy(action); setError(""); setNote("");
+    try {
+      if (action === "export") {
+        await apiClient.exportAccountData();
+        setNote("Your data is downloading.");
+      } else if (action === "delete") {
+        const result = await apiClient.requestAccountDeletion(typed);
+        setTyped("");
+        setNote(`Scheduled. You have ${result.daysRemaining} days to change your mind.`);
+      } else {
+        await apiClient.cancelAccountDeletion();
+        setNote("Deletion cancelled. Nothing was removed.");
+      }
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That did not work");
+    } finally { setBusy(""); }
+  }
+
+  const phrase = state?.confirmationPhrase ?? "DELETE MY ACCOUNT";
+  const pending = state?.pending ?? null;
+
+  return <section className="panel settings-list" data-testid="your-data">
+    <div><span><strong>Your data</strong><small>Everything this workspace holds, as files you can keep — tenders, answers, CVs and the original vault documents.</small></span>
+      <button type="button" className="quiet-btn" onClick={() => run("export")} disabled={busy === "export"} data-testid="export-data">
+        {busy === "export" ? "Preparing…" : "Download my data"}</button></div>
+
+    {pending
+      ? <div><span><strong>Deletion scheduled</strong><small>Requested by {pending.requestedBy}. Everything is removed in {pending.daysRemaining} {pending.daysRemaining === 1 ? "day" : "days"} unless you cancel. Until then nothing changes.</small></span>
+          <button type="button" className="continue-btn" onClick={() => run("cancel")} disabled={busy === "cancel"} data-testid="cancel-deletion">
+            {busy === "cancel" ? "Cancelling…" : "Cancel deletion"}</button></div>
+      : <div><span><strong>Delete this workspace</strong><small>Type {phrase} to schedule it. You get {state?.graceDays ?? 7} days to change your mind; after that every tender, answer, CV and document is destroyed and cannot be recovered.</small></span>
+          <span className="value-band">
+            <input aria-label="Confirmation phrase" value={typed} onChange={(event) => setTyped(event.target.value)} placeholder={phrase} data-testid="deletion-confirmation" />
+            <button type="button" className="quiet-btn danger" onClick={() => run("delete")}
+              disabled={busy === "delete" || typed.trim().toUpperCase() !== phrase} data-testid="request-deletion">
+              {busy === "delete" ? "Scheduling…" : "Delete my account"}</button>
+          </span></div>}
+
+    {error && <p className="auth-error" data-testid="your-data-error">{error}</p>}
+    {note && <p className="muted" data-testid="your-data-note">{note}</p>}
+  </section>;
+}
+
 function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage, audit }: { isDemo: boolean; sectors: SectorPreset[]; preferences: DiscoveryPreferences; onSave: (preferences: DiscoveryPreferences) => void; loading: string; usage: UsageTotals | null; audit: { entries: AuditEntry[]; action: string; days: number; onFilter: (next: { action: string; days: number }) => void; loading: boolean } }) {
   const [draft, setDraft] = useState<DiscoveryPreferences>(preferences);
   const [keywordText, setKeywordText] = useState(preferences.keywords.join(", "));
@@ -3382,6 +3445,8 @@ function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage, au
     <div className="section-intro"><div><p className="eyebrow">SETTINGS</p><h2>What should Tenderly watch for?</h2><p>Pick the kind of work you bid for. Tenderly turns that into the CPV codes and keywords behind the scenes — you never have to go code-hunting on eTenders.</p></div></div>
 
     <AiUsagePanel usage={usage} />
+
+    <YourDataPanel />
 
     <AuditLogPanel entries={audit.entries} action={audit.action} days={audit.days} onFilter={audit.onFilter} loading={audit.loading} />
 
