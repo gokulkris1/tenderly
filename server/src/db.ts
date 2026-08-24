@@ -25,6 +25,7 @@ import type {
   AuditEntry,
   BidAnswer,
   BidDecisionRecord,
+  BidTask,
   Clarification,
   CompanyProfile,
   DiscoveryPreferences,
@@ -79,6 +80,7 @@ const memory = {
   mockEvaluations: [] as MockEvaluation[],
   packQuestions: [] as PackQuestion[],
   clarifications: [] as Clarification[],
+  bidTasks: [] as BidTask[],
   analysisVersions: [] as AnalysisVersionRecord[],
   savedSearches: [] as SavedSearch[],
   ingestionRuns: [] as IngestionRun[],
@@ -1244,6 +1246,102 @@ export async function listClarifications(tenderId: string) {
   }
   const result = await pool.query("SELECT * FROM clarifications WHERE tender_id=$1 ORDER BY created_at DESC", [tenderId]);
   return result.rows.map(toClarification);
+}
+
+const toBidTask = (row: Record<string, unknown>): BidTask => ({
+  id: String(row.id), tenderId: String(row.tender_id), title: String(row.title),
+  origin: row.origin as BidTask["origin"], owner: String(row.owner ?? ""), dueOn: String(row.due_on ?? ""),
+  completedAt: row.completed_at ? new Date(row.completed_at as string).toISOString() : undefined,
+  createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/**
+ * Creates a task, or returns the one already there.
+ *
+ * Blocker tasks are keyed on the blocker's own text, so re-reading the same
+ * blockers never produces a second copy — and an owner already assigned to one
+ * survives the next sync.
+ */
+export async function upsertBidTask(input: Omit<BidTask, "id" | "createdAt" | "completedAt">) {
+  if (!pool) {
+    const existing = memory.bidTasks.find((task) =>
+      task.tenderId === input.tenderId && task.title === input.title && task.origin === input.origin);
+    if (existing) return existing;
+    const task: BidTask = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+    memory.bidTasks.push(task);
+    return task;
+  }
+  const result = await pool.query(
+    `INSERT INTO bid_tasks(id,tender_id,title,origin,owner,due_on) VALUES($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (tender_id,title,origin) DO UPDATE SET title=EXCLUDED.title
+     RETURNING *`,
+    [randomUUID(), input.tenderId, input.title, input.origin, input.owner, input.dueOn],
+  );
+  return toBidTask(result.rows[0]);
+}
+
+export async function listBidTasks(tenderId: string) {
+  if (!pool) return memory.bidTasks.filter((task) => task.tenderId === tenderId);
+  const result = await pool.query("SELECT * FROM bid_tasks WHERE tender_id=$1 ORDER BY created_at", [tenderId]);
+  return result.rows.map(toBidTask);
+}
+
+/** Open tasks owned by one person, across every tender on their account. */
+export async function listTasksForOwner(accountId: string, owner: string) {
+  if (!pool) {
+    const tenderIds = new Set([...memory.tenders.values()].filter((tender) => tender.accountId === accountId).map((tender) => tender.id));
+    return memory.bidTasks
+      .filter((task) => tenderIds.has(task.tenderId) && task.owner === owner && !task.completedAt)
+      .map((task) => ({ ...task, tenderTitle: memory.tenders.get(task.tenderId)?.title ?? "" }));
+  }
+  const result = await pool.query(
+    `SELECT b.*, t.title AS tender_title FROM bid_tasks b JOIN tenders t ON t.id = b.tender_id
+      WHERE t.account_id=$1 AND b.owner=$2 AND b.completed_at IS NULL ORDER BY b.due_on NULLS LAST, b.created_at`,
+    [accountId, owner],
+  );
+  return result.rows.map((row) => ({ ...toBidTask(row), tenderTitle: String(row.tender_title) }));
+}
+
+/** Updates a task. Returns null when it is not this account's. */
+export async function updateBidTask(accountId: string, taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) {
+  if (!isUuid(taskId)) return null;
+  if (!pool) {
+    const task = memory.bidTasks.find((entry) => entry.id === taskId);
+    if (!task || memory.tenders.get(task.tenderId)?.accountId !== accountId) return null;
+    if (patch.owner !== undefined) task.owner = patch.owner;
+    if (patch.dueOn !== undefined) task.dueOn = patch.dueOn;
+    if (patch.completed !== undefined) task.completedAt = patch.completed ? new Date().toISOString() : undefined;
+    return task;
+  }
+  const result = await pool.query(
+    `UPDATE bid_tasks SET owner=COALESCE($3,owner), due_on=COALESCE($4,due_on),
+            completed_at = CASE WHEN $5::boolean IS NULL THEN completed_at WHEN $5 THEN now() ELSE NULL END
+      WHERE id=$1 AND tender_id IN (SELECT id FROM tenders WHERE account_id=$2) RETURNING *`,
+    [taskId, accountId, patch.owner ?? null, patch.dueOn ?? null, patch.completed ?? null],
+  );
+  return result.rows[0] ? toBidTask(result.rows[0]) : null;
+}
+
+/**
+ * Marks blocker tasks complete once their blocker has cleared, and reopens one
+ * whose blocker has come back. The blocker list is the truth; the task follows.
+ */
+export async function syncBlockerTasks(tenderId: string, blockers: string[]) {
+  const open = new Set(blockers);
+  const tasks = await listBidTasks(tenderId);
+  for (const task of tasks) {
+    if (task.origin !== "blocker") continue;
+    const shouldBeComplete = !open.has(task.title);
+    if (shouldBeComplete === Boolean(task.completedAt)) continue;
+    if (!pool) {
+      task.completedAt = shouldBeComplete ? new Date().toISOString() : undefined;
+      continue;
+    }
+    await pool.query(
+      "UPDATE bid_tasks SET completed_at = CASE WHEN $2 THEN now() ELSE NULL END WHERE id=$1",
+      [task.id, shouldBeComplete],
+    );
+  }
 }
 
 export async function addEvidence(

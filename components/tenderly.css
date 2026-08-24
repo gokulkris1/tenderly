@@ -709,3 +709,15 @@ button:disabled { cursor: wait; opacity: .62; }
 .clar-list small { font-size: 11px; color: var(--muted); }
 .clar-list blockquote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--green); background: var(--green-soft); border-radius: 0 8px 8px 0; font-size: 12px; }
 .clar-list cite { display: block; margin-top: 5px; font-size: 10px; font-style: normal; color: var(--muted); }
+
+/* TLY-84 — who is doing what, by when. */
+.task-list { margin-bottom: 14px; }
+.tasks { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 2px; }
+.tasks li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.tasks li.overdue strong { color: var(--red); }
+.tasks strong { display: block; font-size: 13px; }
+.tasks small { font-size: 11px; color: var(--muted); }
+.task-actions { display: flex; gap: 10px; align-items: center; flex: none; }
+.task-due { padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 11px; }
+.tasks-done { margin-top: 12px; }
+.tasks-done summary { cursor: pointer; font-size: 12px; color: var(--muted); }

@@ -277,6 +277,25 @@ export type BidDecisionRecord = {
 };
 
 /**
+ * One piece of work on a bid, with an owner and a date.
+ *
+ * Blockers say what is unresolved; a task says who is doing it and by when.
+ * A task generated from a blocker is completed by the blocker clearing, not by
+ * a person ticking it — otherwise the tick and the blocker disagree.
+ */
+export type BidTask = {
+  id: string;
+  tenderId: string;
+  title: string;
+  origin: "blocker" | "manual";
+  /** The owner's email. A membership reference lands with the org model. */
+  owner: string;
+  dueOn: string;
+  completedAt?: string;
+  createdAt: string;
+};
+
+/**
  * A clarification exchange with the buyer.
  *
  * Status is derived from whether a response has been recorded rather than
