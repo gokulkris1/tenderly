@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiError, createApiClient, type AccountDeletionState, type DraftRunState, type InvitationDetails, type TeamState } from "../web/src/api/client";
 import "./tenderly.css";
 
 import type {
   AiUsePolicy,
+  AnswerStatus,
   AnalysisChanges,
   AnswerVersion,
   AttestationState,
@@ -811,6 +812,9 @@ export default function TenderlyApp() {
   const [role, setRole] = useState<"owner" | "editor" | "viewer">("editor");
   // A whole-questionnaire run, watched while it works. Null when none has run.
   const [draftRun, setDraftRun] = useState<DraftRunState | null>(null);
+  // Held in a ref rather than state: aborting is an action, not something the
+  // screen renders, and a re-render must not lose the handle.
+  const draftAbort = useRef<AbortController | null>(null);
   const readOnly = role === "viewer";
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState("");
@@ -1653,19 +1657,41 @@ export default function TenderlyApp() {
       setToast("Evidence-grounded draft created · review claims before marking ready");
       return;
     }
-    try {
-      setLoading(questionId);
-      const data = await apiClient.draftAnswer(selected.id, questionId);
+    // The answer arrives as it is written. Tens of seconds of spinner is
+    // indistinguishable from a hung request, and people click again.
+    const controller = new AbortController();
+    draftAbort.current = controller;
+    const showAnswer = (answer: string, status?: AnswerStatus) =>
       setTenders((items) => items.map((item) => item.id !== selected.id ? item : {
         ...item,
-        questions: item.questions.map((q) => q.id !== questionId ? q : { ...q, answer: data.answer, status: data.missingInputs.length ? "needs-input" : "draft" }),
+        questions: item.questions.map((q) => q.id !== questionId ? q : { ...q, answer, ...(status ? { status } : {}) }),
       }));
+    const previous = selected.questions.find((question) => question.id === questionId);
+
+    try {
+      setLoading(questionId);
+      const data = await apiClient.streamDraft(selected.id, questionId, {
+        onText: (answerSoFar) => showAnswer(answerSoFar),
+        signal: controller.signal,
+      });
+      showAnswer(data.answer, data.missingInputs.length ? "needs-input" : "draft");
       setToast(data.missingInputs.length ? `Draft needs ${data.missingInputs.length} input${data.missingInputs.length > 1 ? "s" : ""}` : "Evidence-grounded draft created");
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "Draft failed");
+      // Stopped, dropped or rejected: nothing was saved, so the screen goes
+      // back to what the server still holds rather than keeping half a draft.
+      if (previous) showAnswer(previous.answer, previous.status);
+      const stopped = error instanceof DOMException && error.name === "AbortError";
+      setToast(stopped ? "Draft stopped · nothing was saved"
+        : error instanceof Error ? error.message : "Draft failed");
     } finally {
+      draftAbort.current = null;
       setLoading("");
     }
+  }
+
+  /** Stops a streaming draft. The server sees the connection close and saves nothing. */
+  function stopDraft() {
+    draftAbort.current?.abort();
   }
 
   /**
@@ -2016,6 +2042,7 @@ export default function TenderlyApp() {
             <BidWorkspace
               readOnly={readOnly}
               draftAll={draftAllAnswers}
+              onStopDraft={stopDraft}
               draftRun={draftRun}
               acknowledgeAiPolicy={acknowledgeAiPolicy}
               assignRole={assignRole}
@@ -2423,8 +2450,9 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, runbook, runbookCompleted, runbookTotal, tickRunbookStep, tasks, addTask, updateTask, blockers, readOnly, draftAll, draftRun }: {
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, runbook, runbookCompleted, runbookTotal, tickRunbookStep, tasks, addTask, updateTask, blockers, readOnly, draftAll, draftRun, onStopDraft }: {
   readOnly: boolean;
+  onStopDraft: () => void;
   draftAll: () => void;
   draftRun: DraftRunState | null;
   tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; clarifications: Clarification[]; openClarifications: number; askClarification: (question: string) => void; answerClarification: (id: string, response: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; runbook: Runbook | null; runbookCompleted: number; runbookTotal: number; tickRunbookStep: (stepId: string, done: boolean) => void; tasks: BidTask[]; addTask: (title: string, dueOn: string) => void; updateTask: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void; blockers: string[];
@@ -2506,7 +2534,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
       )}
 
       {stage === "Synopsis" && <Synopsis tender={tender} onDownload={() => downloadAsset("deck")} onContinue={() => setStage("Respond")} loading={loading === "deck"} />}
-      {stage === "Respond" && <Respond readOnly={readOnly} draftAll={draftAll} draftRun={draftRun} tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} evaluation={evaluation} onRunEvaluation={runMockEvaluation} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
+      {stage === "Respond" && <Respond readOnly={readOnly} onStopDraft={onStopDraft} draftAll={draftAll} draftRun={draftRun} tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} evaluation={evaluation} onRunEvaluation={runMockEvaluation} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
       {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} attestation={attestation} onAttest={onAttest} tasks={tasks} onAddTask={addTask} onUpdateTask={updateTask} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
       {stage === "Submit" && <Submit readOnly={readOnly} runbook={runbook} runbookCompleted={runbookCompleted} runbookTotal={runbookTotal} onTickRunbook={tickRunbookStep} runbookBusy={loading === "runbook"} tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
     </div>
@@ -2730,7 +2758,7 @@ function DraftAllControl({ onDraftAll, run, busy }: { onDraftAll: () => void; ru
   </div>;
 }
 
-function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, onRunEvaluation, history, onSelectVersion, onCompareVersions, onRestoreVersion, onBackToQualify, onOpenCitation, draftAnswer, draftAll, draftRun, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue, readOnly }: { readOnly: boolean; draftAll: () => void; draftRun: DraftRunState | null; tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; onRunEvaluation: () => void; history: AnswerHistory | null; onSelectVersion: (versionId: string) => void; onCompareVersions: () => void; onRestoreVersion: (versionId: string) => void; onBackToQualify: () => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
+function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, onRunEvaluation, history, onSelectVersion, onCompareVersions, onRestoreVersion, onBackToQualify, onOpenCitation, draftAnswer, onStopDraft, draftAll, draftRun, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue, readOnly }: { readOnly: boolean; onStopDraft: () => void; draftAll: () => void; draftRun: DraftRunState | null; tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; onRunEvaluation: () => void; history: AnswerHistory | null; onSelectVersion: (versionId: string) => void; onCompareVersions: () => void; onRestoreVersion: (versionId: string) => void; onBackToQualify: () => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
   const [activeId, setActiveId] = useState(tender.questions[0]?.id ?? "");
   const active = tender.questions.find((question) => question.id === activeId) ?? tender.questions[0];
   if (!active) return <div className="no-questions panel"><span>◇</span><h2>Import the full tender pack first</h2><p>The notice gives Tenderly the opportunity metadata. The RFT / RFQ documents are needed to extract scored questions, word limits, mandatory roles and response templates.</p><FileButton label={loading === "upload" ? "Uploading…" : "Upload tender documents"} accept=".pdf,.docx,.xlsx,.xls,.pptx,.zip,.txt,.xml" onFile={(file) => uploadTenderFile(file, "source")} /></div>;
@@ -2780,7 +2808,9 @@ function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, on
           ? <span className="muted" data-testid="read-only-note">Read access — ask an editor to make changes</span>
           : <>{active.status === "ready" ? <button className="ready-button" disabled>✓ Reviewed & ready</button> : <button className="quiet-btn" onClick={() => markAnswerReady(active.id)} disabled={loading === `ready-${active.id}`}>{loading === `ready-${active.id}` ? "Saving…" : "Mark reviewed & ready"}</button>}{tender.noAiMode
           ? <button className="quiet-btn" onClick={() => critiqueAnswer(active.id)} disabled={loading === `critique-${active.id}`}>{loading === `critique-${active.id}` ? "Reviewing…" : "◇ Critique what I wrote"}</button>
-          : <button className="ai-draft" onClick={() => draftAnswer(active.id)} disabled={loading === active.id}>{loading === active.id ? "Drafting…" : "✦ Draft from evidence"}</button>}</>}</div></div>
+          : loading === active.id
+            ? <button className="quiet-btn" onClick={onStopDraft} data-testid="stop-draft">■ Stop</button>
+            : <button className="ai-draft" onClick={() => draftAnswer(active.id)}>✦ Draft from evidence</button>}</>}</div></div>
         <MockEvaluationPanel
           evaluation={evaluation?.result ?? null}
           gaps={evaluation?.gaps ?? []}

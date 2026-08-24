@@ -201,6 +201,58 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       request<{ completed: number; total: number }>(`/api/tenders/${tenderId}/runbook/${encodeURIComponent(stepId)}`, "Update runbook", {
         method: "POST", body: JSON.stringify({ done }),
       }),
+    /**
+     * Drafts one answer, calling back as the text arrives.
+     *
+     * Not EventSource: that cannot POST or carry an Authorization header, so
+     * this reads the event stream off a normal fetch. Aborting the signal is
+     * what "Stop" does — the server sees the connection close, abandons the
+     * model call and saves nothing.
+     */
+    async streamDraft(tenderId: string, questionId: string, options: {
+      onText: (answerSoFar: string) => void;
+      signal?: AbortSignal;
+    }): Promise<DraftedAnswer & { citations: { id: string; name: string; hasFile: boolean }[] }> {
+      const response = await fetch(
+        `${baseUrl}/api/tenders/${tenderId}/answers/${encodeURIComponent(questionId)}/draft-stream`,
+        { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: "{}", signal: options.signal },
+      );
+      if (!response.ok) throw await failure(response, "Draft");
+      if (!response.body) throw new ApiError("This browser cannot stream the draft", 500, "Draft");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done: (DraftedAnswer & { citations: { id: string; name: string; hasFile: boolean }[] }) | null = null;
+      let failed: ApiError | null = null;
+
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        // Events are separated by a blank line; a partial one stays in the
+        // buffer until the rest of it arrives.
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const name = part.match(/^event: (.+)$/m)?.[1];
+          const raw = part.match(/^data: (.+)$/m)?.[1];
+          if (!name || !raw) continue;
+          const data = JSON.parse(raw) as Record<string, unknown>;
+          if (name === "text") options.onText(String(data.answer ?? ""));
+          else if (name === "done") done = data as unknown as typeof done;
+          else if (name === "error") failed = new ApiError(String(data.message ?? "Draft failed"), 500, `Draft: ${String(data.title ?? "")}`);
+        }
+      }
+
+      if (failed) throw failed;
+      // A stream that ends with neither event is a dropped connection. Saying
+      // so is better than leaving a half-written answer on the screen looking
+      // like it was saved.
+      if (!done) throw new ApiError("The draft was interrupted and nothing was saved", 500, "Draft");
+      return done;
+    },
+
     /** Starts a run and returns immediately; progress comes from draftRun. */
     draftAll: (tenderId: string) =>
       request<{ run: DraftRun; summary: DraftRunState["summary"] }>(
