@@ -1,0 +1,1598 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+    
+        <!-- ceproc.ok -->
+    
+    
+	<html>
+
+
+	<head>
+		<!--  -->
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<meta http-equiv="Content-Script-Type" content="text/javascript">
+		<meta http-equiv="Content-Style-Type" content="text/css" />
+		<title>European Dynamics - Advanced search</title>
+        <meta name="Description" content="e-Procurement platform home page"/>
+		<meta content="e-Procurement platform - Home page" name="Title"/>
+		<meta content="57" name="Type"/>
+		<meta content="DOCUMENTS/COMM/EN" name="Reference"/>
+		<meta content="European Dynamics" name="Creator"/>
+		<meta name="Language" content="en"/>
+		<meta content="25" name="Classification"/>
+		<meta content="tenders, e-procurement, documents, european law, legislation, economic operator, tenderer, procurement, contract, contracting authority, supplier, awarding authority, institutions, european union, eu" name="Keywords"/>
+        <link rel="shortcut icon" type="image/ico" href="images/favicon.ico" />
+        
+        
+
+<script>
+	const PAGE_LITERAL = 'Page';
+	const RESULTS_PER_PAGE_LITERAL = 'Results Per page';
+	const ERROR_MSG_LITERAL = 'An error has occurred';
+	const WARNING_MSG_LITERAL = 'Warning';
+	const GOTO_PAGE_LITERAL = 'Go to Page';
+    const RESULTS_PER_PAGE_OPTIONS_LITERAL = ["10","20","50","100"];
+    const CONTEXT_PATH_LITERAL = '/epps';
+</script>
+
+        
+        <script src="/epps/scripts/bt/jquery-1.11.3.js" type="text/javascript"></script>
+		<script src="/epps/scripts/bt/popper.min.js" type="text/javascript"></script>
+		<script src="/epps/scripts/bt/bootstrap.min.js" type="text/javascript"></script>
+		<script src="/epps/scripts/bt/navScroll.js" type="text/javascript"></script>
+		
+        <script type="text/javascript">
+	        //<![CDATA[
+	        var $j = jQuery.noConflict();
+	        //]]>
+        </script>
+        <script type="text/javascript">
+            var LOCALE = '';
+            var INVALID_CHARACTERS = '<>&%';
+            
+            var defaults = {
+            		language: 'en', 
+                    showOn: "both",
+                    buttonText: "Calendar",
+                    buttonImage: "/epps/images/action_calendar.gif",
+                    buttonImageOnly: true, clearBtn: true,
+                    firstDay: 1,
+                    weekStart: 0,
+                    format: "dd/mm/yyyy",
+                    mandatory: false,
+                    todayHighlight: true
+           };
+            
+        </script>
+        <script type="text/javascript" src="/epps/scripts/common.js"></script>
+        <script type="text/javascript" src="/epps/scripts/bt/common.js"></script>
+        
+        <script type="text/javascript" src="/epps/scripts/jqComm.js"></script>
+        <script type="text/javascript" src="/epps/scripts/jqForm.js"></script>
+        <script type="text/javascript" src="/epps/scripts/jqTableSet.js"></script>
+        
+		
+        	<script type="text/javascript" src="/epps/scripts/bt/htmx.min.js"></script>
+			<!-- Morph Swaps supported on Chrome <script src="https://unpkg.com/procurement@example.test"></script> -->
+			<script type="text/javascript" src="/epps/scripts/bt/htmx.common.js"></script>     	
+		
+		
+		<link href="https://cdnjs.cloudflare.com/ajax/libs/gijgo/1.7.0/combined/css/gijgo.min.css" rel="stylesheet" type="text/css" />
+		<link href="/epps/css/bt/bootstrap-datepicker3.min.css" rel="stylesheet" media='screen'/> 	
+		<link href="/epps/css/bt/jquery.treefilter.css" rel="stylesheet"/>
+		<link href="/epps/css/quill.css" rel="stylesheet">
+     	<script type="text/javascript" src="/epps/scripts/bt/bootstrap-datepicker.min.js"></script>
+     	<script type="text/javascript" src="/epps/scripts/jquery.formatCurrency-1.4.0.min.js"></script>
+     	<script type="text/javascript" src="/epps/scripts/jquery.formatCurrency.all.js"></script>
+     	<script type="text/javascript" src="/epps/scripts/bt/jcv_handleMessages.js"></script>
+		
+       	<script type="text/javascript">
+			// functions from bt/common.js
+			$j(document).ready(function(){
+				noResultFoundBeautifier();
+				stackModeDataColumn();
+				$j('.countdown').textCountdown({remaining_text: " remaining characters"});
+				//TODO: modify to be enabled in internal sorting:
+				// tableSawSortableStackMode();
+				
+				
+				
+			});
+		</script>
+		
+        <script type="text/javascript">
+            function setParentHref(link){
+                window.location.href=link;
+            }
+            
+            if(typeof String.prototype.trim !== 'function') {
+	             String.prototype.trim = function() {
+	            	  return this.replace(/^\s+|\s+$/g, ''); 
+	             }
+             }   
+        </script>		
+        
+      
+       
+		<meta content="width=device-width, initial-scale=1.0" name="viewport" />
+		<link href="/epps/css/bt/custom.css" rel="stylesheet"/>
+		<link href="/epps/css/bt/bootstrap-datetimepicker.css" rel="stylesheet"/>
+		<link href="/epps/css/bt/mm-folder.css" rel="stylesheet"/>
+		<script src="/epps/scripts/bt/tablesaw.js" type="text/javascript"></script>
+		<script src="/epps/scripts/bt/tablesaw-init.js" type="text/javascript"></script>
+		<script src="/epps/scripts/bt/jquery.treefilter.js" type="text/javascript"></script>
+		<script src="/epps/scripts/bt/moment.min.js" type="text/javascript"></script>
+     	<script src="/epps/scripts/bt/bootstrap-datetimepicker.js" type="text/javascript" ></script>
+     	<script src="/epps/scripts/bt/metisMenu.js" type="text/javascript"></script>
+     	<script src="/epps/scripts/bt/maincard.js" type="text/javascript"></script>
+		<script src="/epps/scripts/quill.js"></script>
+		<script src="/epps/scripts/quill.commons.js"></script>
+     	
+     	<script type="text/javascript">
+     		
+     			HtmxCommon.addEventListeners();
+			
+		</script>
+	</head>
+	<body class="">
+	
+		<header>
+			<nav class="navbar navbar-dark navbar-expand-md p-0 NavbarSG fixed-top">
+				<div class="flex-column col-12 p-0">
+					<div class="row no-gutters p-2 align-items-center">
+						<div class="col">	
+							
+
+
+
+
+
+
+
+
+
+
+
+
+	
+	
+		
+	
+
+
+
+<button class="navbar-toggler pl-0 border-0" type="button" data-toggle="collapse" data-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+	<span class="fa fa-bars" aria-hidden="true"></span>
+</button>
+
+<a class="navbar-brand  mr-0 py-lg-1 py-xl-1 px-lg-2 px-xl-2" href="/epps">
+	<img class="mr-lg-2 mr-xl-2 img-fluid " src="/epps/images/bt/logo.png" alt="Homepage" />
+</a>
+
+						</div>
+						
+						
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+	
+
+
+
+
+
+	<div id="htmx-load-indicator" class="progress">
+		<div class="indeterminate"></div>
+	</div>
+
+
+
+
+
+						
+						<div class="col">
+							<ul class="navbar-nav flex-row justify-content-end">
+								
+								<!-- Search -->
+								
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript">
+	function checkSubmit() {
+		var	quicSearchForm = document.forms["searchForm"];
+		var col = document.getElementsByName("searchType")[0];
+		if (col.selectedIndex != 0) {
+			if(checkInputField(quicSearchForm))quicSearchForm.submit();
+    	}
+    	return false;
+	}
+	
+	function checkInputField(form){
+		var input = form[1].value;
+		if(containForbidenChars(input)){
+			form[1].value = '*';
+			alert("An invalid character was provided for search. Invalid characters include: <, >, &, % .");
+			return false;
+		}
+		return true;
+	}
+	
+	function containForbidenChars(input){
+    	return input.indexOf("<")!=-1 || input.indexOf(">")!=-1 || input.indexOf("%")!=-1 || input.indexOf("&")!=-1;
+    }
+    
+    $j(document).ready(function(){
+        $j('#SearchInput').mouseover(function() {
+           $j(this).attr('title', "Tip: provide a relevant term within asterisks, e.g. *consultancy*");
+
+        });
+    });
+	
+	function openForm() {
+		document.getElementById("simple-search").style.height = "100%";
+		$j(".container").attr("aria-hidden","false");
+		$j("#simple-search").attr("aria-hidden","false");
+		$j("#simple-search").css("display", "block");
+	}
+	function closeForm() {
+		document.getElementById("simple-search").style.height = "0%";
+		$j(".container").attr("aria-hidden","true");
+		$j("#simple-search").attr("aria-hidden","true");
+		$j("#simple-search").css("display", "none");
+	}
+	
+</script>
+	
+	
+	 
+        <li class="nav-item mr-2">
+            <div>
+                <a href="/epps/prepareAdvancedSearch.do?type=cftFTS" class="nav-link p-2"><span class="fa fa-search" aria-label='Advanced search'></span>
+                    
+                     	
+			       	
+					
+                    
+                    <span class="d-none d-lg-inline">Advanced search</span></a>
+            </div>
+        </li>
+        <li class="nav-item mr-2">
+            <div>
+                <a href="/epps/prepareCurrentOpportunities.do?currentType=cft" class="nav-link p-2"><span class="fa fa-search-plus" aria-label='Latest CfTs'></span>
+                        <span class="d-none d-lg-inline">Latest CfTs</span></a>
+            </div>
+        </li>
+        
+	        <li class="nav-item mr-2">
+	            <div>
+	                <a href="/epps/prepareCurrentOpportunities.do?currentType=notice" class="nav-link p-2"><span class="fa fa-search-plus" aria-label='Latest Notices'></span>
+	                        <span class="d-none d-lg-inline">Latest Notices</span></a>
+	            </div>
+	        </li>
+                 
+    
+	
+	
+	
+    <li class="nav-item mr-2 dropdown">
+		<a class="nav-item nav-link dropdown-toggle mr-md-2 font-weight-bold lang" href="#" id="bd-versions" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+			EN
+		</a>	
+		<div class="dropdown-menu dropdown-menu-right" aria-labelledby="bd-versions">
+		 	
+			 	
+        	
+			 	
+	               <a class="dropdown-item" href="/epps/changeLanguage.do?language=ga">GA</a>
+	            
+        	
+		</div>
+	</li> 
+	
+
+
+
+
+
+
+
+								<!--// Search -->
+								
+								<li class="nav-item dropdown user">
+									
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+    	
+	    	<a href="/epps/authenticate/login" id="loginButton" role="button" class="btn login" aria-label="Log in">
+				<i class="fa fa-sign-in" aria-hidden="true"></i>
+				<span>Log in</span>
+	    	</a>
+        
+        
+	
+
+
+
+
+
+								</li>
+								
+							</ul>
+						</div>	
+					</div>	
+					<!-- MAIN NAVIGATION MENU -->
+					
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+					<!-- /.#mainnav || MAIN NAVIGATION MENU-->
+				</div>		
+			</nav>
+		</header> <!-- /.header -->
+		
+		
+				
+		<div id="main-container" class="container-fluid pt-0">
+		
+         	
+            
+                
+                
+            
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+	<h1 class="my-4">Simple search</h1>
+
+
+
+
+
+
+            
+			<div class="row">
+				<div id="msgCol" class="col">
+          			
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          		</div>
+    		</div>
+    		
+			<div class="row">
+				<div class="col">
+                	
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+<noscript>
+	<div id="NoJavascriptMessage" class="alert alert-warning alert-dismissible">
+		<a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
+		For enjoying the full functionality of this application, please ensure that Javascript is enabled in your browser.
+	</div>
+</noscript>
+
+
+
+
+          		</div>
+    		</div>
+			
+            <div class="row">
+				<div class="col">
+					
+         			
+
+
+
+
+    <div class="card-wrapper">
+        <div class="row">
+            <div class="col">
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+<script type="text/javascript">
+
+    $('document').ready(function(ev){
+        // Adding column-toggle to T01
+        var table01 = $("#T01");
+        table01.attr('data-tablesaw-mode', 'columntoggle');
+        $("#T01 thead th").each(function(index) {
+            //Persist: Title, resourceId, Task 
+            if([0,1,2,3,4,5,6,9].indexOf(index) <= -1){  
+           		$(this).attr('data-tablesaw-priority', index);
+            }
+        })
+    });
+
+	$j('document').ready(function(ev){
+		$j("#btnAddSelectedCft").click(function() {
+			var opener = window.opener;
+			var selBox = $j("input[type='radio']:checked").val();
+			if (selBox != null || selBox !="" || selBox != 'undefined'){
+				opener.addSelectedEntry(selBox);
+				window.close();
+			}else{
+				alert('???prompt.select.atleast.one.entry???');
+			}
+		});
+	});
+
+    function addSelectedEntries() {
+        $j('[id^=selectedCft]').each(function() {
+            if ($j(this).is(":checked")) {
+                var optionValue = $j(this).val();
+                var optionTitle = $j(this).attr("title");
+                window.opener.submitCfts(optionValue, optionTitle);
+            }
+        });
+        window.close();
+    }
+</script>
+
+
+
+<form name="searchCfTWorkspaceForm" method="post" action="/epps/viewCFTSAction.do" class="col-12" target="_self">
+
+	<input type="hidden" name="isExport" value="true">
+    <input type="hidden" name="isFTS" value="true">
+	<input type="hidden" name="isQuickSearch" value="true">
+	<input type="hidden" name="freeText" value="">
+	<input type="hidden" name="uniqueId" value="">
+	<input type="hidden" name="title" value="">
+	<input type="hidden" name="status" value="">
+	<input type="hidden" name="description" value="">
+	<input type="hidden" name="contractType" value="">
+	<input type="hidden" name="procedure" value="">
+	<input type="hidden" name="nuts" value="">
+	<input type="hidden" name="estimatedValueMin" value="">
+	<input type="hidden" name="estimatedValueMax" value="">
+	<input type="hidden" name="cpvLabels" value="">
+	<input type="hidden" name="tenderOpeningFromDate" value="">
+	<input type="hidden" name="tenderOpeningUntilDate" value="">
+	<input type="hidden" name="submissionFromDate" value="">
+	<input type="hidden" name="submissionUntilDate" value="">
+	<input type="hidden" name="publicationFromDate" value="">
+	<input type="hidden" name="publicationUntilDate" value="">
+	<input type="hidden" name="contractAuthority" value="">
+	<input type="hidden" name="captcha" value="">
+    <input type="hidden" name="type" value="cftFTS">
+
+	
+
+		<div class="tablesaw-overflow SearchResults">
+			<h2>Search results</h2>
+			
+	<div class="Pagination6 row p-1 m-1  justify-content-between table-pagination">
+		<div class="col-12 col-sm-6"> 
+		 	| Displaying: <strong>1-10</strong> | <strong>2,884</strong> results in total.
+		</div>
+
+
+		<div>
+			<script type="text/javascript">
+				var scriptNode = $j(document.currentScript.parentElement);
+				writePageSelection("289", "?d-3680175-p=&amp;searchType=cftFTS&amp;latest=true", this, scriptNode);
+			</script>
+		</div>
+		
+		<div class="btn-group align-self-end" role="group" aria-label="pagination toolbar">
+			<button type="button" class="btn btn-primary btn-lg rounded-left" title="First" type="button" id="firstNav" disabled="disabled">
+				<i class="fa fa-angle-double-left"></i>
+			</button>
+			<button type="button" class="btn btn-primary btn-lg" title="Previous" type="button" id="previousNav" disabled="disabled">
+				<i class="fa fa-angle-left"></i>
+			</button>
+			
+			<div class="btn-group" role="group">
+				<!-- Go to Page: JS Code Append -->
+			</div>
+			
+			<button type="button" class="btn btn-lg btn-primary" title="Next" type="button" id="nextNav"
+				onclick=window.location.href=this.getAttribute("href") href="?d-3680175-p=2&amp;searchType=cftFTS&amp;latest=true">
+				<i class="fa fa-angle-right"></i>
+			</button>
+			<button type="button" class="btn btn-lf btn-primary rounded-right btn-primary" title="Last" type="button" id="lastNav"
+				onclick=window.location.href=this.getAttribute("href") href="?d-3680175-p=289&amp;searchType=cftFTS&amp;latest=true">
+				<i class="fa fa-angle-double-right"></i>
+			</button>
+		</div>
+
+	</div>
+
+<table id="T01" class="table table-striped tablesaw">
+<thead>
+<tr>
+<th>#</th>
+<th>Title<a href="?d-3680175-s=title.keyword&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><a href="?d-3680175-s=title.keyword&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><div class="THSort">
+				<img src="/epps/images/ascending.gif" alt="Sort ascending"><img
+					src="/epps/images/descending.gif" alt="Sort descending" class="Descending">
+			</div></a>
+</th>
+<th>Resource ID<a href="?d-3680175-s=eppsId&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><a href="?d-3680175-s=eppsId&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><div class="THSort">
+				<img src="/epps/images/ascending.gif" alt="Sort ascending"><img
+					src="/epps/images/descending.gif" alt="Sort descending" class="Descending">
+			</div></a>
+</th>
+<th>CA<a href="?d-3680175-s=caName.keyword&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><a href="?d-3680175-s=caName.keyword&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><div class="THSort">
+				<img src="/epps/images/ascending.gif" alt="Sort ascending"><img
+					src="/epps/images/descending.gif" alt="Sort descending" class="Descending">
+			</div></a>
+</th>
+<th>Info</th>
+<th>Date published<a href="?d-3680175-s=datePublished&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><a href="?d-3680175-s=datePublished&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><div class="THSort">
+				<img src="/epps/images/ascending.gif" alt="Sort ascending"><img
+					src="/epps/images/descending.gif" alt="Sort descending" class="Descending">
+			</div></a>
+</th>
+<th>Tenders Submission Deadline<a href="?d-3680175-s=submissionDeadline&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><a href="?d-3680175-s=submissionDeadline&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><div class="THSort">
+				<img src="/epps/images/ascending.gif" alt="Sort ascending"><img
+					src="/epps/images/descending.gif" alt="Sort descending" class="Descending">
+			</div></a>
+</th>
+<th>Procedure<a href="?d-3680175-s=procedure&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><a href="?d-3680175-s=procedure&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><div class="THSort">
+				<img src="/epps/images/ascending.gif" alt="Sort ascending"><img
+					src="/epps/images/descending.gif" alt="Sort descending" class="Descending">
+			</div></a>
+</th>
+<th>Status<a href="?d-3680175-s=status&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><a href="?d-3680175-s=status&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><div class="THSort">
+				<img src="/epps/images/ascending.gif" alt="Sort ascending"><img
+					src="/epps/images/descending.gif" alt="Sort descending" class="Descending">
+			</div></a>
+</th>
+<th>Notice PDF</th>
+<th>Award date<a href="?d-3680175-s=awardDate&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><a href="?d-3680175-s=awardDate&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><div class="THSort">
+				<img src="/epps/images/ascending.gif" alt="Sort ascending"><img
+					src="/epps/images/descending.gif" alt="Sort descending" class="Descending">
+			</div></a>
+</th>
+<th>Estimated value</th>
+<th>Cycle<a href="?d-3680175-s=cftActiveCycle&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><a href="?d-3680175-s=cftActiveCycle&amp;d-3680175-p=1&amp;searchType=cftFTS&amp;d-3680175-n=1&amp;latest=true&amp;d-3680175-o=2"><div class="THSort">
+				<img src="/epps/images/ascending.gif" alt="Sort ascending"><img
+					src="/epps/images/descending.gif" alt="Sort descending" class="Descending">
+			</div></a>
+</th></tr></thead>
+<tbody>
+<tr>
+<td>1</td>
+<td style="display:block; text-align:left">
+					
+						
+						
+						
+							<a href="/epps/cft/prepareViewCfTWS.do?resourceId=8909575">Trocaire RFT Payroll Outsourcing Services 2026</a>
+						
+					
+				</td>
+<td>
+                    8909575
+                </td>
+<td>
+					Trócaire_166765
+				</td>
+<td>
+					
+					<img src="/epps/images/icon_information.gif" alt="Desription" title='Trócaire (Ireland and Northern Ireland) invites tenders for the provision of Payroll Outsourcing Services. Trócaire invites suitably qualified payroll service providers to submit proposals for the provision of outsourced payroll services.' />
+					
+				</td>
+<td>
+                    
+                        Mon Aug 24 14:18:12 IST 2026
+                     
+                </td>
+<td>
+					
+						Wed Sep 30 17:00:00 IST 2026
+					
+				</td>
+<td>
+					
+						
+						Open
+					
+				</td>
+<td>
+					
+					Tender Submission
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+                    1
+                </td></tr>
+<tr>
+<td>2</td>
+<td style="display:block; text-align:left">
+					
+						
+						
+						
+							<a href="/epps/cft/prepareViewCfTWS.do?resourceId=8907606">Engineer Led Design Team to deliver Stages 2 - 5 of Park Lane Enhancement Works</a>
+						
+					
+				</td>
+<td>
+                    8907606
+                </td>
+<td>
+					Roscommon County Council_424
+				</td>
+<td>
+					
+					<img src="/epps/images/icon_information.gif" alt="Desription" title='Engineer Led Design Team to deliver Stages 2–5 of the Park Lane Enhancement Works (Detailed Design, Tender Process, Construction Stage Services, Handover/Defects Period)' />
+					
+				</td>
+<td>
+                    
+                        Mon Aug 24 12:42:16 IST 2026
+                     
+                </td>
+<td>
+					
+						Mon Sep 21 16:00:00 IST 2026
+					
+				</td>
+<td>
+					
+						
+						Open
+					
+				</td>
+<td>
+					
+					Tender Submission
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+						70000.0
+					
+				</td>
+<td>
+                    1
+                </td></tr>
+<tr>
+<td>3</td>
+<td style="display:block; text-align:left">
+					
+						
+						
+						
+							<a href="/epps/cft/prepareViewCfTWS.do?resourceId=8907794">LA3907C - UCD - RFT for the Supply, Delivery, Installation, and Commissioning of a Stand-alone Automatic Slide Staining and Glass Cover Slipper for University College Dublin (UCD)</a>
+						
+					
+				</td>
+<td>
+                    8907794
+                </td>
+<td>
+					Education Procurement Service (EPS)
+				</td>
+<td>
+					
+					<img src="/epps/images/icon_information.gif" alt="Desription" title='University College Dublin (UCD) invites tenders for the supply, delivery, installation, commissioning and support of an automated histology slide staining and coverslipping system for use within a high-throughput research laboratory. The system shall automate the complete workflow from slide staining through drying to glass coverslipping without operator intervention or manual handling between process stages The proposed system shall produce consistently high-quality stained microscope slides suitable for routine histological analysis, whole-slide digital imaging and AI-assisted image analysis. Tenderers shall complete all sections of this specification within the response document and clearly indicate compliance with each requirement.' />
+					
+				</td>
+<td>
+                    
+                        Mon Aug 24 12:40:40 IST 2026
+                     
+                </td>
+<td>
+					
+						Mon Sep 14 12:00:00 IST 2026
+					
+				</td>
+<td>
+					
+						
+						Open
+					
+				</td>
+<td>
+					
+					Tender Submission
+				</td>
+<td>
+					
+						<a href="/epps/cft/downloadNoticeForAdvSearch.do?resourceId=8907794"><img src="/epps/images/acrobat.gif" alt="Contract Notice PDF" title="Contract Notice PDF" /></a>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+						88500.0
+					
+				</td>
+<td>
+                    1
+                </td></tr>
+<tr>
+<td>4</td>
+<td style="display:block; text-align:left">
+					
+						
+						
+						
+							<a href="/epps/cft/prepareViewCfTWS.do?resourceId=8907005">Fencing Repair works at Ulluans and the old Kenmare Killarney National Park</a>
+						
+					
+				</td>
+<td>
+                    8907005
+                </td>
+<td>
+					Department of Housing Local Government and Heritage
+				</td>
+<td>
+					
+					<img src="/epps/images/icon_information.gif" alt="Desription" title='The Contracting Authority is inviting tenders for the fencing repair works at Derrycunihy Upper and Ulluans, Killarney National Park A detailed description of the project requirements is provided below. Contractors are expected to provide a detailed description of their proposed strategy and methods for the Works in their response, based on their own expertise and experience on similar projects.' />
+					
+				</td>
+<td>
+                    
+                        Mon Aug 24 12:12:36 IST 2026
+                     
+                </td>
+<td>
+					
+						Fri Sep 18 17:00:00 IST 2026
+					
+				</td>
+<td>
+					
+						
+						Open
+					
+				</td>
+<td>
+					
+					Tender Submission
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+                    1
+                </td></tr>
+<tr>
+<td>5</td>
+<td style="display:block; text-align:left">
+					
+						
+						
+						
+							<a href="/epps/cft/prepareViewCfTWS.do?resourceId=8906837">Supply, Delivery and Commissioning of One Electric Utility Vehicle for Moate Town Team CLG</a>
+						
+					
+				</td>
+<td>
+                    8906837
+                </td>
+<td>
+					Westmeath County Council
+				</td>
+<td>
+					
+					<img src="/epps/images/icon_information.gif" alt="Desription" title='Moate Town Team CLG invites tenders for the supply, delivery, commissioning and operator training of one new battery electric utility vehicle for public realm maintenance and watering operations within Moate, Co. Westmeath. The vehicle shall be capable of safely transporting a water tank of up to 1,000 litres (1650mm × 1000mm × 1270mm), together with a driver, passenger, pump, hose reel, washer lance and associated equipment, while remaining within the manufacturer&#039;s certified payload and stability limits. See the tender pack for full details.' />
+					
+				</td>
+<td>
+                    
+                        Mon Aug 24 12:01:58 IST 2026
+                     
+                </td>
+<td>
+					
+						Mon Sep 28 15:00:00 IST 2026
+					
+				</td>
+<td>
+					
+						
+						Open
+					
+				</td>
+<td>
+					
+					Tender Submission
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+                    1
+                </td></tr>
+<tr>
+<td>6</td>
+<td style="display:block; text-align:left">
+					
+						
+						
+						
+							<a href="/epps/cft/prepareViewCfTWS.do?resourceId=8906445">UHF Antennas - Woodcock Hill and Aranmore</a>
+						
+					
+				</td>
+<td>
+                    8906445
+                </td>
+<td>
+					Raidió Teilifís Éireann ( RTÉ )
+				</td>
+<td>
+					
+					<img src="/epps/images/icon_information.gif" alt="Desription" title='2RN invites submissions, from suitably qualified Tenderers for the supply, design, manufacture, commissioning, factory testing, site acceptance testing, delivery to site, off-loading, and commissioning (optional) of UHF Antennas and associated feeder system and mounting hardware in the 2RN sites at Woodcock Hill and Aranmore.' />
+					
+				</td>
+<td>
+                    
+                        Mon Aug 24 11:34:19 IST 2026
+                     
+                </td>
+<td>
+					
+						Fri Oct 02 13:00:00 IST 2026
+					
+				</td>
+<td>
+					
+						
+						Open
+					
+				</td>
+<td>
+					
+					Tender Submission
+				</td>
+<td>
+					
+						<a href="/epps/cft/downloadNoticeForAdvSearch.do?resourceId=8906445"><img src="/epps/images/acrobat.gif" alt="Contract Notice PDF" title="Contract Notice PDF" /></a>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+						100000.0
+					
+				</td>
+<td>
+                    1
+                </td></tr>
+<tr>
+<td>7</td>
+<td style="display:block; text-align:left">
+					
+						
+						
+						
+							<a href="/epps/cft/prepareViewCfTWS.do?resourceId=8904877">Mechanical Works to St. Marys JNS, Blessington, Co. Wicklow</a>
+						
+					
+				</td>
+<td>
+                    8904877
+                </td>
+<td>
+					St. Mary&#039;s Junior National School (Blessington)
+				</td>
+<td>
+					
+					<img src="/epps/images/icon_information.gif" alt="Desription" title='EWS 2026 Mechanical upgrading works to St. Mary&#039;s Junior National School, Blessington, Co. Wicklow. The works entail the replacement of the existing space heating services and boilerhouse throughout the building. Refer to the drawings for further information on the works to be carried out.' />
+					
+				</td>
+<td>
+                    
+                        Mon Aug 24 10:53:43 IST 2026
+                     
+                </td>
+<td>
+					
+						Fri Sep 11 12:00:00 IST 2026
+					
+				</td>
+<td>
+					
+						
+						Open
+					
+				</td>
+<td>
+					
+					Tender Submission
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+                    1
+                </td></tr>
+<tr>
+<td>8</td>
+<td style="display:block; text-align:left">
+					
+						
+						
+						
+							<a href="/epps/cft/prepareViewCfTWS.do?resourceId=8888590">SCC2026-0126 Cleveragh Active Travel Scheme</a>
+						
+					
+				</td>
+<td>
+                    8888590
+                </td>
+<td>
+					Sligo County Council
+				</td>
+<td>
+					
+					<img src="/epps/images/icon_information.gif" alt="Desription" title='Sligo County Council, through its Active Travel Section, intends to deliver the Cleveragh Active Travel Scheme to improve sustainable transport infrastructure, road safety, accessibility and connectivity along Cleveragh Drive, Sligo. The Scheme comprises the provision of active travel infrastructure along approximately 1.0km of Cleveragh Drive (L-9208), extending from the junction with Pearse Road (R287) to the vicinity of Cleveragh Park and the Regional Sports Complex. The primary objective of the Scheme is to provide a safe, attractive and accessible environment for pedestrians and cyclists of all ages and abilities, while improving connectivity between residential areas, recreational facilities, educational facilities, sporting amenities and the wider Active Travel network within Sligo Town.' />
+					
+				</td>
+<td>
+                    
+                        Mon Aug 24 09:06:43 IST 2026
+                     
+                </td>
+<td>
+					
+						Mon Sep 21 12:00:00 IST 2026
+					
+				</td>
+<td>
+					
+						
+						Open
+					
+				</td>
+<td>
+					
+					Tender Submission
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+                    1
+                </td></tr>
+<tr>
+<td>9</td>
+<td style="display:block; text-align:left">
+					
+						
+						
+						
+							<a href="/epps/cft/prepareViewCfTWS.do?resourceId=8897682">CFT for the provision of Consultancy Services</a>
+						
+					
+				</td>
+<td>
+                    8897682
+                </td>
+<td>
+					Taighde Éireann – Research Ireland
+				</td>
+<td>
+					
+					<img src="/epps/images/icon_information.gif" alt="Desription" title='Research Ireland wishes to appoint a suitably qualified and experienced service provider to deliver a broad range of Business Consultancy Services in support of its strategic, operational and organisational requirements over the term of the Contract. The Services will support Research Ireland in fulfilling its role as Ireland’s national research and innovation funding agency and may include strategic and policy development, organisational development, governance and performance improvement, programme and project management, business transformation, stakeholder engagement, digital and data-enabled improvement, and other related business consultancy services. The successful Tenderer will be expected to provide high-quality, evidence-based advice and support, applying appropriate professional expertise, methodologies and sectoral knowledge to meet Research Ireland’s evolving requirements.' />
+					
+				</td>
+<td>
+                    
+                        Mon Aug 24 03:14:50 IST 2026
+                     
+                </td>
+<td>
+					
+						Fri Sep 25 12:00:00 IST 2026
+					
+				</td>
+<td>
+					
+						
+						Open
+					
+				</td>
+<td>
+					
+					Tender Submission
+				</td>
+<td>
+					
+						<a href="/epps/cft/downloadNoticeForAdvSearch.do?resourceId=8897682"><img src="/epps/images/acrobat.gif" alt="Contract Notice PDF" title="Contract Notice PDF" /></a>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+						1000000.0
+					
+				</td>
+<td>
+                    1
+                </td></tr>
+<tr>
+<td>10</td>
+<td style="display:block; text-align:left">
+					
+						
+						
+						
+							<a href="/epps/cft/prepareViewCfTWS.do?resourceId=8895572">Single Party Framework Agreement for the supply of Address Validation and Related Services to the Gambling Regulatory Authority of Ireland</a>
+						
+					
+				</td>
+<td>
+                    8895572
+                </td>
+<td>
+					Gambling Regulatory Authority of Ireland
+				</td>
+<td>
+					
+					<img src="/epps/images/icon_information.gif" alt="Desription" title='The Gambling Regulatory Authority of Ireland (GRAI) intends to establish a single-party framework agreement for the provision of address validation and related products and services. The successful Tenderer will support the Contracting Authority in the discharge of address validation and related services' />
+					
+				</td>
+<td>
+                    
+                        Mon Aug 24 03:14:36 IST 2026
+                     
+                </td>
+<td>
+					
+						Mon Sep 21 12:00:00 IST 2026
+					
+				</td>
+<td>
+					
+						
+						Open
+					
+				</td>
+<td>
+					
+					Tender Submission
+				</td>
+<td>
+					
+						<a href="/epps/cft/downloadNoticeForAdvSearch.do?resourceId=8895572"><img src="/epps/images/acrobat.gif" alt="Contract Notice PDF" title="Contract Notice PDF" /></a>
+					
+				</td>
+<td>
+					
+				</td>
+<td>
+					
+						400000.0
+					
+				</td>
+<td>
+                    1
+                </td></tr></tbody></table><input type="hidden" name="tableUid" value="searchCft">
+	<div class="Pagination6 row p-1 m-1  justify-content-between table-pagination">
+		<div class="col-12 col-sm-6"> 
+		 	| Displaying: <strong>1-10</strong> | <strong>2,884</strong> results in total.
+		</div>
+
+
+		<div>
+			<script type="text/javascript">
+				var scriptNode = $j(document.currentScript.parentElement);
+				writePageSelection("289", "?d-3680175-p=&amp;searchType=cftFTS&amp;latest=true", this, scriptNode);
+			</script>
+		</div>
+		
+		<div class="btn-group align-self-end" role="group" aria-label="pagination toolbar">
+			<button type="button" class="btn btn-primary btn-lg rounded-left" title="First" type="button" id="firstNav" disabled="disabled">
+				<i class="fa fa-angle-double-left"></i>
+			</button>
+			<button type="button" class="btn btn-primary btn-lg" title="Previous" type="button" id="previousNav" disabled="disabled">
+				<i class="fa fa-angle-left"></i>
+			</button>
+			
+			<div class="btn-group" role="group">
+				<!-- Go to Page: JS Code Append -->
+			</div>
+			
+			<button type="button" class="btn btn-lg btn-primary" title="Next" type="button" id="nextNav"
+				onclick=window.location.href=this.getAttribute("href") href="?d-3680175-p=2&amp;searchType=cftFTS&amp;latest=true">
+				<i class="fa fa-angle-right"></i>
+			</button>
+			<button type="button" class="btn btn-lf btn-primary rounded-right btn-primary" title="Last" type="button" id="lastNav"
+				onclick=window.location.href=this.getAttribute("href") href="?d-3680175-p=289&amp;searchType=cftFTS&amp;latest=true">
+				<i class="fa fa-angle-double-right"></i>
+			</button>
+		</div>
+
+	</div>
+
+		</div><!-- end "CFTResults" -->
+        
+        
+            
+		
+	
+<!-- added to address false positive reports from accessibility tools -->
+<button type="submit" style="display:none;">Submit</button>
+</form>
+
+
+
+
+
+
+
+
+	        </div>
+	    </div>
+	</div>
+
+
+				</div>
+			</div>
+						
+			
+			
+			
+
+		</div><!-- /.container-fluid -->
+		
+	
+	
+		
+		
+		
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+	<script type="text/javascript">
+	
+	    $j('document').ready(function(ev){
+	    	$j("a.PopUp").click(function(){
+	    		PopUpOpts = {
+	        		windowname: 'popupwindow',
+	        		width:		810,
+	        		height:		600,
+	        		scroll:		1,
+	        		resizable:	0
+	        	};
+	           	$j(this).PopUp(this.href, PopUpOpts); 
+	            return false; 
+	        }); 
+	    });
+	    
+	</script>
+	
+	<footer>
+	
+	
+		<div class="container-fluid">
+			<div class="row">
+			
+				<div class="col-sm">
+					<ul class="list-unstyled">
+                        
+			        	<li>
+		                   <a href="/epps/prepareCurrentOpportunities.do?mode=cft">Latest CfTs</a>
+	                    </li>
+			        	
+			        	<li>
+			            	<a href="/epps/viewInfo.do?section=legal">Public procurement legislation</a>
+			            </li>
+			      		<li>
+			            	<a href="/epps/viewTrainingVideos.do">Guidance Videos</a>
+						</li>
+			        	<li>
+			            	<a href="/epps/viewInfo.do?section=statistics">Release Notes</a>
+			            </li>
+			        	<li>
+			            	<a href="/epps/viewInfo.do?section=calendar">Calendar</a>
+			            </li>
+					</ul>
+				</div>
+				<div class="col-sm">
+					<ul class="list-unstyled">
+						<li>
+			            	<a href="/epps/viewInfo.do?section=eproc">Electronic public procurement</a>
+			            </li>
+			            <li>
+			               <a href="/epps/viewInfo.do?section=newItems">News</a>
+			            </li>
+			            <li>
+			            	<a href="/epps/viewInfo.do?section=links">Relevant links</a>
+			            </li>
+		        		<li>
+			            	<a href="/epps/viewInfo.do?section=faq">FAQ</a>
+			            </li>
+		        		<li>
+			            	<a href="/epps/viewInfo.do?section=thresholds">EU Threshold Information</a>
+			            </li>
+					</ul>
+				</div>
+			
+				<div class="col-sm">
+					<ul class="list-unstyled">		        	
+		    		    
+				        
+				        
+				        
+									        
+			        	<li id="Help">
+				            <a href="/epps/viewInfo.do?section=userGuides&amp;helpPage=true">Help</a>
+				        </li>
+				        <li id="About">
+				            <a href="/epps/DisplayHeaderStaticTextAction.do" class="PopUp ml-0">About</a>
+				        </li>
+				        <li>
+				            <a href="https://www.gov.ie/en/publication/32015-sell-to-government/" target="_blank">       
+				                Sell to Government
+				            </a>
+				        </li>
+				        <li class="Last" id="Contact">
+				            <a href="/epps/PrepareContactUsAction.do" class="PopUp ml-0">Contact us</a>
+				        </li>
+					</ul>
+				</div>	
+				<div class="col-sm">
+					<img src="/epps/images/government_of_ireland.svg" class="FooterLogo" alt="Government of Ireland">
+				</div>		
+			</div>
+			<div class="row">
+				<div class="col text-center">
+					<span>Copyright &copy; European Dynamics - Last update: 24 August 2026</span>
+				</div>
+			</div>
+		</div>
+	</footer>
+
+<!-- Footer // -->
+
+
+
+
+
+
+        
+
+
+
+
+
+
+	</body>
+	
+	
+</html>
+
