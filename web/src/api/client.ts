@@ -143,6 +143,9 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       }),
 
     // --- the team ---------------------------------------------------------
+    /** Who is signed in, and what they may do. The server refuses either way. */
+    me: () => request<{ user: { id: string; email: string }; role: string; company: CompanyProfile }>(
+      "/api/me", "Load your account"),
     team: () => request<TeamState>("/api/team/members", "Load team"),
     /**
      * `link` comes back only while email is unconfigured (TLY-35), so an owner
@@ -151,6 +154,12 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
     inviteMember: (email: string, role: string) =>
       request<{ invitation: TeamState["invitations"][number]; delivered: boolean; link?: string }>(
         "/api/team/invitations", "Invite", { method: "POST", body: JSON.stringify({ email, role }) }),
+    setMemberRole: (memberId: string, role: string) =>
+      request<{ role: string }>(`/api/team/members/${encodeURIComponent(memberId)}`, "Change role",
+        { method: "PUT", body: JSON.stringify({ role }) }),
+    removeMember: (memberId: string) =>
+      request<{ removed: boolean }>(`/api/team/members/${encodeURIComponent(memberId)}`, "Remove from workspace",
+        { method: "DELETE" }),
     revokeInvitation: (id: string) =>
       request<{ revoked: boolean }>(`/api/team/invitations/${encodeURIComponent(id)}`, "Withdraw invitation",
         { method: "DELETE" }),

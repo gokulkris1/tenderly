@@ -190,6 +190,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     // The team is the caller's own organisation; server/tests/invitations.test.ts
     // proves an invitation cannot be issued or withdrawn across one.
     "GET /api/team/members", "POST /api/team/invitations", "DELETE /api/team/invitations/:id",
+    "PUT /api/team/members/:userId", "DELETE /api/team/members/:userId", "GET /api/billing",
   ];
   const covered = new Set([
     ...ownScopeOnly,

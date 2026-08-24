@@ -806,6 +806,10 @@ export default function TenderlyApp() {
   const [query, setQuery] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importUrl, setImportUrl] = useState("");
+  // What this person may do here. Defaults to editor so the demo build, which
+  // has no API to ask, behaves as it always has.
+  const [role, setRole] = useState<"owner" | "editor" | "viewer">("editor");
+  const readOnly = role === "viewer";
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState("");
   const [company, setCompany] = useState(initialCompany);
@@ -929,11 +933,12 @@ export default function TenderlyApp() {
     async function loadWorkspace() {
       setLoading("initial");
       try {
-        const [bidsData, companyData, evidenceData, peopleData, notificationsData, sectorsData, preferencesData] = await Promise.all([
+        const [bidsData, companyData, evidenceData, peopleData, notificationsData, sectorsData, preferencesData, meData] = await Promise.all([
           apiClient.listTenders(), apiClient.getCompany(), apiClient.listEvidence(), apiClient.listPeople(), apiClient.listNotifications(),
-          apiClient.listSectors(), apiClient.getPreferences(),
+          apiClient.listSectors(), apiClient.getPreferences(), apiClient.me(),
         ]);
         if (!active) return;
+        setRole(meData.role === "owner" || meData.role === "editor" ? meData.role : "viewer");
         setTenders(bidsData.items ?? []);
         setCompany((current) => ({ ...current, ...(companyData.company ?? {}) }));
         setEvidence(evidenceData.items ?? []);
@@ -1971,6 +1976,7 @@ export default function TenderlyApp() {
             <>
             <BidList tenders={tenders} selectedId={selected.id} onSelect={setSelectedId} />
             <BidWorkspace
+              readOnly={readOnly}
               acknowledgeAiPolicy={acknowledgeAiPolicy}
               assignRole={assignRole}
               packQuestions={packQuestions}
@@ -2377,7 +2383,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, runbook, runbookCompleted, runbookTotal, tickRunbookStep, tasks, addTask, updateTask, blockers }: {
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, runbook, runbookCompleted, runbookTotal, tickRunbookStep, tasks, addTask, updateTask, blockers, readOnly }: {
+  readOnly: boolean;
   tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; clarifications: Clarification[]; openClarifications: number; askClarification: (question: string) => void; answerClarification: (id: string, response: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; runbook: Runbook | null; runbookCompleted: number; runbookTotal: number; tickRunbookStep: (stepId: string, done: boolean) => void; tasks: BidTask[]; addTask: (title: string, dueOn: string) => void; updateTask: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
@@ -2457,9 +2464,9 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
       )}
 
       {stage === "Synopsis" && <Synopsis tender={tender} onDownload={() => downloadAsset("deck")} onContinue={() => setStage("Respond")} loading={loading === "deck"} />}
-      {stage === "Respond" && <Respond tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} evaluation={evaluation} onRunEvaluation={runMockEvaluation} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
+      {stage === "Respond" && <Respond readOnly={readOnly} tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} evaluation={evaluation} onRunEvaluation={runMockEvaluation} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
       {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} attestation={attestation} onAttest={onAttest} tasks={tasks} onAddTask={addTask} onUpdateTask={updateTask} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
-      {stage === "Submit" && <Submit runbook={runbook} runbookCompleted={runbookCompleted} runbookTotal={runbookTotal} onTickRunbook={tickRunbookStep} runbookBusy={loading === "runbook"} tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
+      {stage === "Submit" && <Submit readOnly={readOnly} runbook={runbook} runbookCompleted={runbookCompleted} runbookTotal={runbookTotal} onTickRunbook={tickRunbookStep} runbookBusy={loading === "runbook"} tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
     </div>
   );
 }
@@ -2650,7 +2657,7 @@ function MockEvaluationPanel({ evaluation, gaps, onRun, onJumpToQuestion, busy }
   );
 }
 
-function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, onRunEvaluation, history, onSelectVersion, onCompareVersions, onRestoreVersion, onBackToQualify, onOpenCitation, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue }: { tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; onRunEvaluation: () => void; history: AnswerHistory | null; onSelectVersion: (versionId: string) => void; onCompareVersions: () => void; onRestoreVersion: (versionId: string) => void; onBackToQualify: () => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
+function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, onRunEvaluation, history, onSelectVersion, onCompareVersions, onRestoreVersion, onBackToQualify, onOpenCitation, draftAnswer, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue, readOnly }: { readOnly: boolean; tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; onRunEvaluation: () => void; history: AnswerHistory | null; onSelectVersion: (versionId: string) => void; onCompareVersions: () => void; onRestoreVersion: (versionId: string) => void; onBackToQualify: () => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
   const [activeId, setActiveId] = useState(tender.questions[0]?.id ?? "");
   const active = tender.questions.find((question) => question.id === activeId) ?? tender.questions[0];
   if (!active) return <div className="no-questions panel"><span>◇</span><h2>Import the full tender pack first</h2><p>The notice gives Tenderly the opportunity metadata. The RFT / RFQ documents are needed to extract scored questions, word limits, mandatory roles and response templates.</p><FileButton label={loading === "upload" ? "Uploading…" : "Upload tender documents"} accept=".pdf,.docx,.xlsx,.xls,.pptx,.zip,.txt,.xml" onFile={(file) => uploadTenderFile(file, "source")} /></div>;
@@ -2694,10 +2701,12 @@ function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, on
         <div className="answer-head"><div><p className="eyebrow">SCORED QUESTION · {active.weight}%</p><h2>{active.title}</h2><p>{active.prompt}</p><ProvenanceBadge entry={active.provenance} /></div><div className="mark-badge"><strong>{active.weight}</strong><small>marks</small></div></div>
         <div className="answer-brief"><div><span>✦</span><p><strong>Tenderly writing brief</strong><small>Answer the question directly, lead with the outcome, evidence every material claim, and reserve ~10% of words for measurable controls and assurance.</small></p></div><button>View scoring logic</button></div>
         <div className="editor-toolbar"><button><b>B</b></button><button><i>I</i></button><button>≡</button><button>• list</button><span /><button>Insert evidence ⌄</button></div>
-        <textarea value={active.answer} onChange={(event) => updateQuestion(active.id, event.target.value)} placeholder="Draft your response here, or ask Tenderly to build a first draft from verified evidence…" />
-        <div className="editor-foot"><span>{active.answer.trim() ? active.answer.trim().split(/\s+/).length : 0} / {active.maxWords || "—"} words</span><div>{active.status === "ready" ? <button className="ready-button" disabled>✓ Reviewed & ready</button> : <button className="quiet-btn" onClick={() => markAnswerReady(active.id)} disabled={loading === `ready-${active.id}`}>{loading === `ready-${active.id}` ? "Saving…" : "Mark reviewed & ready"}</button>}{tender.noAiMode
+        <textarea value={active.answer} onChange={(event) => updateQuestion(active.id, event.target.value)} readOnly={readOnly} placeholder={readOnly ? "You have read access to this bid." : "Draft your response here, or ask Tenderly to build a first draft from verified evidence…"} />
+        <div className="editor-foot"><span>{active.answer.trim() ? active.answer.trim().split(/\s+/).length : 0} / {active.maxWords || "—"} words</span><div>{readOnly
+          ? <span className="muted" data-testid="read-only-note">Read access — ask an editor to make changes</span>
+          : <>{active.status === "ready" ? <button className="ready-button" disabled>✓ Reviewed & ready</button> : <button className="quiet-btn" onClick={() => markAnswerReady(active.id)} disabled={loading === `ready-${active.id}`}>{loading === `ready-${active.id}` ? "Saving…" : "Mark reviewed & ready"}</button>}{tender.noAiMode
           ? <button className="quiet-btn" onClick={() => critiqueAnswer(active.id)} disabled={loading === `critique-${active.id}`}>{loading === `critique-${active.id}` ? "Reviewing…" : "◇ Critique what I wrote"}</button>
-          : <button className="ai-draft" onClick={() => draftAnswer(active.id)} disabled={loading === active.id}>{loading === active.id ? "Drafting…" : "✦ Draft from evidence"}</button>}</div></div>
+          : <button className="ai-draft" onClick={() => draftAnswer(active.id)} disabled={loading === active.id}>{loading === active.id ? "Drafting…" : "✦ Draft from evidence"}</button>}</>}</div></div>
         <MockEvaluationPanel
           evaluation={evaluation?.result ?? null}
           gaps={evaluation?.gaps ?? []}
@@ -2932,7 +2941,7 @@ function SubmissionRunbook({ runbook, completed, total, onTick, busy }: {
   );
 }
 
-function Submit({ tender, onDownload, onReview, loading, blockers, runbook, runbookCompleted, runbookTotal, onTickRunbook, runbookBusy }: { tender: Tender; onDownload: () => void; onReview: () => void; loading: boolean; blockers: string[]; runbook: Runbook | null; runbookCompleted: number; runbookTotal: number; onTickRunbook: (stepId: string, done: boolean) => void; runbookBusy: boolean }) {
+function Submit({ tender, onDownload, onReview, loading, blockers, runbook, runbookCompleted, runbookTotal, onTickRunbook, runbookBusy, readOnly }: { readOnly: boolean; tender: Tender; onDownload: () => void; onReview: () => void; loading: boolean; blockers: string[]; runbook: Runbook | null; runbookCompleted: number; runbookTotal: number; onTickRunbook: (stepId: string, done: boolean) => void; runbookBusy: boolean }) {
   const eligibilityReady = tender.eligibility ? tender.eligibility === "PASS" : tender.gates.every((gate) => gate.state === "pass");
   const requiredQuestions = tender.questions.filter((question) => question.required !== false);
   const responsesReady = requiredQuestions.length === 0 || requiredQuestions.every((question) => question.status === "ready" && question.answer.trim());
@@ -2948,7 +2957,9 @@ function Submit({ tender, onDownload, onReview, loading, blockers, runbook, runb
     <div className="submit-page">
       <section className="submit-hero"><span className="lock-orb">✓</span><p className="eyebrow">HUMAN-CONTROLLED SUBMISSION</p><h2>Ready means actually ready.</h2><p>Tenderly can build the final ZIP, but it never presses the buyer portal’s final submit button for you. You keep the last check and submission control.</p></section>
       <SubmissionRunbook runbook={runbook} completed={runbookCompleted} total={runbookTotal} onTick={onTickRunbook} busy={runbookBusy} />
-      <div className="submit-grid"><section className="panel final-checks"><h3>Final verification</h3>{checks.map(([label, ok, detail]) => <div key={label}><span className={ok ? "check-ok" : "check-wait"}>{ok ? "✓" : "!"}</span><p><strong>{label}</strong><small>{detail}</small></p>{label === "Deadline re-check" ? <a href={tender.sourceUrl} target="_blank" rel="noreferrer">Open ↗</a> : <button onClick={onReview}>{ok ? "View" : "Review"}</button>}</div>)}</section><aside className="panel submit-card"><p className="eyebrow">SUBMISSION</p><h3>{tender.deadline}</h3><p>Official deadline shown from the source notice. Re-check eTenders immediately before upload.</p><button className="continue-btn" onClick={onDownload} disabled={loading}>{loading ? "Checking pack…" : "⇩ Download final ZIP"}</button><a href={tender.sourceUrl} target="_blank" rel="noreferrer">Open eTenders submission page ↗</a><small>The API performs the authoritative blocker check when you request the final ZIP.</small>{blockers.length > 0 && <ul className="blocker-list" data-testid="blockers">{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>}</aside></div>
+      <div className="submit-grid"><section className="panel final-checks"><h3>Final verification</h3>{checks.map(([label, ok, detail]) => <div key={label}><span className={ok ? "check-ok" : "check-wait"}>{ok ? "✓" : "!"}</span><p><strong>{label}</strong><small>{detail}</small></p>{label === "Deadline re-check" ? <a href={tender.sourceUrl} target="_blank" rel="noreferrer">Open ↗</a> : <button onClick={onReview}>{ok ? "View" : "Review"}</button>}</div>)}</section><aside className="panel submit-card"><p className="eyebrow">SUBMISSION</p><h3>{tender.deadline}</h3><p>Official deadline shown from the source notice. Re-check eTenders immediately before upload.</p>{readOnly
+      ? <p className="muted" data-testid="read-only-pack">Read access — an editor builds the final pack.</p>
+      : <button className="continue-btn" onClick={onDownload} disabled={loading}>{loading ? "Checking pack…" : "⇩ Download final ZIP"}</button>}<a href={tender.sourceUrl} target="_blank" rel="noreferrer">Open eTenders submission page ↗</a><small>The API performs the authoritative blocker check when you request the final ZIP.</small>{blockers.length > 0 && <ul className="blocker-list" data-testid="blockers">{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>}</aside></div>
     </div>
   );
 }
@@ -3446,6 +3457,20 @@ function TeamAccessPanel() {
     } finally { setBusy(""); }
   }
 
+  async function changeRole(memberId: string, next: string) {
+    setBusy(memberId); setError(""); setLink("");
+    try { await apiClient.setMemberRole(memberId, next); await refresh(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Could not change that role"); }
+    finally { setBusy(""); }
+  }
+
+  async function remove(memberId: string) {
+    setBusy(memberId); setError(""); setLink("");
+    try { await apiClient.removeMember(memberId); await refresh(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Could not remove that person"); }
+    finally { setBusy(""); }
+  }
+
   async function withdraw(id: string) {
     setBusy(id); setError(""); setLink("");
     try { await apiClient.revokeInvitation(id); await refresh(); }
@@ -3458,7 +3483,18 @@ function TeamAccessPanel() {
 
     {(team?.members ?? []).map((member) => (
       <div key={member.userId}><span><strong>{member.email}{member.you ? " (you)" : ""}</strong>
-        <small>{member.role}</small></span></div>
+        <small>{member.role}</small></span>
+        {team?.canInvite && <span className="value-band">
+          <select aria-label={`Role for ${member.email}`} value={member.role}
+            onChange={(event) => void changeRole(member.userId, event.target.value)}
+            disabled={busy === member.userId} data-testid={`role-${member.email}`}>
+            <option value="owner">Owner</option>
+            <option value="editor">Editor</option>
+            <option value="viewer">Viewer</option>
+          </select>
+          <button type="button" className="quiet-btn danger" onClick={() => void remove(member.userId)}
+            disabled={busy === member.userId} data-testid={`remove-${member.email}`}>Remove</button>
+        </span>}</div>
     ))}
 
     {(team?.invitations ?? []).map((invitation) => (

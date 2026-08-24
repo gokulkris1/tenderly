@@ -97,9 +97,12 @@ test("TLY-86 AC3: a token naming a user id as the organisation reaches nothing",
   const wrong = jwt.sign({ sub: user.id, org: user.id, role: "owner", email: user.email }, secret,
     { expiresIn: "12h", issuer: "tenderly-api", audience: "tenderly-web" });
 
-  const listed = await fetch(`${base}/api/tenders`, { headers: { authorization: `Bearer ${wrong}` } })
-    .then((r) => r.json() as Promise<{ items: unknown[] }>);
-  assert.deepEqual(listed.items, [], "an organisation id that is really a user id owns nothing");
+  const response = await fetch(`${base}/api/tenders`, { headers: { authorization: `Bearer ${wrong}` } });
+  // Since TLY-88 the membership is checked on every request, so a claim naming
+  // an organisation the caller has no place in is refused outright rather than
+  // answered with an empty list.
+  assert.equal(response.status, 403);
+  assert.equal((await response.json() as { items?: unknown }).items, undefined);
 });
 
 test("TLY-86: two people in one organisation see the same bids", async () => {

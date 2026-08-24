@@ -470,6 +470,51 @@ export async function createUserWithoutOrganisation(email: string, passwordHash:
   }
 }
 
+/** How many owners this organisation has. The answer must never reach zero. */
+export async function ownerCount(organisationId: string) {
+  if (!isUuid(organisationId)) return 0;
+  if (!pool) {
+    return memory.memberships.filter((entry) => entry.organisationId === organisationId && entry.role === "owner").length;
+  }
+  const result = await pool.query<{ count: string }>(
+    "SELECT count(*)::int AS count FROM memberships WHERE organisation_id=$1 AND role='owner'", [organisationId]);
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+/** Changes somebody's role. Returns false when they are not a member. */
+export async function setMembershipRole(organisationId: string, memberId: string, role: MembershipRole) {
+  if (!isUuid(organisationId) || !isUuid(memberId)) return false;
+  if (!pool) {
+    const membership = memory.memberships.find((entry) =>
+      entry.organisationId === organisationId && entry.userId === memberId);
+    if (!membership) return false;
+    membership.role = role;
+    return true;
+  }
+  const result = await pool.query(
+    "UPDATE memberships SET role=$3 WHERE organisation_id=$1 AND user_id=$2", [organisationId, memberId, role]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Removes somebody from an organisation.
+ *
+ * Their sign-in survives: it is theirs, and they may work for somebody else
+ * too. What they lose is this workspace, on their next request.
+ */
+export async function removeMembership(organisationId: string, memberId: string) {
+  if (!isUuid(organisationId) || !isUuid(memberId)) return false;
+  if (!pool) {
+    const before = memory.memberships.length;
+    memory.memberships = memory.memberships.filter((entry) =>
+      !(entry.organisationId === organisationId && entry.userId === memberId));
+    return memory.memberships.length < before;
+  }
+  const result = await pool.query(
+    "DELETE FROM memberships WHERE organisation_id=$1 AND user_id=$2", [organisationId, memberId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
 /** Everyone in one organisation, owners first. */
 export async function listMemberships(organisationId: string): Promise<Membership[]> {
   if (!isUuid(organisationId)) return [];

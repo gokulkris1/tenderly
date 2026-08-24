@@ -25,6 +25,8 @@ export const AUDIT_ACTIONS = {
   accountExported: "account.exported",
   accountDeletionRequested: "account.deletion_requested",
   accountDeletionCancelled: "account.deletion_cancelled",
+  memberRoleChanged: "member.role_changed",
+  memberRemoved: "member.removed",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

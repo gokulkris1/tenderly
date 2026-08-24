@@ -335,4 +335,12 @@ carries the two guards described above and refuses to run once they are false.
 Invitations shipped in TLY-87, so **the window in which rollback is exact is
 closed**. From here on, a rollback is exact only for a database in which no
 invitation has yet been accepted — the guards in the rollback file check that
-and refuse when it is false. Role enforcement is TLY-88.
+and refuse when it is false.
+
+Role enforcement shipped in TLY-88. Two things about it are worth keeping in
+mind when reading the token section above: the `role` claim is now advisory,
+because `attachMembership` re-reads the membership row on every request; and
+that same read is what removes a person's access on their next call rather than
+at the end of their twelve-hour session. Every mutating request needs at least
+the editor role, enforced on the HTTP method rather than on a list of paths, so
+a route added tomorrow is covered without anybody remembering to cover it.
