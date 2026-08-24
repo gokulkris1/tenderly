@@ -49,6 +49,7 @@ import {
 } from "./db.js";
 import { runDiscoveryJob } from "./jobs.js";
 import { createSubmissionPack, createSynopsisDeck, packFilename, submissionBlockers } from "./pack.js";
+import { attestationValid, contentVersion, provenanceSummary, type Attestation } from "./attestation.js";
 import { serializePublicTender, serializeTender } from "./serializers.js";
 import type { CompanyProfile, TenderRecord } from "./types.js";
 
@@ -407,6 +408,54 @@ app.post("/api/tenders/:id/checklist/:itemId", async (req: AuthenticatedRequest,
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
+/**
+ * What the attester is being asked to stand behind, and whether the statement
+ * they may already have made still applies to the current content.
+ */
+app.get("/api/tenders/:id/attestation", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const [answers, provenance, documents, evidence] = await Promise.all([
+      listAnswers(tender.id), tenderProvenance(tender.id), listDocuments(tender.id), listEvidence(account),
+    ]);
+    const attestation = tender.metadata.attestation as Attestation | undefined;
+    const valid = attestationValid(attestation, answers);
+    res.json({
+      summary: provenanceSummary(tender.analysis, answers, provenance),
+      attestation: attestation ?? null,
+      // An attestation that no longer matches the content is reported as
+      // invalidated rather than quietly dropped: the user needs to know why.
+      invalidated: Boolean(attestation) && !valid,
+      blockers: tender.analysis ? submissionBlockers(tender, tender.analysis, answers, documents, evidence) : ["Run tender analysis first"],
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Records that a named person has reviewed this exact content. Refused while
+ * any other blocker stands — attesting to a pack that is not ready would make
+ * the statement meaningless.
+ */
+app.post("/api/tenders/:id/attestation", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender?.analysis) return res.status(404).json({ error: "Tender analysis not found" });
+    const { confirmed } = z.object({ confirmed: z.literal(true) }).parse(req.body);
+    void confirmed;
+    const [answers, documents, evidence] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id), listEvidence(account)]);
+    const remaining = submissionBlockers(tender, tender.analysis, answers, documents, evidence)
+      .filter((blocker) => blocker !== "Attestation not recorded");
+    if (remaining.length) return res.status(409).json({ error: "Resolve the remaining blockers before attesting", blockers: remaining });
+
+    const attestation: Attestation = { actor: actorEmail(req), at: new Date().toISOString(), contentVersion: contentVersion(answers) };
+    await updateTenderMetadata(account, tender.id, { attestation });
+    res.json({ attestation });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
 /** True when this tender is in no-AI mode. Stored on the tender, not the account. */
 function noAiMode(tender: { metadata: Record<string, unknown> }) {
   return tender.metadata.noAiMode === true;
@@ -526,7 +575,7 @@ app.get("/api/tenders/:id/pack", async (req: AuthenticatedRequest, res) => {
     if (!tender.analysis) return res.status(409).json({ error: "Analyse the tender before building a pack" });
     const draft = String(req.query.draft).toLowerCase() === "true";
     const [answers, documents, company, people, evidence] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id), getCompany(account), listPeople(account), listEvidence(account)]);
-    const result = await createSubmissionPack({ tender, analysis: tender.analysis, answers, documents, company, people, evidence, draft });
+    const result = await createSubmissionPack({ tender, analysis: tender.analysis, answers, documents, company, people, evidence, provenance: await tenderProvenance(tender.id), draft });
     if (!result.buffer) return res.status(409).json({ error: "Final submission pack is blocked", blockers: result.blockers });
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${packFilename(tender, draft)}"`);

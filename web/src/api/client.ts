@@ -8,6 +8,8 @@
  */
 import type {
   AiPolicyAcknowledgement,
+  Attestation,
+  AttestationState,
   CompanyProfile,
   DiscoveryPreferences,
   EvidenceItem,
@@ -154,6 +156,13 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       request<unknown>(`/api/tenders/${tenderId}/answers/${questionId}`, "Save answer", {
         method: "PUT",
         body: JSON.stringify({ response, status }),
+      }),
+    attestationState: (tenderId: string) =>
+      request<AttestationState>(`/api/tenders/${tenderId}/attestation`, "Load attestation"),
+    recordAttestation: (tenderId: string) =>
+      request<{ attestation: Attestation }>(`/api/tenders/${tenderId}/attestation`, "Record attestation", {
+        method: "POST",
+        body: JSON.stringify({ confirmed: true }),
       }),
     setNoAiMode: (tenderId: string, enabled: boolean) =>
       request<{ noAiMode: boolean; aiWrittenAnswers: string[] }>(`/api/tenders/${tenderId}/no-ai-mode`, "Set no-AI mode", {
