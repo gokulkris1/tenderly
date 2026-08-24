@@ -1186,6 +1186,42 @@ export default function TenderlyApp() {
     } catch (error) { setToast(error instanceof Error ? error.message : "Evidence upload failed"); } finally { setLoading(""); }
   }
 
+  const [busyPersonId, setBusyPersonId] = useState("");
+
+  async function renamePerson(personId: string, title: string) {
+    if (isDemo) { setToast("Editing people is disabled in the demo"); return; }
+    try {
+      setBusyPersonId(personId);
+      const { person } = await apiClient.updatePerson(personId, { title });
+      setPeople((items) => items.map((item) => (item.id === person.id ? person : item)));
+      setToast(`${person.name} updated`);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not update that person");
+    } finally {
+      setBusyPersonId("");
+    }
+  }
+
+  async function archivePerson(target: PersonItem, archived: boolean) {
+    if (isDemo) { setToast("Archiving is disabled in the demo"); return; }
+    try {
+      setBusyPersonId(target.id);
+      const { person, affectedTenders } = await apiClient.setPersonArchived(target.id, archived);
+      setPeople((items) => items.map((item) => (item.id === person.id ? person : item)));
+      // Naming the affected bids is the point: archiving quietly would leave a
+      // live tender proposing someone the company can no longer field.
+      setToast(archived
+        ? affectedTenders.length
+          ? `${person.name} archived · ${affectedTenders.length} live bid${affectedTenders.length > 1 ? "s" : ""} proposed them: ${affectedTenders.map((entry) => entry.title).join(", ")}`
+          : `${person.name} archived`
+        : `${person.name} reinstated`);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not change that person");
+    } finally {
+      setBusyPersonId("");
+    }
+  }
+
   async function uploadCvFile(file: File) {
     if (isDemo) { setPeople((items) => [{ id: `demo-${Date.now()}`, name: file.name.replace(/\.[^.]+$/, ""), title: "CV uploaded", cvText: "Demo CV", skills: [] }, ...items]); setToast(`${file.name} added to the demo CV library`); return; }
     try {
@@ -1376,7 +1412,7 @@ export default function TenderlyApp() {
             try { await apiClient.saveCompany(company); setToast("Company profile saved"); } catch (error) { setToast(error instanceof Error ? error.message : "Could not save profile"); }
           }} />}
           {section === "Evidence" && <EvidenceView tab={evidenceTab} setTab={setEvidenceTab} evidence={evidence} people={people} onUploadEvidence={uploadEvidenceFile} onUploadCv={uploadCvFile} onVerify={setEvidenceVerification} onDownload={downloadEvidence} loading={loading} />}
-          {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} loading={loading === "cv-upload"} />}
+          {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} onRename={renamePerson} onArchive={archivePerson} busyPersonId={busyPersonId} loading={loading === "cv-upload"} />}
           {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} usage={usage} audit={{ entries: auditEntries, action: auditAction, days: auditDays, onFilter: setAuditFilter, loading: loading === "audit" }} />}
         </div>
       </main>
@@ -2082,8 +2118,42 @@ function EvidenceView({ tab, setTab, evidence, people, onUploadEvidence, onUploa
   return <div className="library-page"><div className="section-intro"><div><p className="eyebrow">REUSABLE BID LIBRARY</p><h2>Write from evidence, not memory.</h2><p>Approved case studies, methods and policies are the only reusable claims Tenderly gives its bid writer. CV facts are kept separately for role matching.</p></div>{tab === "Evidence" ? <FileButton label={loading === "evidence-upload" ? "Extracting…" : "＋ Upload evidence"} accept=".pdf,.docx,.xlsx,.xls,.pptx,.zip,.txt,.csv" onFile={onUploadEvidence} /> : <FileButton label={loading === "cv-upload" ? "Extracting…" : "＋ Upload CV"} accept=".pdf,.docx,.txt" onFile={onUploadCv} />}</div><div className="segmented"><button className={tab === "Evidence" ? "active" : ""} onClick={() => setTab("Evidence")}>Evidence library</button><button className={tab === "CVs" ? "active" : ""} onClick={() => setTab("CVs")}>CV library</button></div>{tab === "Evidence" ? <section className="panel evidence-table">{evidence.map((item) => <div key={item.id}><span className="file-orb">◇</span><p><strong>{item.name}</strong><small>{[item.kind, item.expiresOn ? `expires ${item.expiresOn}` : "", item.sizeBytes ? formatBytes(item.sizeBytes) : "", item.tags.length ? item.tags.join(" · ") : ""].filter(Boolean).join(" · ")}</small></p><span className={item.verified ? "verified" : "review-state"}>{item.verified ? "✓ Verified" : "! Review"}</span>{/* Text-only items from before files were kept have nothing to download. */}{item.filename && <button className="text-action" onClick={() => onDownload(item)}>Download</button>}<button onClick={() => onVerify(item.id, !item.verified)} disabled={loading === `evidence-${item.id}`}>{loading === `evidence-${item.id}` ? "Saving…" : item.verified ? "Unverify" : "Verify →"}</button></div>)}{!evidence.length && <div className="library-empty"><span className="file-orb">◇</span><p><strong>No evidence yet</strong><small>Upload case studies, policies, methods or certificates. Review them before marking verified.</small></p></div>}</section> : <div className="cv-grid">{people.map((person) => <article className="panel cv-card" key={person.id}><span className="cv-avatar">{person.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "CV"}</span><h3>{person.name}</h3><p>{person.title || "Parsed CV"}</p><small>{person.cvText ? `${Math.min(person.cvText.length, 9999).toLocaleString()} characters extracted` : "CV text pending"}</small><div>{person.skills.length ? person.skills.slice(0, 4).map((skill) => <span key={skill}>{skill}</span>) : <span>Full CV available to role matching</span>}</div></article>)}<article className="panel gap-card"><span>＋</span><h3>Add another CV</h3><p>Upload the people you may propose. Re-run qualification and Tenderly will match explicit CV facts to tender roles.</p><FileButton label="Upload CV" accept=".pdf,.docx,.txt" onFile={onUploadCv} /></article></div>}</div>;
 }
 
-function TeamView({ people, onUploadCv, loading }: { people: PersonItem[]; onUploadCv: (file: File) => void; loading: boolean }) {
-  return <div className="library-page"><div className="section-intro"><div><p className="eyebrow">TEAM & PARTNERS</p><h2>Know your bid shape before you write.</h2><p>Tenderly maps required roles to CV evidence and only flags a tie-up when a concrete capability, capacity or credential gap remains.</p></div><FileButton label={loading ? "Extracting…" : "＋ Add person / CV"} accept=".pdf,.docx,.txt" onFile={onUploadCv} /></div><div className="team-grid">{people.map((person) => <section className="panel team-card" key={person.id}><span className="cv-avatar">{person.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "CV"}</span><div><h3>{person.name}</h3><p>{person.title || "Parsed CV profile"}</p></div><strong>Available to match</strong><small>{person.skills.length ? person.skills.join(" · ") : "Tenderly will match requirements against the full extracted CV text."}</small></section>)}<section className="panel gap-card"><span>＋</span><h3>Build your partner bench</h3><p>Add trusted associates or partner CVs here. A tender analysis will identify exactly which required role or credential still lacks evidence.</p><FileButton label="Add partner CV" accept=".pdf,.docx,.txt" onFile={onUploadCv} /></section></div></div>;
+/**
+ * One person, with the controls to correct or retire their record.
+ *
+ * Archiving is never a delete: a submitted bid named this person, and the
+ * record of what the buyer received has to stay intact. An archived card says
+ * so plainly rather than disappearing.
+ */
+function PersonCard({ person, onRename, onArchive, busy }: {
+  person: PersonItem; onRename: (id: string, title: string) => void;
+  onArchive: (person: PersonItem, archived: boolean) => void; busy: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(person.title);
+  const archived = Boolean(person.archivedAt);
+
+  return (
+    <section className={archived ? "panel team-card archived" : "panel team-card"} data-testid={`person-${person.id}`}>
+      <span className="cv-avatar">{person.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "CV"}</span>
+      <div>
+        <h3>{person.name}{archived && <em className="archived-tag">Archived</em>}</h3>
+        {editing
+          ? <div className="person-edit"><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Job title" /><button className="text-action" disabled={busy} onClick={() => { onRename(person.id, title); setEditing(false); }}>Save</button></div>
+          : <p>{person.title || "Parsed CV profile"}</p>}
+      </div>
+      <strong>{archived ? "Not available to match" : "Available to match"}</strong>
+      <small>{person.skills.length ? person.skills.join(" · ") : "Tenderly will match requirements against the full extracted CV text."}</small>
+      <div className="person-actions">
+        {!editing && <button className="text-action" onClick={() => { setTitle(person.title); setEditing(true); }}>Edit</button>}
+        <button className="text-action" disabled={busy} onClick={() => onArchive(person, !archived)}>{archived ? "Reinstate" : "Archive"}</button>
+      </div>
+    </section>
+  );
+}
+
+function TeamView({ people, onUploadCv, onRename, onArchive, busyPersonId, loading }: { people: PersonItem[]; onUploadCv: (file: File) => void; onRename: (id: string, title: string) => void; onArchive: (person: PersonItem, archived: boolean) => void; busyPersonId: string; loading: boolean }) {
+  return <div className="library-page"><div className="section-intro"><div><p className="eyebrow">TEAM & PARTNERS</p><h2>Know your bid shape before you write.</h2><p>Tenderly maps required roles to CV evidence and only flags a tie-up when a concrete capability, capacity or credential gap remains.</p></div><FileButton label={loading ? "Extracting…" : "＋ Add person / CV"} accept=".pdf,.docx,.txt" onFile={onUploadCv} /></div><div className="team-grid">{people.map((person) => <PersonCard key={person.id} person={person} onRename={onRename} onArchive={onArchive} busy={busyPersonId === person.id} />)}<section className="panel gap-card"><span>＋</span><h3>Build your partner bench</h3><p>Add trusted associates or partner CVs here. A tender analysis will identify exactly which required role or credential still lacks evidence.</p><FileButton label="Add partner CV" accept=".pdf,.docx,.txt" onFile={onUploadCv} /></section></div></div>;
 }
 
 /**

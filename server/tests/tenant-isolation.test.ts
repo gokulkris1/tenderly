@@ -96,6 +96,8 @@ function crossTenantCases(owner: Tenant) {
     { method: "GET", path: `/api/tenders/${owner.tenderId}/pack?draft=true` },
     { method: "PUT", path: `/api/evidence/${owner.evidenceId}/verification`, body: { verified: false } },
     { method: "GET", path: `/api/evidence/${owner.evidenceId}/file` },
+    { method: "PUT", path: `/api/people/${owner.personId}`, body: { title: "stolen" } },
+    { method: "POST", path: `/api/people/${owner.personId}/archive`, body: { archived: true } },
   ];
 }
 
@@ -168,6 +170,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     "POST /api/tenders/:id/checklist/:itemId", "GET /api/tenders/:id/red-team",
     "GET /api/tenders/:id/deck", "GET /api/tenders/:id/pack",
     "PUT /api/evidence/:id/verification", "GET /api/evidence/:id/file",
+    "PUT /api/people/:id", "POST /api/people/:id/archive",
   ]);
   const uncovered = routes.filter((r) => !covered.has(r));
   assert.deepEqual(uncovered, [], `these authenticated routes have no isolation case:\n${uncovered.join("\n")}`);

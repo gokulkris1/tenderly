@@ -254,6 +254,15 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         method: "POST", body: "{}",
       }),
     vaultCompleteness: () => request<{ completeness: VaultCompleteness }>("/api/vault/completeness", "Load vault readiness"),
+    updatePerson: (personId: string, patch: { name?: string; title?: string; email?: string; phone?: string }) =>
+      request<{ person: PersonItem }>(`/api/people/${encodeURIComponent(personId)}`, "Update person", {
+        method: "PUT", body: JSON.stringify(patch),
+      }),
+    setPersonArchived: (personId: string, archived: boolean) =>
+      request<{ person: PersonItem; affectedTenders: { id: string; title: string }[] }>(
+        `/api/people/${encodeURIComponent(personId)}/archive`, "Archive person",
+        { method: "POST", body: JSON.stringify({ archived }) },
+      ),
     setEvidenceVerified: (itemId: string, verified: boolean) =>
       request<{ item: EvidenceItem }>(`/api/evidence/${itemId}/verification`, "Update evidence", {
         method: "PUT",
