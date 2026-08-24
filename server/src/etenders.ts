@@ -150,15 +150,17 @@ function extractStructuredFields(html: string) {
 
 export type ImportedETender = PublicTender & { metadata: Record<string, unknown>; sourceText: string; resourceId: string };
 
-export async function importETender(inputUrl: string): Promise<ImportedETender> {
-  const safeUrl = assertSafeProcurementUrl(inputUrl);
-  if (!ETENDERS_HOSTS.has(safeUrl.hostname.toLowerCase())) throw new Error("For automatic document import, paste an etenders.gov.ie opportunity link");
-  const initial = await fetchHtml(safeUrl.toString());
-  const resourceId = extractResourceId(safeUrl, initial.html);
+/**
+ * Turns one notice-detail page into a tender, with no network involved.
+ *
+ * Separated from importETender so the extraction contract can be pinned against
+ * a recorded fixture: a portal redesign used to change the result silently —
+ * imports kept succeeding with every field empty.
+ */
+export function parseNoticeDetailHtml(html: string, resourceId: string): ImportedETender {
   const detailUrl = `https://www.etenders.gov.ie/epps/cft/prepareViewCfTWS.do?resourceId=${encodeURIComponent(resourceId)}`;
-  const detail = safeUrl.pathname.includes("prepareViewCfTWS.do") ? initial : await fetchHtml(detailUrl);
-  const { fields, sourceText } = extractStructuredFields(detail.html);
-  const title = fields.Title || clean(cheerio.load(detail.html)("h2").first().text()).replace(/^CfT:\s*/i, "") || `eTenders ${resourceId}`;
+  const { fields, sourceText } = extractStructuredFields(html);
+  const title = fields.Title || clean(cheerio.load(html)("h2").first().text()).replace(/^CfT:\s*/i, "") || `eTenders ${resourceId}`;
   return {
     resourceId,
     externalId: resourceId,
@@ -174,6 +176,22 @@ export async function importETender(inputUrl: string): Promise<ImportedETender> 
     metadata: { ...fields, resourceId },
     sourceText,
   };
+}
+
+/** How many of the known labels a detail page must yield to count as parsed. */
+export const MINIMUM_DETAIL_FIELDS = 15;
+
+/** Every label the detail parser knows how to find, for coverage assertions. */
+export const KNOWN_FIELD_LABELS: readonly string[] = FIELD_LABELS;
+
+export async function importETender(inputUrl: string): Promise<ImportedETender> {
+  const safeUrl = assertSafeProcurementUrl(inputUrl);
+  if (!ETENDERS_HOSTS.has(safeUrl.hostname.toLowerCase())) throw new Error("For automatic document import, paste an etenders.gov.ie opportunity link");
+  const initial = await fetchHtml(safeUrl.toString());
+  const resourceId = extractResourceId(safeUrl, initial.html);
+  const detailUrl = `https://www.etenders.gov.ie/epps/cft/prepareViewCfTWS.do?resourceId=${encodeURIComponent(resourceId)}`;
+  const detail = safeUrl.pathname.includes("prepareViewCfTWS.do") ? initial : await fetchHtml(detailUrl);
+  return parseNoticeDetailHtml(detail.html, resourceId);
 }
 
 export type RemoteTenderDocument = { filename: string; url: string; description: string; bytes?: Buffer; mimeType?: string; warning?: string };

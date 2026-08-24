@@ -5,6 +5,7 @@ import pg from "pg";
 import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
 import { allCpvCodes, cpvAncestors, normaliseCpv } from "./cpv.js";
 import { canonicalKey } from "./dedupe.js";
+import type { IngestionRun } from "./ingestion-health.js";
 import type {
   AuditEntry,
   BidAnswer,
@@ -15,6 +16,8 @@ import type {
   PersonRecord,
   ProvenanceEntry,
   PublicTender,
+  SavedSearch,
+  SavedSearchFilter,
   StoredDocument,
   TenderAnalysis,
   TenderRecord,
@@ -54,6 +57,8 @@ const memory = {
   audit: [] as AuditEntry[],
   bidDecisions: [] as BidDecisionRecord[],
   watchlist: [] as WatchlistEntry[],
+  savedSearches: [] as SavedSearch[],
+  ingestionRuns: [] as IngestionRun[],
 };
 
 /**
@@ -644,6 +649,124 @@ export async function removeFromWatchlist(accountId: string, externalId: string)
   }
   const result = await pool.query("DELETE FROM watchlist WHERE account_id=$1 AND external_id=$2", [accountId, externalId]);
   return (result.rowCount ?? 0) > 0;
+}
+
+const toSavedSearch = (row: Record<string, unknown>): SavedSearch => ({
+  id: String(row.id), accountId: String(row.account_id), name: String(row.name),
+  filter: (row.filter_json ?? {}) as SavedSearchFilter,
+  createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/**
+ * Saves a named search. Throws NAME_TAKEN rather than silently overwriting:
+ * a name is how a person picks a search, so two of them is a bug not a choice.
+ */
+export async function createSavedSearch(accountId: string, name: string, filter: SavedSearchFilter) {
+  const trimmed = name.trim();
+  if (!pool) {
+    if (memory.savedSearches.some((entry) => entry.accountId === accountId && entry.name.toLowerCase() === trimmed.toLowerCase())) {
+      throw new Error("NAME_TAKEN");
+    }
+    const entry: SavedSearch = { id: randomUUID(), accountId, name: trimmed, filter, createdAt: new Date().toISOString() };
+    memory.savedSearches.push(entry);
+    return entry;
+  }
+  try {
+    const result = await pool.query(
+      "INSERT INTO saved_searches(id,account_id,name,filter_json) VALUES($1,$2,$3,$4) RETURNING *",
+      [randomUUID(), accountId, trimmed, JSON.stringify(filter)],
+    );
+    return toSavedSearch(result.rows[0]);
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") throw new Error("NAME_TAKEN");
+    throw error;
+  }
+}
+
+export async function listSavedSearches(accountId: string) {
+  if (!pool) {
+    return memory.savedSearches.filter((entry) => entry.accountId === accountId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const result = await pool.query("SELECT * FROM saved_searches WHERE account_id=$1 ORDER BY name", [accountId]);
+  return result.rows.map(toSavedSearch);
+}
+
+/**
+ * Anything that is not a uuid cannot be a row id.
+ *
+ * Postgres raises 22P02 for a malformed uuid rather than returning no rows, so
+ * without this a stale or hand-edited identifier surfaced as a 500 instead of
+ * the 404 the caller expects.
+ */
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+export async function getSavedSearch(accountId: string, id: string) {
+  if (!isUuid(id)) return null;
+  if (!pool) return memory.savedSearches.find((entry) => entry.accountId === accountId && entry.id === id) ?? null;
+  const result = await pool.query("SELECT * FROM saved_searches WHERE account_id=$1 AND id=$2", [accountId, id]);
+  return result.rows[0] ? toSavedSearch(result.rows[0]) : null;
+}
+
+/** Returns false when there was nothing to delete, rather than a quiet success. */
+export async function deleteSavedSearch(accountId: string, id: string) {
+  if (!isUuid(id)) return false;
+  if (!pool) {
+    const before = memory.savedSearches.length;
+    memory.savedSearches = memory.savedSearches.filter((entry) => !(entry.accountId === accountId && entry.id === id));
+    return memory.savedSearches.length < before;
+  }
+  const result = await pool.query("DELETE FROM saved_searches WHERE account_id=$1 AND id=$2", [accountId, id]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+const toIngestionRun = (row: Record<string, unknown>): IngestionRun => ({
+  id: String(row.id), source: String(row.source),
+  noticesSeen: Number(row.notices_seen), noticesParsed: Number(row.notices_parsed),
+  fieldCoverage: (row.field_coverage ?? {}) as Record<string, number>,
+  alarms: (row.alarms ?? []) as string[],
+  createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/** Records what one source yielded on one run, alarms included. */
+export async function recordIngestionRun(input: Omit<IngestionRun, "id" | "createdAt">) {
+  const run: IngestionRun = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.ingestionRuns.push(run); return run; }
+  await pool.query(
+    `INSERT INTO ingestion_runs(id,source,notices_seen,notices_parsed,field_coverage,alarms)
+     VALUES($1,$2,$3,$4,$5,$6)`,
+    [run.id, run.source, run.noticesSeen, run.noticesParsed, JSON.stringify(run.fieldCoverage), JSON.stringify(run.alarms)],
+  );
+  return run;
+}
+
+/** Parsed counts from this source's recent runs, newest first. */
+export async function recentIngestionYields(source: string, limit = 10) {
+  if (!pool) {
+    return memory.ingestionRuns.filter((run) => run.source === source)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit)
+      .map((run) => run.noticesParsed);
+  }
+  const result = await pool.query(
+    "SELECT notices_parsed FROM ingestion_runs WHERE source=$1 ORDER BY created_at DESC LIMIT $2",
+    [source, limit],
+  );
+  return result.rows.map((row) => Number(row.notices_parsed));
+}
+
+/** The most recent run for each source, for /health. */
+export async function latestIngestionRuns(): Promise<IngestionRun[]> {
+  if (!pool) {
+    const bySource = new Map<string, IngestionRun>();
+    for (const run of [...memory.ingestionRuns].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+      bySource.set(run.source, run);
+    }
+    return [...bySource.values()];
+  }
+  const result = await pool.query(
+    `SELECT DISTINCT ON (source) * FROM ingestion_runs ORDER BY source, created_at DESC`,
+  );
+  return result.rows.map(toIngestionRun);
 }
 
 export async function addEvidence(accountId: string, input: Omit<EvidenceRecord, "id" | "accountId">) {

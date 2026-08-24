@@ -231,6 +231,23 @@ export type Recommendation = {
   note?: string;
 };
 
+/** A named slice of Discover: the profile's filter fields plus a buyer. */
+export type SavedSearchFilter = {
+  buyer: string;
+  sectors: string[];
+  keywords: string[];
+  cpvCodes: string[];
+  valueMin: number | null;
+  valueMax: number | null;
+};
+
+export type SavedSearch = {
+  id: string;
+  name: string;
+  filter: SavedSearchFilter;
+  createdAt: string;
+};
+
 /**
  * A notice being watched without a bid record. `daysRemaining` is null once the
  * deadline has passed, which the view shows as "Deadline passed" rather than a

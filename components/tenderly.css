@@ -544,3 +544,12 @@ button:disabled { cursor: wait; opacity: .62; }
 .watch-row h3 { margin: 0; font-size: 15px; }
 .watch-actions { display: flex; gap: 10px; flex: none; align-items: center; }
 .watch-passed { color: var(--muted); font-weight: 500; }
+
+/* TLY-38 — named slices of Discover; the profile stays the default. */
+.saved-search-bar { margin-bottom: 14px; }
+.saved-search-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.saved-search-row label { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); }
+.saved-search-row select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 13px; }
+.active-search { font-size: 13px; }
+.saved-search-form { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.saved-search-form input { flex: 1; min-width: 160px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
