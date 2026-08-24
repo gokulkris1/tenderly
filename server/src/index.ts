@@ -17,6 +17,7 @@ import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./e
 import { mergeNotices } from "./dedupe.js";
 import { deadlinePressure, parseDeadline } from "./pressure.js";
 import { vaultCompleteness } from "./vault.js";
+import { skillMatrix, skillMatrixCsv } from "./skills.js";
 import { DECLARATIONS, affirmationProblems, declarationEvidence, needsReaffirmation } from "./declarations.js";
 import { decide, unsupportedFigures } from "./decision.js";
 import { parseContractValue, scoreNotice } from "./scoring.js";
@@ -74,6 +75,7 @@ import {
   updatePerson,
   updateTenderMetadata,
   confirmAllPersonFacts,
+  listAccountPersonFacts,
   listPersonFacts,
   replacePersonFacts,
   updatePersonFact,
@@ -1165,6 +1167,28 @@ app.post("/api/people/upload", upload.single("file"), async (req: AuthenticatedR
       person, records,
       extractionWarnings: extracted.filter((entry) => entry.warning).map((entry) => entry.warning),
     });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * The team as a grid of confirmed skills.
+ *
+ * Only confirmed skills appear: staffing a bid off a model's suggestion is how
+ * a company ends up naming someone who cannot do the work.
+ */
+app.get("/api/skills-matrix", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const skill = z.string().max(200).catch("").parse(req.query.skill);
+    const [people, facts] = await Promise.all([listPeople(account), listAccountPersonFacts(account)]);
+    const matrix = skillMatrix({ people, facts, filterSkill: skill || undefined });
+
+    if (String(req.query.format).toLowerCase() === "csv") {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="tenderly-skills-matrix.csv"');
+      return res.send(skillMatrixCsv(matrix));
+    }
+    res.json({ matrix });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

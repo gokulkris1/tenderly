@@ -34,6 +34,7 @@ import type {
   SavedSearchFilter,
   ScoreBreakdown,
   SectorPreset,
+  SkillMatrix,
   SubmissionItem,
   Tender,
   UsageTotals,
@@ -605,6 +606,8 @@ export default function TenderlyApp() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [personRecords, setPersonRecords] = useState<PersonFact[]>([]);
   const [recordsPersonId, setRecordsPersonId] = useState("");
+  const [skillsMatrix, setSkillsMatrix] = useState<SkillMatrix | null>(null);
+  const [skillFilter, setSkillFilter] = useState("");
   const [vaultReadiness, setVaultReadiness] = useState<VaultCompleteness | null>(null);
   const [declarations, setDeclarations] = useState<DeclarationState | null>(null);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
@@ -668,6 +671,7 @@ export default function TenderlyApp() {
     if (!API_BASE || !token || isDemo) return;
     void refreshWatchlist();
     void refreshSavedSearches();
+    void filterSkills(skillFilter);
     // Recomputed on the server from the vault itself, so it is never stale.
     apiClient.vaultCompleteness().then(({ completeness }) => setVaultReadiness(completeness)).catch(() => setVaultReadiness(null));
     void refreshDeclarations();
@@ -1225,6 +1229,26 @@ export default function TenderlyApp() {
     }
   }
 
+  async function filterSkills(skill: string) {
+    setSkillFilter(skill);
+    if (isDemo || !API_BASE || !token) return;
+    try {
+      const { matrix } = await apiClient.skillsMatrix(skill);
+      setSkillsMatrix(matrix);
+    } catch {
+      setSkillsMatrix(null);
+    }
+  }
+
+  async function exportSkillsMatrix() {
+    if (isDemo) { setToast("Export is disabled in the demo"); return; }
+    try {
+      await apiClient.downloadSkillsMatrix(skillFilter);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not export the matrix");
+    }
+  }
+
   async function loadPersonRecords(personId: string) {
     setRecordsPersonId(personId);
     if (!personId || isDemo) { setPersonRecords([]); return; }
@@ -1458,7 +1482,7 @@ export default function TenderlyApp() {
             try { await apiClient.saveCompany(company); setToast("Company profile saved"); } catch (error) { setToast(error instanceof Error ? error.message : "Could not save profile"); }
           }} />}
           {section === "Evidence" && <EvidenceView tab={evidenceTab} setTab={setEvidenceTab} evidence={evidence} people={people} onUploadEvidence={uploadEvidenceFile} onUploadCv={uploadCvFile} onVerify={setEvidenceVerification} onDownload={downloadEvidence} loading={loading} />}
-          {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} onRename={renamePerson} onArchive={archivePerson} busyPersonId={busyPersonId} loading={loading === "cv-upload"} records={personRecords} selectedPersonId={recordsPersonId} onSelectPerson={loadPersonRecords} onConfirmAll={confirmPersonRecords} onCorrect={correctPersonRecord} busyRecords={loading === "cv-records"} />}
+          {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} onRename={renamePerson} onArchive={archivePerson} busyPersonId={busyPersonId} loading={loading === "cv-upload"} records={personRecords} selectedPersonId={recordsPersonId} onSelectPerson={loadPersonRecords} onConfirmAll={confirmPersonRecords} onCorrect={correctPersonRecord} busyRecords={loading === "cv-records"} matrix={skillsMatrix} skillFilter={skillFilter} onSkillFilter={filterSkills} onExportMatrix={exportSkillsMatrix} />}
           {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} usage={usage} audit={{ entries: auditEntries, action: auditAction, days: auditDays, onFilter: setAuditFilter, loading: loading === "audit" }} />}
         </div>
       </main>
@@ -2256,8 +2280,73 @@ function CvRecords({ records, onConfirmAll, onCorrect, busy }: {
   );
 }
 
-function TeamView({ people, onUploadCv, onRename, onArchive, busyPersonId, loading, records, selectedPersonId, onSelectPerson, onConfirmAll, onCorrect, busyRecords }: { people: PersonItem[]; onUploadCv: (file: File) => void; onRename: (id: string, title: string) => void; onArchive: (person: PersonItem, archived: boolean) => void; busyPersonId: string; loading: boolean; records: PersonFact[]; selectedPersonId: string; onSelectPerson: (id: string) => void; onConfirmAll: () => void; onCorrect: (factId: string, value: string) => void; busyRecords: boolean }) {
-  return <div className="library-page"><div className="section-intro"><div><p className="eyebrow">TEAM & PARTNERS</p><h2>Know your bid shape before you write.</h2><p>Tenderly maps required roles to CV evidence and only flags a tie-up when a concrete capability, capacity or credential gap remains.</p></div><FileButton label={loading ? "Extracting…" : "＋ Add person / CV"} accept=".pdf,.docx,.txt" onFile={onUploadCv} /></div><div className="team-grid">{people.map((person) => <PersonCard key={person.id} person={person} onRename={onRename} onArchive={onArchive} busy={busyPersonId === person.id} />)}<section className="panel gap-card"><span>＋</span><h3>Build your partner bench</h3><p>Add trusted associates or partner CVs here. A tender analysis will identify exactly which required role or credential still lacks evidence.</p><FileButton label="Add partner CV" accept=".pdf,.docx,.txt" onFile={onUploadCv} /></section></div>{people.length > 0 && <div className="cv-review"><div className="cv-review-picker"><label>Review CV records for<select value={selectedPersonId} onChange={(event) => onSelectPerson(event.target.value)}><option value="">Choose a person</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></div>{selectedPersonId && <CvRecords records={records} onConfirmAll={onConfirmAll} onCorrect={onCorrect} busy={busyRecords} />}</div>}</div>;
+/**
+ * The team as a grid: who can we put on this, and where are we one person deep.
+ *
+ * An empty matrix says so rather than drawing a grid with no columns — a blank
+ * table reads as a bug, not as "nobody has confirmed a skill yet".
+ */
+function SkillsMatrix({ matrix, filter, onFilter, onExport, onOpenTeam, busy }: {
+  matrix: SkillMatrix | null; filter: string;
+  onFilter: (skill: string) => void; onExport: () => void; onOpenTeam: () => void; busy: boolean;
+}) {
+  if (!matrix) return null;
+  if (matrix.note) {
+    return (
+      <section className="panel skills-matrix" data-testid="skills-matrix">
+        <div className="panel-heading"><div><h3>Skills matrix</h3><p>Who can we put on this, and where is the team one person deep.</p></div></div>
+        <p className="skills-empty" data-testid="skills-empty">{matrix.note} — <button className="text-action" onClick={onOpenTeam}>upload a CV and confirm its skills</button></p>
+      </section>
+    );
+  }
+  return (
+    <section className="panel skills-matrix" data-testid="skills-matrix">
+      <div className="panel-heading">
+        <div><h3>Skills matrix</h3><p>Confirmed skills only. A column with one holder is a single point of dependency.</p></div>
+        <button className="text-action" onClick={onExport} disabled={busy}>Export CSV</button>
+      </div>
+      <div className="skills-filter">
+        <label>Filter by skill
+          <select value={filter} onChange={(event) => onFilter(event.target.value)}>
+            <option value="">All skills</option>
+            {matrix.columns.map((column) => <option key={column.skill} value={column.skill}>{column.skill}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="skills-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Person</th>
+              {matrix.columns.map((column) => (
+                <th key={column.skill} className={column.singlePointOfDependency ? "single-point" : ""}>
+                  {column.skill}
+                  {column.singlePointOfDependency && <em title="Single point of dependency">1</em>}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {matrix.people.map((row) => (
+              <tr key={row.id}>
+                <td>{row.name}</td>
+                {matrix.columns.map((column) => (
+                  <td key={column.skill} className="skill-cell">{row.skills.includes(column.skill) ? "●" : ""}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {matrix.columns.some((column) => column.singlePointOfDependency) && (
+        <p className="skills-warning">Single point of dependency: {matrix.columns.filter((column) => column.singlePointOfDependency).map((column) => column.skill).join(", ")}</p>
+      )}
+    </section>
+  );
+}
+
+function TeamView({ people, onUploadCv, onRename, onArchive, busyPersonId, loading, records, selectedPersonId, onSelectPerson, onConfirmAll, onCorrect, busyRecords, matrix, skillFilter, onSkillFilter, onExportMatrix }: { people: PersonItem[]; onUploadCv: (file: File) => void; onRename: (id: string, title: string) => void; onArchive: (person: PersonItem, archived: boolean) => void; busyPersonId: string; loading: boolean; records: PersonFact[]; selectedPersonId: string; onSelectPerson: (id: string) => void; onConfirmAll: () => void; onCorrect: (factId: string, value: string) => void; busyRecords: boolean; matrix: SkillMatrix | null; skillFilter: string; onSkillFilter: (skill: string) => void; onExportMatrix: () => void }) {
+  return <div className="library-page"><div className="section-intro"><div><p className="eyebrow">TEAM & PARTNERS</p><h2>Know your bid shape before you write.</h2><p>Tenderly maps required roles to CV evidence and only flags a tie-up when a concrete capability, capacity or credential gap remains.</p></div><FileButton label={loading ? "Extracting…" : "＋ Add person / CV"} accept=".pdf,.docx,.txt" onFile={onUploadCv} /></div><div className="team-grid">{people.map((person) => <PersonCard key={person.id} person={person} onRename={onRename} onArchive={onArchive} busy={busyPersonId === person.id} />)}<section className="panel gap-card"><span>＋</span><h3>Build your partner bench</h3><p>Add trusted associates or partner CVs here. A tender analysis will identify exactly which required role or credential still lacks evidence.</p><FileButton label="Add partner CV" accept=".pdf,.docx,.txt" onFile={onUploadCv} /></section></div><SkillsMatrix matrix={matrix} filter={skillFilter} onFilter={onSkillFilter} onExport={onExportMatrix} onOpenTeam={() => undefined} busy={busyRecords} />{people.length > 0 && <div className="cv-review"><div className="cv-review-picker"><label>Review CV records for<select value={selectedPersonId} onChange={(event) => onSelectPerson(event.target.value)}><option value="">Choose a person</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></div>{selectedPersonId && <CvRecords records={records} onConfirmAll={onConfirmAll} onCorrect={onCorrect} busy={busyRecords} />}</div>}</div>;
 }
 
 /**

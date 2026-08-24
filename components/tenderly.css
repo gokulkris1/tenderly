@@ -602,3 +602,18 @@ button:disabled { cursor: wait; opacity: .62; }
 .cv-record small { font-size: 11px; color: var(--muted); }
 .cv-record blockquote { margin: 0; padding: 6px 12px; border-left: 2px solid var(--line); background: var(--paper); font-size: 11px; color: var(--ink-2); }
 .cv-record-foot { display: flex; gap: 12px; align-items: center; }
+
+/* TLY-60 — who can we put on this, and where are we one person deep. */
+.skills-matrix { margin-top: 20px; }
+.skills-filter { margin-top: 12px; }
+.skills-filter label { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
+.skills-filter select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 13px; }
+.skills-scroll { margin-top: 12px; overflow-x: auto; }
+.skills-scroll table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.skills-scroll th, .skills-scroll td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); text-align: left; white-space: nowrap; }
+.skills-scroll th { font-weight: 600; font-size: 11px; }
+.skills-scroll th.single-point { color: var(--amber); }
+.skills-scroll th em { display: inline-block; margin-left: 5px; padding: 0 5px; border-radius: 5px; background: var(--amber-soft); font-style: normal; font-size: 10px; }
+.skill-cell { text-align: center; color: var(--green-2); }
+.skills-empty { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+.skills-warning { margin: 12px 0 0; font-size: 12px; color: var(--amber); }

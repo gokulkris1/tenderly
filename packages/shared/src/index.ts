@@ -464,6 +464,21 @@ export type PersonFact = {
   confirmed: boolean;
 };
 
+/** One column of the skills matrix. */
+export type SkillColumn = {
+  skill: string;
+  holders: number;
+  /** True when exactly one person holds it — the team is one person deep. */
+  singlePointOfDependency: boolean;
+};
+
+export type SkillMatrix = {
+  people: { id: string; name: string; skills: string[] }[];
+  columns: SkillColumn[];
+  /** Set when there is nothing to draw, so the UI shows a sentence not a grid. */
+  note?: string;
+};
+
 export type PersonItem = {
   id: string;
   name: string;
