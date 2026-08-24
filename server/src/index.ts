@@ -34,6 +34,7 @@ import {
   listPeople,
   listProvenance,
   listTenders,
+  backfillTenderCpv,
   migrateAnalysisSchema,
   monthlyUsage,
   persistentDatabase,
@@ -42,6 +43,7 @@ import {
   saveDocument,
   savePreferences,
   saveTenderAnalysis,
+  seedCpvCodes,
   setEvidenceVerified,
   tenderProvenance,
   updateCompany,
@@ -709,6 +711,12 @@ if (process.env.TENDERLY_NO_LISTEN !== "1") {
   // Re-key analyses written before stable question ids existed (TLY-40). Idempotent.
   const migrated = await migrateAnalysisSchema();
   if (migrated.tenders) console.log(`analysis schema migration · tenders=${migrated.tenders} answers=${migrated.answers} checklistOverrides=${migrated.overrides}`);
+  // The CPV list and the backfill both run after migrations: the table and the
+  // column have to exist first, and both are idempotent.
+  const cpv = await seedCpvCodes();
+  if (cpv.seeded) console.log(`cpv lookup seeded · codes=${cpv.seeded}`);
+  const backfilled = await backfillTenderCpv();
+  if (backfilled.updated) console.log(`cpv backfill · tenders=${backfilled.updated}`);
   app.listen(port, "0.0.0.0", () => {
     console.log(`Tenderly API listening on port ${port} · database=${persistentDatabase ? "postgres" : "memory"} · ai=${aiConfigured() ? "configured" : "not-configured"}`);
   });

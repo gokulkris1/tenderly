@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import pg from "pg";
 import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
+import { allCpvCodes, cpvAncestors, normaliseCpv } from "./cpv.js";
 import type {
   AuditEntry,
   BidAnswer,
@@ -76,6 +77,58 @@ export async function initializeDatabase() {
     await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]).catch(() => {});
     client.release();
   }
+}
+
+/**
+ * Loads the published CPV list into the lookup table.
+ *
+ * Idempotent and cheap to re-run: the list changes only when the Commission
+ * amends the regulation, so a matching row count means there is nothing to do.
+ */
+export async function seedCpvCodes() {
+  if (!pool) return { seeded: 0 };
+  const entries = allCpvCodes();
+  const existing = await pool.query("SELECT count(*)::int AS count FROM cpv_codes");
+  if (existing.rows[0].count === entries.length) return { seeded: 0 };
+
+  // One statement per batch rather than per code: 9,454 round trips would make
+  // every cold start noticeably slower.
+  const size = 500;
+  for (let start = 0; start < entries.length; start += size) {
+    const batch = entries.slice(start, start + size);
+    const values: unknown[] = [];
+    const rows = batch.map((entry, index) => {
+      const base = index * 5;
+      values.push(entry.code, entry.checkDigit, entry.description, cpvAncestors(entry.code)[0]?.code ?? null, entry.level);
+      return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5})`;
+    });
+    await pool.query(
+      `INSERT INTO cpv_codes(code,check_digit,description,parent_code,level) VALUES ${rows.join(",")}
+       ON CONFLICT(code) DO UPDATE SET description=EXCLUDED.description,parent_code=EXCLUDED.parent_code,level=EXCLUDED.level`,
+      values,
+    );
+  }
+  return { seeded: entries.length };
+}
+
+/**
+ * Sets the canonical code on tenders imported before this column existed.
+ *
+ * A notice whose raw value carries no readable code keeps a null, and is left
+ * alone on later runs — there is nothing to find and re-reading it every start
+ * would be wasted work.
+ */
+export async function backfillTenderCpv() {
+  if (!pool) return { updated: 0 };
+  const rows = await pool.query("SELECT id, metadata FROM tenders WHERE cpv_normalised IS NULL");
+  let updated = 0;
+  for (const row of rows.rows) {
+    const code = rawCpvOf(row.metadata ?? {});
+    if (!code) continue;
+    await pool.query("UPDATE tenders SET cpv_normalised=$2 WHERE id=$1", [row.id, code]);
+    updated += 1;
+  }
+  return { updated };
 }
 
 export async function closeDatabase() {
@@ -170,17 +223,17 @@ export async function listAllCompanies() {
 export async function upsertTender(accountId: string, tender: Omit<TenderRecord, "id" | "accountId" | "analysis"> & { id?: string; analysis?: TenderAnalysis | null }) {
   if (!pool) {
     const existing = [...memory.tenders.values()].find((item) => item.accountId === accountId && item.source === tender.source && item.externalId === tender.externalId);
-    const record: TenderRecord = { ...tender, id: existing?.id ?? tender.id ?? randomUUID(), accountId, analysis: tender.analysis ?? existing?.analysis ?? null };
+    const record: TenderRecord = { ...tender, id: existing?.id ?? tender.id ?? randomUUID(), accountId, analysis: tender.analysis ?? existing?.analysis ?? null, cpvNormalised: rawCpvOf(tender.metadata) ?? undefined };
     memory.tenders.set(record.id, record);
     return record;
   }
   const id = tender.id ?? randomUUID();
   const result = await pool.query(
-    `INSERT INTO tenders(id,account_id,source,external_id,source_url,title,authority,description,procedure,deadline,published,estimated_value,status,metadata,analysis)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'IMPORTED',$13,$14)
-     ON CONFLICT(account_id,source,external_id) DO UPDATE SET source_url=EXCLUDED.source_url,title=EXCLUDED.title,authority=EXCLUDED.authority,description=EXCLUDED.description,procedure=EXCLUDED.procedure,deadline=EXCLUDED.deadline,published=EXCLUDED.published,estimated_value=EXCLUDED.estimated_value,metadata=EXCLUDED.metadata,analysis=COALESCE(EXCLUDED.analysis,tenders.analysis),updated_at=now()
+    `INSERT INTO tenders(id,account_id,source,external_id,source_url,title,authority,description,procedure,deadline,published,estimated_value,status,metadata,analysis,cpv_normalised)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'IMPORTED',$13,$14,$15)
+     ON CONFLICT(account_id,source,external_id) DO UPDATE SET source_url=EXCLUDED.source_url,title=EXCLUDED.title,authority=EXCLUDED.authority,description=EXCLUDED.description,procedure=EXCLUDED.procedure,deadline=EXCLUDED.deadline,published=EXCLUDED.published,estimated_value=EXCLUDED.estimated_value,metadata=EXCLUDED.metadata,analysis=COALESCE(EXCLUDED.analysis,tenders.analysis),cpv_normalised=EXCLUDED.cpv_normalised,updated_at=now()
      RETURNING *`,
-    [id, accountId, tender.source, tender.externalId || null, tender.sourceUrl, tender.title, tender.authority, tender.description, tender.procedure, tender.deadline, tender.published, tender.estimatedValue, JSON.stringify(tender.metadata), tender.analysis ? JSON.stringify(tender.analysis) : null],
+    [id, accountId, tender.source, tender.externalId || null, tender.sourceUrl, tender.title, tender.authority, tender.description, tender.procedure, tender.deadline, tender.published, tender.estimatedValue, JSON.stringify(tender.metadata), tender.analysis ? JSON.stringify(tender.analysis) : null, rawCpvOf(tender.metadata)],
   );
   return mapTenderRow(result.rows[0]);
 }
@@ -225,6 +278,22 @@ export async function updateTenderMetadata(accountId: string, tenderId: string, 
   return mapTenderRow(result.rows[0]);
 }
 
+/**
+ * The canonical code for a notice, read from whichever metadata field the
+ * source happens to use. Null when the notice carries no readable code — which
+ * is common and is not an error.
+ */
+function rawCpvOf(metadata: Record<string, unknown>) {
+  const candidates = ["CPV Codes", "cpv", "CPV", "classification-cpv"];
+  for (const key of candidates) {
+    const value = metadata[key];
+    if (typeof value !== "string" && !Array.isArray(value)) continue;
+    const normalised = normaliseCpv(Array.isArray(value) ? String(value[0] ?? "") : value);
+    if (normalised) return normalised.code;
+  }
+  return null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(TLY-26): pg returns untyped rows; row typing lands with the strict-TypeScript story.
 function mapTenderRow(row: Record<string, any>): TenderRecord {
   return {
@@ -243,6 +312,7 @@ function mapTenderRow(row: Record<string, any>): TenderRecord {
     estimatedValue: row.estimated_value,
     metadata: row.metadata ?? {},
     analysis: row.analysis ?? null,
+    cpvNormalised: row.cpv_normalised ?? undefined,
   } as TenderRecord;
 }
 

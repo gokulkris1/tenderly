@@ -196,6 +196,21 @@ export type AttestationState = {
   blockers: string[];
 };
 
+/**
+ * A tender's CPV as it will be shown. An unrecognised value keeps its own
+ * wording: a notice with a code we do not hold is still a notice.
+ */
+export type TenderCpv = {
+  /** The raw string exactly as the source published it. */
+  raw: string;
+  /** Eight digits, absent when nothing recognisable could be read. */
+  code?: string;
+  description?: string;
+  /** Broader codes that exist in the published list, nearest first. */
+  ancestors?: { code: string; description: string }[];
+  recognised: boolean;
+};
+
 export type SynopsisSlide = {
   title: string;
   bullets: string[];
@@ -238,6 +253,8 @@ export type Tender = {
   matchedBy?: MatchReason[];
   /** Which feed the notice came from, so a user can tell TED from eTenders. */
   noticeSource?: "eTenders" | "TED";
+  /** The tender's CPV, normalised where the code is one we hold. */
+  cpv?: TenderCpv;
   /** Historical awards by this buyer under this CPV. Absent until analysed. */
   awardIntelligence?: AwardIntelligence;
   /** Award criteria with weightings, empty when the pack states none. */
