@@ -130,7 +130,16 @@ export async function createSynopsisDeck(tender: TenderRecord, analysis: TenderA
   return Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer);
 }
 
-export function submissionBlockers(tender: TenderRecord, analysis: TenderAnalysis, answers: BidAnswer[], documents: StoredDocument[], evidence: EvidenceRecord[] = []) {
+export function submissionBlockers(
+  tender: TenderRecord,
+  analysis: TenderAnalysis,
+  answers: BidAnswer[],
+  documents: StoredDocument[],
+  evidence: EvidenceRecord[] = [],
+  // Roles nobody on the team can fill. Passed in rather than recomputed here so
+  // the pack does not need the people tables to decide whether it is blocked.
+  unfillableRoles: string[] = [],
+) {
   const blockers: string[] = [];
   // A named person must state they have reviewed this exact content before the
   // final pack leaves the system. Editing any answer invalidates that statement.
@@ -157,13 +166,17 @@ export function submissionBlockers(tender: TenderRecord, analysis: TenderAnalysi
   });
   const overrides = (tender.metadata.checklistOverrides ?? {}) as Record<string, string>;
   analysis.submissionChecklist.filter((item) => item.required && item.status !== "READY" && overrides[item.id] !== "READY").forEach((item) => blockers.push(`Submission item needs action: ${item.label}`));
+  // A bid naming nobody for a role the buyer requires will be rejected on the
+  // formality, whatever the responses say.
+  for (const role of unfillableRoles) blockers.push(role);
+
   const requiresCompletedBuyerFile = analysis.submissionChecklist.some((item) => item.required && ["BUYER_TEMPLATE", "PRICING", "SIGNATURE"].includes(item.kind));
   if (requiresCompletedBuyerFile && !documents.some((document) => document.role === "submission")) blockers.push("Upload completed buyer templates / pricing / signed declarations as submission files");
   return [...new Set(blockers)];
 }
 
-export async function createSubmissionPack(args: { tender: TenderRecord; analysis: TenderAnalysis; answers: BidAnswer[]; documents: StoredDocument[]; company: CompanyProfile; people: PersonRecord[]; evidence: EvidenceRecord[]; provenance?: ProvenanceEntry[]; draft: boolean }) {
-  const blockers = submissionBlockers(args.tender, args.analysis, args.answers, args.documents, args.evidence);
+export async function createSubmissionPack(args: { tender: TenderRecord; analysis: TenderAnalysis; answers: BidAnswer[]; documents: StoredDocument[]; company: CompanyProfile; people: PersonRecord[]; evidence: EvidenceRecord[]; provenance?: ProvenanceEntry[]; unfillableRoles?: string[]; draft: boolean }) {
+  const blockers = submissionBlockers(args.tender, args.analysis, args.answers, args.documents, args.evidence, args.unfillableRoles ?? []);
   if (!args.draft && blockers.length) return { blockers, buffer: null as Buffer | null };
   const zip = new JSZip();
   const prefix = args.draft ? "DRAFT_" : "";

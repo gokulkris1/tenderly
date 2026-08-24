@@ -198,6 +198,11 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ decision, reason }),
       }),
+    assignRole: (tenderId: string, role: string, personId: string | null) =>
+      request<{ tender: Tender }>(
+        `/api/tenders/${tenderId}/roles/${encodeURIComponent(role)}/assignment`, "Assign role",
+        { method: "PUT", body: JSON.stringify({ personId }) },
+      ),
     setSelectedLots: (tenderId: string, lotIds: string[]) =>
       request<{ tender: Tender }>(`/api/tenders/${tenderId}/lots`, "Select lots", {
         method: "PUT",
