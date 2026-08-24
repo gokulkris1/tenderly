@@ -13,7 +13,8 @@ Audit date: 2026-08-19 · Branch: `TLY-0-bootstrap` · Auditor: engineering agen
 ## 1. System overview
 
 Tenderly v1 is a single-tenant bidder workspace for Irish public tenders (eTenders). One user
-account owns exactly one company profile. The system discovers opportunities, imports a tender by
+account owns exactly one company profile — `docs/TENANCY.md` records the agreed design for
+replacing that with organisations and memberships, and the migration path to it. The system discovers opportunities, imports a tender by
 URL, extracts text from the tender pack, runs AI qualification and drafting, and assembles a
 gated submission ZIP. Final submission is always a human action on eTenders.
 
