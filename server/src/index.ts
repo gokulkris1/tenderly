@@ -29,6 +29,7 @@ import {
   invitationLink, invitationProblem, newInvitationToken,
 } from "./invitations.js";
 import { sendEmail } from "./mail.js";
+import { LAST_OWNER, attachMembership, requireEditorForWrites, requireRole } from "./roles.js";
 import { buildAccountExport } from "./account-export.js";
 import { CONFIRMATION_PHRASE, GRACE_DAYS, confirmsDeletion, daysRemaining, isOwner } from "./account-erasure.js";
 import { skillMatrix, skillMatrixCsv } from "./skills.js";
@@ -118,10 +119,14 @@ import {
   listInvitations,
   listMemberships,
   markInvitationAccepted,
+  membershipFor,
+  ownerCount,
+  removeMembership,
   listPersonFacts,
   pendingDeletion,
   replacePersonFacts,
   revokeInvitation,
+  setMembershipRole,
   requestAccountDeletion,
   updatePersonFact,
   upsertBidTask,
@@ -439,12 +444,21 @@ app.post("/api/invitations/:token/accept", authLimiter, async (req, res) => {
 });
 
 app.use("/api", requireAuth);
+// The token's role claim is a twelve-hour-old copy; the membership row is the
+// authority. Reading it here is what makes "you were removed from the team"
+// true on the next request rather than at the end of the session.
+app.use("/api", attachMembership);
+// Anything that changes something needs at least an editor. Applied to the
+// method, so a route added tomorrow is covered without anyone remembering to.
+app.use("/api", requireEditorForWrites);
 
 app.get("/api/me", async (req: AuthenticatedRequest, res) => {
   try {
-    const user = await getUserById(accountId(req));
+    const user = await getUserById(userId(req));
     if (!user) return res.status(404).json({ error: "Account not found" });
-    res.json({ user, company: await getCompany(accountId(req)) });
+    // The role travels with the person, so the screens can hide what this
+    // person cannot do. The server refuses it either way.
+    res.json({ user, role: req.auth?.role ?? "viewer", company: await getCompany(accountId(req)) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
@@ -2090,6 +2104,77 @@ app.delete("/api/team/invitations/:id", async (req: AuthenticatedRequest, res) =
       return res.status(404).json({ error: "No invitation is waiting on that address" });
     }
     res.json({ revoked: true });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Changes somebody's role.
+ *
+ * The last owner cannot be demoted, including by themselves. An organisation
+ * with no owner is one where nobody can invite, remove, export or delete — a
+ * locked room whose key is inside it.
+ */
+app.put("/api/team/members/:userId", requireRole("owner"), async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const target = routeParam(req.params.userId);
+    const input = z.object({ role: z.enum(["owner", "editor", "viewer"]) }).parse(req.body);
+
+    const membership = await membershipFor(account, target);
+    if (!membership) return res.status(404).json({ error: "That person is not in this workspace" });
+
+    if (membership.role === "owner" && input.role !== "owner" && await ownerCount(account) <= 1) {
+      return res.status(409).json({ error: LAST_OWNER });
+    }
+    if (!await setMembershipRole(account, target, input.role)) {
+      return res.status(404).json({ error: "That person is not in this workspace" });
+    }
+    await audit(req, {
+      action: AUDIT_ACTIONS.memberRoleChanged, subjectType: "member", subjectId: target,
+      subjectLabel: input.role, metadata: { from: membership.role, to: input.role },
+    });
+    res.json({ role: input.role });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** Removes somebody from the workspace. Their sign-in is theirs and survives. */
+app.delete("/api/team/members/:userId", requireRole("owner"), async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const target = routeParam(req.params.userId);
+    const membership = await membershipFor(account, target);
+    if (!membership) return res.status(404).json({ error: "That person is not in this workspace" });
+    if (membership.role === "owner" && await ownerCount(account) <= 1) {
+      return res.status(409).json({ error: LAST_OWNER });
+    }
+    if (!await removeMembership(account, target)) {
+      return res.status(404).json({ error: "That person is not in this workspace" });
+    }
+    await audit(req, {
+      action: AUDIT_ACTIONS.memberRemoved, subjectType: "member", subjectId: target,
+      subjectLabel: membership.role,
+    });
+    res.json({ removed: true });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Billing, such as it is.
+ *
+ * Subscriptions are TLY-90 and the provider is unchosen, so there is nothing
+ * here to charge anybody yet. The route exists now because the access rule does:
+ * billing is the owner's, and an editor asking for it is refused rather than
+ * shown an empty page that will quietly start holding card details later.
+ */
+app.get("/api/billing", requireRole("owner"), async (req: AuthenticatedRequest, res) => {
+  try {
+    const organisation = await getOrganisation(accountId(req));
+    res.json({
+      organisation: organisation?.name ?? "",
+      plan: null,
+      status: "not-configured",
+      message: "Subscriptions are not switched on yet",
+    });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
