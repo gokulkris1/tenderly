@@ -34,14 +34,32 @@ const memory = {
   notifications: new Map<string, NotificationRow>(),
 };
 
+/**
+ * Arbitrary but fixed key for the migration advisory lock. Any process running
+ * migrations against this database uses the same one.
+ */
+const MIGRATION_LOCK_KEY = 4207701;
+
 export async function initializeDatabase() {
   if (!pool) return;
   // Every migration, in filename order. Each is written to be idempotent, so a
   // restart re-applies them harmlessly — and CI applies the same set with psql.
   const dir = path.resolve(process.cwd(), "migrations");
   const files = (await readdir(dir)).filter((name) => name.endsWith(".sql")).sort();
-  for (const file of files) {
-    await pool.query(await readFile(path.join(dir, file), "utf8"));
+
+  // CREATE ... IF NOT EXISTS is not atomic: two processes can both see the
+  // object missing and both try to create it, and the loser gets a unique
+  // violation on a system catalogue. Test files run concurrently and every one
+  // of them initialises, so serialise the whole set behind an advisory lock.
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+    for (const file of files) {
+      await client.query(await readFile(path.join(dir, file), "utf8"));
+    }
+  } finally {
+    await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]).catch(() => {});
+    client.release();
   }
 }
 
