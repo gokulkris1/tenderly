@@ -29,7 +29,7 @@ import {
   invitationLink, invitationProblem, newInvitationToken,
 } from "./invitations.js";
 import { sendEmail } from "./mail.js";
-import { draftAndSaveAnswer, draftContext, streamAndSaveAnswer } from "./drafting.js";
+import { draftAndSaveAnswer, draftContext, refineAndSaveAnswer, streamAndSaveAnswer } from "./drafting.js";
 import { SSE_HEADERS, sseEvent } from "./streaming.js";
 import { isRunning, runFor, startBatchDraft, summarise } from "./batch-draft.js";
 import { LAST_OWNER, attachMembership, requireEditorForWrites, requireRole } from "./roles.js";
@@ -2244,6 +2244,44 @@ app.post("/api/tenders/:id/answers/:questionId/draft-stream", draftLimiter, draf
   } finally {
     res.end();
   }
+});
+
+/**
+ * Revises an answer according to an instruction the bidder wrote.
+ *
+ * The instruction steers style, length and emphasis. It cannot supply a fact,
+ * and it cannot remove an [INPUT NEEDED: …] placeholder — a placeholder is
+ * removed by uploading the evidence, never by asking.
+ */
+app.post("/api/tenders/:id/answers/:questionId/refine", draftLimiter, draftHourlyLimiter, async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    if (!tender.analysis) return res.status(409).json({ error: "Run tender analysis before refining responses" });
+    if (noAiMode(tender)) return res.status(409).json({ error: NO_AI_REFUSAL });
+    const questionId = routeParam(req.params.questionId);
+    const question = tender.analysis.questions.find((item) => item.id === questionId);
+    if (!question) return res.status(404).json({ error: "Scored question not found" });
+
+    const input = z.object({ steering: z.string().trim().min(1).max(2000) }).parse(req.body);
+    const answers = await listAnswers(tender.id);
+    const answer = answers.find((entry) => entry.questionId === questionId);
+    if (!answer?.response.trim()) return res.status(409).json({ error: "Draft an answer before refining it" });
+
+    const context = await draftContext(account, tender.id);
+    const { revision, saved } = await refineAndSaveAnswer({
+      tender, question, answer, steering: input.steering, context, actor: actorEmail(req),
+    });
+    res.json({
+      answer: revision.answer,
+      status: saved.status,
+      words: revision.answer.trim() ? revision.answer.trim().split(/\s+/).length : 0,
+      missingInputs: revision.missingInputs,
+      citations: revision.citations ?? [],
+      claimsToVerify: revision.claimsToVerify ?? [],
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
 app.use((error: unknown, req: Request, res: Response, _next: unknown) => {
