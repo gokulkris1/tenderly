@@ -257,6 +257,13 @@ export type Tender = {
   cpv?: TenderCpv;
   /** Why this notice scored what it did. Present on every scored notice. */
   scoreBreakdown?: ScoreBreakdown;
+  /**
+   * Every portal that published this notice. More than one entry means the same
+   * opportunity was found on both eTenders and TED and merged into one row.
+   */
+  alternateSources?: { label: string; url: string }[];
+  /** How the merge was decided: a shared OJEU reference, or the fallback triple. */
+  mergeReason?: "reference" | "heuristic";
   /** Historical awards by this buyer under this CPV. Absent until analysed. */
   awardIntelligence?: AwardIntelligence;
   /** Award criteria with weightings, empty when the pack states none. */

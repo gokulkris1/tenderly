@@ -4,6 +4,7 @@ import path from "node:path";
 import pg from "pg";
 import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
 import { allCpvCodes, cpvAncestors, normaliseCpv } from "./cpv.js";
+import { canonicalKey } from "./dedupe.js";
 import type {
   AuditEntry,
   BidAnswer,
@@ -12,6 +13,7 @@ import type {
   EvidenceRecord,
   PersonRecord,
   ProvenanceEntry,
+  PublicTender,
   StoredDocument,
   TenderAnalysis,
   TenderRecord,
@@ -221,19 +223,52 @@ export async function listAllCompanies() {
 }
 
 export async function upsertTender(accountId: string, tender: Omit<TenderRecord, "id" | "accountId" | "analysis"> & { id?: string; analysis?: TenderAnalysis | null }) {
+  const identity = canonicalKey(tender as unknown as PublicTender & { metadata?: Record<string, unknown> });
+
   if (!pool) {
-    const existing = [...memory.tenders.values()].find((item) => item.accountId === accountId && item.source === tender.source && item.externalId === tender.externalId);
-    const record: TenderRecord = { ...tender, id: existing?.id ?? tender.id ?? randomUUID(), accountId, analysis: tender.analysis ?? existing?.analysis ?? null, cpvNormalised: rawCpvOf(tender.metadata) ?? undefined };
+    const sameSource = [...memory.tenders.values()].find((item) => item.accountId === accountId && item.source === tender.source && item.externalId === tender.externalId);
+    // The same opportunity from the other portal is not a new opportunity.
+    const twin = sameSource ?? [...memory.tenders.values()].find((item) => item.accountId === accountId && item.canonicalKey === identity.key);
+    const record: TenderRecord = {
+      ...(twin ?? {}), ...tender,
+      id: twin?.id ?? tender.id ?? randomUUID(),
+      accountId,
+      analysis: tender.analysis ?? twin?.analysis ?? null,
+      cpvNormalised: rawCpvOf(tender.metadata) ?? twin?.cpvNormalised,
+      canonicalKey: identity.key,
+      // A twin keeps its own source and body: the record already worked on wins.
+      ...(twin && !sameSource ? { source: twin.source, externalId: twin.externalId, sourceUrl: twin.sourceUrl, title: twin.title, description: twin.description || tender.description, estimatedValue: twin.estimatedValue || tender.estimatedValue } : {}),
+    };
     memory.tenders.set(record.id, record);
     return record;
   }
+  // A notice already imported from the other portal is the same opportunity.
+  // Updating that row rather than inserting a second keeps its bid record, its
+  // documents and its saved answers attached — orphaning them would lose work.
+  const twin = await pool.query(
+    `SELECT * FROM tenders WHERE account_id=$1 AND canonical_key=$2 AND NOT (source=$3 AND external_id IS NOT DISTINCT FROM $4) LIMIT 1`,
+    [accountId, identity.key, tender.source, tender.externalId || null],
+  );
+  if (twin.rows[0]) {
+    const existing = mapTenderRow(twin.rows[0]);
+    const alternates = [
+      ...((existing.metadata.alternateSources ?? []) as { label: string; url: string; externalId: string }[]),
+      { label: tender.source, url: tender.sourceUrl, externalId: tender.externalId },
+    ].filter((entry, index, all) => all.findIndex((other) => other.url === entry.url) === index);
+    const updated = await pool.query(
+      `UPDATE tenders SET metadata=$2, cpv_normalised=COALESCE(tenders.cpv_normalised,$3), updated_at=now() WHERE id=$1 RETURNING *`,
+      [existing.id, JSON.stringify({ ...existing.metadata, ...tender.metadata, alternateSources: alternates, mergeReason: identity.reason }), rawCpvOf(tender.metadata)],
+    );
+    return mapTenderRow(updated.rows[0]);
+  }
+
   const id = tender.id ?? randomUUID();
   const result = await pool.query(
-    `INSERT INTO tenders(id,account_id,source,external_id,source_url,title,authority,description,procedure,deadline,published,estimated_value,status,metadata,analysis,cpv_normalised)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'IMPORTED',$13,$14,$15)
-     ON CONFLICT(account_id,source,external_id) DO UPDATE SET source_url=EXCLUDED.source_url,title=EXCLUDED.title,authority=EXCLUDED.authority,description=EXCLUDED.description,procedure=EXCLUDED.procedure,deadline=EXCLUDED.deadline,published=EXCLUDED.published,estimated_value=EXCLUDED.estimated_value,metadata=EXCLUDED.metadata,analysis=COALESCE(EXCLUDED.analysis,tenders.analysis),cpv_normalised=EXCLUDED.cpv_normalised,updated_at=now()
+    `INSERT INTO tenders(id,account_id,source,external_id,source_url,title,authority,description,procedure,deadline,published,estimated_value,status,metadata,analysis,cpv_normalised,canonical_key)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'IMPORTED',$13,$14,$15,$16)
+     ON CONFLICT(account_id,source,external_id) DO UPDATE SET source_url=EXCLUDED.source_url,title=EXCLUDED.title,authority=EXCLUDED.authority,description=EXCLUDED.description,procedure=EXCLUDED.procedure,deadline=EXCLUDED.deadline,published=EXCLUDED.published,estimated_value=EXCLUDED.estimated_value,metadata=EXCLUDED.metadata,analysis=COALESCE(EXCLUDED.analysis,tenders.analysis),cpv_normalised=EXCLUDED.cpv_normalised,canonical_key=EXCLUDED.canonical_key,updated_at=now()
      RETURNING *`,
-    [id, accountId, tender.source, tender.externalId || null, tender.sourceUrl, tender.title, tender.authority, tender.description, tender.procedure, tender.deadline, tender.published, tender.estimatedValue, JSON.stringify(tender.metadata), tender.analysis ? JSON.stringify(tender.analysis) : null, rawCpvOf(tender.metadata)],
+    [id, accountId, tender.source, tender.externalId || null, tender.sourceUrl, tender.title, tender.authority, tender.description, tender.procedure, tender.deadline, tender.published, tender.estimatedValue, JSON.stringify(tender.metadata), tender.analysis ? JSON.stringify(tender.analysis) : null, rawCpvOf(tender.metadata), identity.key],
   );
   return mapTenderRow(result.rows[0]);
 }
@@ -313,6 +348,7 @@ function mapTenderRow(row: Record<string, any>): TenderRecord {
     metadata: row.metadata ?? {},
     analysis: row.analysis ?? null,
     cpvNormalised: row.cpv_normalised ?? undefined,
+    canonicalKey: row.canonical_key ?? undefined,
   } as TenderRecord;
 }
 

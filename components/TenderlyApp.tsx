@@ -1094,6 +1094,14 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
                   {tender.matchedBy!.map((reason) => <i key={`${reason.sector}-${reason.keyword}`} title={`matched on "${reason.keyword}"`}>{reason.label}</i>)}
                 </div>
               )}
+              {(tender.alternateSources?.length ?? 0) > 1 && (
+                <p className="alternate-sources" data-testid="alternate-sources">
+                  Published on {tender.alternateSources!.map((entry, index) => (
+                    <span key={entry.url}>{index > 0 && " and "}<a href={entry.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{entry.label}</a></span>
+                  ))}
+                  {tender.mergeReason === "heuristic" && <small title="Matched on buyer, title and deadline rather than a shared OJEU reference"> · matched without a shared reference</small>}
+                </p>
+              )}
               <ScoreBreakdownDetail breakdown={tender.scoreBreakdown} />
             </div>
             <div className="tender-decision">

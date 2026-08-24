@@ -14,6 +14,7 @@ import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from ".
 import { searchTed } from "./sources/ted.js";
 import { combineSourceText, extractDocumentText } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./etenders.js";
+import { mergeNotices } from "./dedupe.js";
 import { parseContractValue, scoreNotice } from "./scoring.js";
 import {
   addEvidence,
@@ -228,7 +229,18 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
     const crawledItems = crawled.status === "fulfilled" ? crawled.value : [];
     for (const item of crawledItems) sourceOf.set(item.externalId, "eTenders");
     for (const item of tedResult.items) if (!sourceOf.has(item.externalId)) sourceOf.set(item.externalId, "TED");
-    const items = [...crawledItems, ...tedResult.items.filter((item) => sourceOf.get(item.externalId) === "TED")];
+    // One opportunity, one row: above-threshold Irish notices appear on both
+    // portals, and without this the same tender was listed twice and scored twice.
+    const merged = mergeNotices([
+      ...crawledItems.map((notice) => ({ notice, label: "eTenders" as const })),
+      ...tedResult.items.filter((item) => sourceOf.get(item.externalId) === "TED").map((notice) => ({ notice, label: "TED" as const })),
+    ]);
+    const items = merged;
+    const duplicates = merged.filter((item) => item.alternateSources.length > 1);
+    if (duplicates.length) {
+      const heuristic = duplicates.filter((item) => item.mergeReason === "heuristic").length;
+      console.log(`discovery dedupe · merged=${duplicates.length} byReference=${duplicates.length - heuristic} heuristic=${heuristic}`);
+    }
     // Buyers this company has won from before are a real signal, and the query
     // is cheap. It must never break discovery, so a failure just means no
     // buyer-history contribution rather than no results.
@@ -261,6 +273,8 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
         ...serializePublicTender(item, scoreNotice({ tender: item, preferences, company, knownBuyers })),
         matchedBy: reasons,
         noticeSource: sourceOf.get(item.externalId) ?? "eTenders",
+        alternateSources: item.alternateSources.map((entry) => ({ label: entry.label, url: entry.url })),
+        mergeReason: item.mergeReason,
       }))
       .sort((a, b) => b.match - a.match)
       .slice(0, 50);
