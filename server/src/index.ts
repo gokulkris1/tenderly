@@ -17,6 +17,8 @@ import { discoverETenders, fetchPublicTenderDocuments, importETender, scoreTende
 import {
   addEvidence,
   addPerson,
+  awardIntelligence,
+  companyWonBefore,
   createUser,
   findUserByEmail,
   getCompany,
@@ -96,8 +98,26 @@ function routeParam(value: string | string[]) {
 
 async function tenderWithAnswers(account: string, tender: TenderRecord) {
   // Evidence decides whether a required certificate is satisfied.
-  const [answers, evidence, provenance] = await Promise.all([listAnswers(tender.id), listEvidence(account), tenderProvenance(tender.id)]);
-  return serializeTender(tender, answers, evidence, provenance);
+  const [answers, evidence, provenance, company] = await Promise.all([
+    listAnswers(tender.id), listEvidence(account), tenderProvenance(tender.id), getCompany(account),
+  ]);
+  const serialized = serializeTender(tender, answers, evidence, provenance);
+
+  // Historical awards for this buyer and CPV (TLY-48). Intelligence must never
+  // break the page: if the query fails, the tender still renders without it.
+  try {
+    const cpv = String(tender.metadata["CPV Codes"] ?? company.cpv ?? "").replace(/[^0-9]/g, "").slice(0, 8);
+    const intelligence = await awardIntelligence(tender.authority, cpv);
+    if (intelligence.awards > 0) {
+      const companyAwards = await companyWonBefore(tender.authority, company.name);
+      serialized.awardIntelligence = { ...intelligence, companyAwards };
+    } else {
+      serialized.awardIntelligence = intelligence;
+    }
+  } catch {
+    // leave it absent
+  }
+  return serialized;
 }
 
 async function analyseSavedTender(account: string, tenderId: string) {

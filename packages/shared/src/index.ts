@@ -157,6 +157,24 @@ export type AiPolicyAcknowledgement = {
   at: string;
 };
 
+/**
+ * What this buyer has awarded under this CPV. Every figure is a fact from the
+ * OGP dataset; an empty sample says so rather than guessing.
+ */
+export type AwardIntelligence = {
+  awards: number;
+  medianValue: number | null;
+  minValue: number | null;
+  maxValue: number | null;
+  topSuppliers: { supplier: string; awards: number }[];
+  /** True when the figures come from the CPV division, not the exact code. */
+  relatedCpv: boolean;
+  /** Set when the company itself appears among this authority's suppliers. */
+  companyAwards?: number;
+  /** CC-BY-4.0 attribution, shown wherever the figures are. */
+  licenceNote: string;
+};
+
 export type SynopsisSlide = {
   title: string;
   bullets: string[];
@@ -199,6 +217,8 @@ export type Tender = {
   matchedBy?: MatchReason[];
   /** Which feed the notice came from, so a user can tell TED from eTenders. */
   noticeSource?: "eTenders" | "TED";
+  /** Historical awards by this buyer under this CPV. Absent until analysed. */
+  awardIntelligence?: AwardIntelligence;
   /** Award criteria with weightings, empty when the pack states none. */
   awardCriteria?: AwardCriterion[];
   /** Set when the stated weightings do not add up, e.g. "Stated weightings sum to 90%". */

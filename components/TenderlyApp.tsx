@@ -8,6 +8,7 @@ import "./tenderly.css";
 import type {
   AiUsePolicy,
   AwardCriterion,
+  AwardIntelligence as AwardIntelligenceData,
   BidQuestion,
   CompanyProfile,
   Decision,
@@ -335,6 +336,49 @@ function Formalities({ formalities, certificates }: { formalities: Formality[]; 
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+const euro = (n: number | null) =>
+  n === null ? "—" : new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+
+/**
+ * What this buyer has actually awarded. Facts from the OGP dataset, not the
+ * model — and when there is no history it says so rather than reassuring.
+ */
+function AwardHistory({ data }: { data?: AwardIntelligenceData }) {
+  if (!data) return null;
+  return (
+    <section className="panel gate-panel" data-testid="award-intelligence">
+      <div className="panel-heading">
+        <div>
+          <h3>What this buyer has awarded</h3>
+          <p>Past awards by this authority under this CPV. Figures are counts from published data, not estimates.</p>
+        </div>
+      </div>
+      {data.awards === 0 ? (
+        <p className="input-needed" data-testid="no-award-history">No award history for this buyer and CPV</p>
+      ) : (
+        <>
+          {data.relatedCpv && <p className="criteria-warning">Based on the wider CPV division, not the exact code</p>}
+          {data.awards < 5 && <p className="criteria-warning" data-testid="small-sample">Based on fewer than 5 awards</p>}
+          <div className="award-stats">
+            <span><strong>{data.awards}</strong><small>awards</small></span>
+            <span><strong>{euro(data.medianValue)}</strong><small>median value</small></span>
+            <span><strong>{euro(data.minValue)} – {euro(data.maxValue)}</strong><small>range</small></span>
+          </div>
+          {data.topSuppliers.length > 0 && (
+            <ul className="supplier-list">
+              {data.topSuppliers.map((s) => <li key={s.supplier}><strong>{s.supplier}</strong><small>{s.awards} award{s.awards > 1 ? "s" : ""}</small></li>)}
+            </ul>
+          )}
+          {(data.companyAwards ?? 0) > 0 && (
+            <p className="you-won" data-testid="company-appears">Your company appears in this history — {data.companyAwards} award{(data.companyAwards ?? 0) > 1 ? "s" : ""}</p>
+          )}
+        </>
+      )}
+      <small className="licence-note">{data.licenceNote}</small>
     </section>
   );
 }
@@ -1025,6 +1069,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
             </section>
 
             <AiUsePolicyPanel policy={tender.aiUsePolicy} onAcknowledge={acknowledgeAiPolicy} busy={loading === "ai-policy"} />
+            <AwardHistory data={tender.awardIntelligence} />
             <AwardCriteria criteria={tender.awardCriteria ?? []} warning={tender.awardCriteriaWarning} />
             <Formalities formalities={tender.formalities ?? []} certificates={tender.requiredCertificates ?? []} />
             <section className="panel gate-panel">

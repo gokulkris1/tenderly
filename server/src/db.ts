@@ -633,3 +633,113 @@ export async function countAwards(): Promise<number> {
   const result = await pool.query("SELECT count(*)::int AS n FROM award_history");
   return result.rows[0]?.n ?? 0;
 }
+
+export type AwardIntelligence = {
+  awards: number;
+  medianValue: number | null;
+  minValue: number | null;
+  maxValue: number | null;
+  topSuppliers: { supplier: string; awards: number }[];
+  relatedCpv: boolean;
+  licenceNote: string;
+};
+
+/**
+ * What this authority has awarded under this CPV. Every figure is a count or a
+ * statistic over stored rows — never a model's narration — and an empty sample
+ * returns zero awards rather than a reassuring guess.
+ *
+ * Falls back to the CPV division (first two digits) when the exact code has no
+ * history, flagged as related so the caller can say which it is.
+ */
+export async function awardIntelligence(authority: string, cpv: string, years = 5): Promise<AwardIntelligence> {
+  const { AWARD_DATA_ATTRIBUTION } = await import("./sources/ogp.js");
+  const empty: AwardIntelligence = { awards: 0, medianValue: null, minValue: null, maxValue: null, topSuppliers: [], relatedCpv: false, licenceNote: AWARD_DATA_ATTRIBUTION };
+  if (!authority.trim()) return empty;
+
+  if (!pool) {
+    const rows = [...memory.awards.values()] as Record<string, unknown>[];
+    const match = (row: Record<string, unknown>, prefix: string) =>
+      String(row.authority ?? "").toLowerCase() === authority.toLowerCase() &&
+      String(row.cpv ?? "").startsWith(prefix);
+    let hits = rows.filter((r) => match(r, cpv));
+    let related = false;
+    if (hits.length === 0 && cpv.length >= 2) {
+      hits = rows.filter((r) => match(r, cpv.slice(0, 2)));
+      related = hits.length > 0;
+    }
+    if (hits.length === 0) return empty;
+    const values = hits.map((r) => Number(r.awardedValue)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+    const counts = new Map<string, number>();
+    for (const r of hits) {
+      const supplier = String(r.suppliers ?? "").trim();
+      if (supplier) counts.set(supplier, (counts.get(supplier) ?? 0) + 1);
+    }
+    return {
+      awards: hits.length,
+      medianValue: values.length ? values[Math.floor(values.length / 2)] : null,
+      minValue: values.length ? values[0] : null,
+      maxValue: values.length ? values[values.length - 1] : null,
+      topSuppliers: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([supplier, awards]) => ({ supplier, awards })),
+      relatedCpv: related,
+      licenceNote: AWARD_DATA_ATTRIBUTION,
+    };
+  }
+
+  const run = (prefix: string) => pool!.query(
+    `SELECT count(*)::int AS awards,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY awarded_value) AS median_value,
+            min(awarded_value) AS min_value, max(awarded_value) AS max_value
+       FROM award_history
+      WHERE lower(authority) = lower($1) AND cpv LIKE $2`,
+    [authority, prefix + "%"],
+  );
+
+  let prefix = cpv;
+  let stats = await run(prefix);
+  let related = false;
+  if ((stats.rows[0]?.awards ?? 0) === 0 && cpv.length >= 2) {
+    prefix = cpv.slice(0, 2);
+    stats = await run(prefix);
+    related = (stats.rows[0]?.awards ?? 0) > 0;
+  }
+  const row = stats.rows[0];
+  if (!row || row.awards === 0) return empty;
+
+  const suppliers = await pool.query(
+    `SELECT suppliers AS supplier, count(*)::int AS awards
+       FROM award_history
+      WHERE lower(authority) = lower($1) AND cpv LIKE $2 AND suppliers <> ''
+      GROUP BY suppliers ORDER BY awards DESC, supplier ASC LIMIT 3`,
+    [authority, prefix + "%"],
+  );
+
+  return {
+    awards: row.awards,
+    medianValue: row.median_value === null ? null : Number(row.median_value),
+    minValue: row.min_value === null ? null : Number(row.min_value),
+    maxValue: row.max_value === null ? null : Number(row.max_value),
+    topSuppliers: suppliers.rows.map((r) => ({ supplier: r.supplier, awards: r.awards })),
+    relatedCpv: related,
+    licenceNote: AWARD_DATA_ATTRIBUTION,
+  };
+}
+
+/** How many of this authority's awards name the company itself. */
+export async function companyWonBefore(authority: string, companyName: string): Promise<number> {
+  const name = companyName.trim();
+  if (!name || !authority.trim()) return 0;
+  if (!pool) {
+    return [...memory.awards.values()].filter((entry) => {
+      const row = entry as Record<string, unknown>;
+      return String(row.authority ?? "").toLowerCase() === authority.toLowerCase() &&
+        String(row.suppliers ?? "").toLowerCase().includes(name.toLowerCase());
+    }).length;
+  }
+  const result = await pool.query(
+    `SELECT count(*)::int AS n FROM award_history
+      WHERE lower(authority) = lower($1) AND lower(suppliers) LIKE lower($2)`,
+    [authority, "%" + name + "%"],
+  );
+  return result.rows[0]?.n ?? 0;
+}
