@@ -398,6 +398,25 @@ export type EvidenceItem = {
   expiresOn?: string;
 };
 
+/** One standard document kind and whether the vault satisfies it. */
+export type VaultKindState = {
+  id: string;
+  label: string;
+  status: "complete" | "expired" | "unverified" | "missing";
+  itemName?: string;
+  expiresOn?: string;
+};
+
+/** How ready the company is to be asked for its paperwork. */
+export type VaultCompleteness = {
+  complete: number;
+  total: number;
+  kinds: VaultKindState[];
+  missing: string[];
+  expired: string[];
+  awaitingVerification: string[];
+};
+
 export type PersonItem = {
   id: string;
   name: string;

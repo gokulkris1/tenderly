@@ -22,6 +22,7 @@ import type {
   SectorPreset,
   Tender,
   UsageTotals,
+  VaultCompleteness,
   WatchlistItem,
 } from "@tenderly/shared";
 
@@ -240,6 +241,7 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       anchor.click();
       URL.revokeObjectURL(url);
     },
+    vaultCompleteness: () => request<{ completeness: VaultCompleteness }>("/api/vault/completeness", "Load vault readiness"),
     setEvidenceVerified: (itemId: string, verified: boolean) =>
       request<{ item: EvidenceItem }>(`/api/evidence/${itemId}/verification`, "Update evidence", {
         method: "PUT",

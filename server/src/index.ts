@@ -16,6 +16,7 @@ import { combineSourceText, extractDocumentText } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./etenders.js";
 import { mergeNotices } from "./dedupe.js";
 import { deadlinePressure, parseDeadline } from "./pressure.js";
+import { vaultCompleteness } from "./vault.js";
 import { decide, unsupportedFigures } from "./decision.js";
 import { parseContractValue, scoreNotice } from "./scoring.js";
 import {
@@ -827,6 +828,16 @@ app.delete("/api/watchlist/:externalId", async (req: AuthenticatedRequest, res) 
     const removed = await removeFromWatchlist(accountId(req), routeParam(req.params.externalId));
     if (!removed) return res.status(404).json({ error: "That notice is not on your watchlist" });
     res.json({ removed: true });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * How the vault measures against the documents Irish public tenders routinely
+ * demand. Computed rather than stored, so it is never stale.
+ */
+app.get("/api/vault/completeness", async (req: AuthenticatedRequest, res) => {
+  try {
+    res.json({ completeness: vaultCompleteness(await listEvidence(accountId(req))) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
