@@ -1,6 +1,7 @@
 import type { AiUsePolicy as AiUsePolicyWire, Tender } from "@tenderly/shared";
 import { ANALYSIS_SCHEMA_VERSION, orphanedAnswers } from "./analysis-schema.js";
-import type { BidAnswer, EvidenceRecord, PublicTender, RequiredCertificate, TenderAnalysis, TenderRecord } from "./types.js";
+import { badgeFor } from "./provenance.js";
+import type { BidAnswer, EvidenceRecord, ProvenanceEntry, PublicTender, RequiredCertificate, TenderAnalysis, TenderRecord } from "./types.js";
 
 function accessLabel(access: TenderRecord["analysis"] extends infer _T ? string : never) {
   return access === "OPEN_TO_QUALIFIED_BIDDERS" ? "Open to qualified bidders" : access === "FRAMEWORK_MEMBERS_ONLY" ? "Framework members only" : access === "INVITED_ONLY" ? "Invited bidders only" : "Needs source review";
@@ -78,9 +79,13 @@ export function aiUsePolicy(
   };
 }
 
-export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [], evidence: EvidenceRecord[] = []): Tender {
+export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [], evidence: EvidenceRecord[] = [], provenance: ProvenanceEntry[] = []): Tender {
   const analysis = tender.analysis;
   const answerMap = new Map(answers.map((answer) => [answer.questionId, answer]));
+  const ledger = new Map<string, ProvenanceEntry[]>();
+  for (const entry of provenance) {
+    ledger.set(entry.answerId, [...(ledger.get(entry.answerId) ?? []), entry]);
+  }
   const checklistOverrides = (tender.metadata.checklistOverrides ?? {}) as Record<string, "READY" | "ACTION" | "VERIFY">;
   return {
     id: tender.id,
@@ -119,6 +124,7 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
         prompt: question.prompt,
         answer: saved?.response ?? "",
         evidence: question.evidenceNeeded,
+        provenance: saved ? badgeFor(ledger.get(saved.id) ?? []) : undefined,
       };
     }) ?? [],
     roles: analysis?.roles.map((role) => ({

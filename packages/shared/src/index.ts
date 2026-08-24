@@ -41,6 +41,20 @@ export type Gate = {
   source: string;
 };
 
+/** How much of a response section a machine produced. */
+export type ProvenanceClass = "ai-generated" | "ai-assisted" | "human";
+
+/** One entry in an answer's append-only provenance ledger. */
+export type ProvenanceEntry = {
+  section: string;
+  class: ProvenanceClass;
+  model?: string;
+  promptVersion?: string;
+  evidenceIds: string[];
+  actor: string;
+  createdAt: string;
+};
+
 export type BidQuestion = {
   id: string;
   title: string;
@@ -51,6 +65,12 @@ export type BidQuestion = {
   prompt: string;
   answer: string;
   evidence: string[];
+  /**
+   * The badge shown against the answer: the class of its latest ledger entry.
+   * Absent when nothing has been recorded — an answer with no ledger makes no
+   * claim about how it was written.
+   */
+  provenance?: ProvenanceEntry;
 };
 
 export type BidRole = {

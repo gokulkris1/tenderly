@@ -32,7 +32,7 @@ export function accountId(req: AuthenticatedRequest) {
   return req.auth.accountId;
 }
 
-/** The acting user's email, recorded when a person acknowledges or attests. */
+/** The acting user's email: the actor on ledger entries and acknowledgements. */
 export function actorEmail(req: AuthenticatedRequest) {
   if (!req.auth?.email) throw new Error("AUTH_REQUIRED");
   return req.auth.email;
