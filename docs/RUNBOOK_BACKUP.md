@@ -145,7 +145,12 @@ about today.
 
 | Date | Operator | Elapsed | Result |
 |---|---|---|---|
-| _first run pending_ | GitHub Actions · `ci-pr` / `restore-rehearsal` | — | To be filled from the first run of the rehearsal step |
+| 2026-08-24 | GitHub Actions · `ci-pr` / `restore-rehearsal`, run 32776607421 | 0.7s | 32 tables restored with matching row counts; vault document `tax clearance.pdf` restored byte for byte |
+
+That elapsed time is the CI database, which the test suite fills and which is
+small. It says the procedure works; it says nothing about how long production
+takes. The first restore against a production-sized dump should be timed and its
+row added here, because the number an incident actually needs is that one.
 
 Each run prints its own evidence line in the form
 `REHEARSAL <date> · <operator> · <elapsed>s · <n> tables`. When a restore is
