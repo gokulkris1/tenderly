@@ -24,6 +24,11 @@ import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./e
 import { mergeNotices } from "./dedupe.js";
 import { deadlinePressure, parseDeadline } from "./pressure.js";
 import { vaultCompleteness } from "./vault.js";
+import {
+  ALREADY_A_MEMBER, INVITATION_MESSAGES, hashInvitationToken, invitationEmail, invitationExpiry,
+  invitationLink, invitationProblem, newInvitationToken,
+} from "./invitations.js";
+import { sendEmail } from "./mail.js";
 import { buildAccountExport } from "./account-export.js";
 import { CONFIRMATION_PHRASE, GRACE_DAYS, confirmsDeletion, daysRemaining, isOwner } from "./account-erasure.js";
 import { skillMatrix, skillMatrixCsv } from "./skills.js";
@@ -102,11 +107,21 @@ import {
   updatePerson,
   updateTenderMetadata,
   confirmAllPersonFacts,
+  addMembership,
   cancelAccountDeletion,
+  createInvitation,
+  createUserWithoutOrganisation,
+  emailIsMember,
+  getOrganisation,
+  invitationByTokenHash,
   listAccountPersonFacts,
+  listInvitations,
+  listMemberships,
+  markInvitationAccepted,
   listPersonFacts,
   pendingDeletion,
   replacePersonFacts,
+  revokeInvitation,
   requestAccountDeletion,
   updatePersonFact,
   upsertBidTask,
@@ -355,6 +370,72 @@ app.post("/api/jobs/discover", async (req: Request, res: Response) => {
   const supplied = req.headers.authorization?.replace(/^Bearer\s+/i, "") || "";
   if (!process.env.CRON_SECRET || supplied !== process.env.CRON_SECRET) return res.status(401).json({ error: "Invalid cron secret" });
   try { res.json({ ok: true, ...(await runDiscoveryJob()) }); } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * What an invitation link says about itself, before anyone signs in.
+ *
+ * Deliberately says almost nothing: the organisation's name and the address it
+ * was sent to, so the person knows what they are joining. A token that names no
+ * invitation and one that was withdrawn get the same answer, because the
+ * difference is only useful to somebody guessing tokens.
+ */
+app.get("/api/invitations/:token", authLimiter, async (req, res) => {
+  try {
+    const invitation = await invitationByTokenHash(hashInvitationToken(routeParam(req.params.token)));
+    const problem = invitationProblem(invitation);
+    if (problem || !invitation) return res.status(410).json({ error: INVITATION_MESSAGES[problem ?? "unknown"] });
+    const organisation = await getOrganisation(invitation.organisationId);
+    res.json({
+      organisation: organisation?.name || "your colleague's workspace",
+      email: invitation.email,
+      role: invitation.role,
+      expiresAt: invitation.expiresAt,
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Accepts an invitation, creating a sign-in if the person has none.
+ *
+ * If the address already has an account, the password in the request is
+ * ignored and they join with the one they have. Letting a link set the password
+ * of an existing account would make an invitation a way to take one over.
+ */
+app.post("/api/invitations/:token/accept", authLimiter, async (req, res) => {
+  try {
+    const input = z.object({ password: z.string().max(200).default("") }).parse(req.body);
+    const invitation = await invitationByTokenHash(hashInvitationToken(routeParam(req.params.token)));
+    const problem = invitationProblem(invitation);
+    if (problem || !invitation) return res.status(410).json({ error: INVITATION_MESSAGES[problem ?? "unknown"] });
+
+    const existing = await findUserByEmail(invitation.email);
+    if (!existing && input.password.trim().length < 10) {
+      return res.status(400).json({ error: "Choose a password of at least 10 characters" });
+    }
+
+    // Claim the invitation first. Two clicks on the same link race for this one
+    // row, and the loser is told it was already accepted rather than quietly
+    // creating a second membership.
+    if (!await markInvitationAccepted(invitation.id)) {
+      return res.status(410).json({ error: INVITATION_MESSAGES["already-accepted"] });
+    }
+
+    const user = existing
+      ?? await createUserWithoutOrganisation(invitation.email, await bcrypt.hash(input.password, 12));
+    await addMembership(invitation.organisationId, user.id, invitation.role, invitation.invitedBy);
+
+    res.status(201).json({
+      token: signToken({ id: user.id, organisationId: invitation.organisationId, email: user.email, role: invitation.role }),
+      user: { id: user.id, email: user.email },
+      hadAccount: Boolean(existing),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "EMAIL_EXISTS") {
+      return res.status(409).json({ error: "An account with that email already exists" });
+    }
+    const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message });
+  }
 });
 
 app.use("/api", requireAuth);
@@ -1910,6 +1991,105 @@ app.delete("/api/account/deletion", async (req: AuthenticatedRequest, res) => {
       subjectLabel: "Account deletion",
     });
     res.json({ cancelled: true });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * The people in this organisation and the invitations still outstanding.
+ *
+ * One list rather than two screens: "who can see our bids" is a single
+ * question, and a pending invitation is part of the answer.
+ */
+app.get("/api/team/members", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const [memberships, invitations] = await Promise.all([listMemberships(account), listInvitations(account)]);
+    const people = await Promise.all(memberships.map(async (membership) => {
+      const user = await getUserById(membership.userId);
+      return {
+        userId: membership.userId,
+        email: user?.email ?? "",
+        role: membership.role,
+        joinedAt: membership.acceptedAt ?? membership.createdAt,
+        you: membership.userId === userId(req),
+      };
+    }));
+    res.json({
+      members: people,
+      invitations: invitations
+        .filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)
+        .map((invitation) => ({
+          id: invitation.id, email: invitation.email, role: invitation.role,
+          invitedBy: invitation.invitedBy, expiresAt: invitation.expiresAt,
+          expired: invitationProblem(invitation) === "expired",
+        })),
+      canInvite: await isOwner(account, userId(req)),
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Invites somebody by email.
+ *
+ * The plain token is generated here, put in exactly one email and never stored.
+ * If the mail provider is not configured yet (TLY-35), the response says the
+ * invitation was not delivered rather than pretending it was.
+ */
+app.post("/api/team/invitations", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    if (!await isOwner(account, userId(req))) {
+      return res.status(403).json({ error: "Only the account owner can invite people" });
+    }
+    const input = z.object({
+      email: z.string().trim().email().max(200),
+      role: z.enum(["owner", "editor", "viewer"]).default("editor"),
+    }).parse(req.body);
+
+    if (await emailIsMember(account, input.email)) return res.status(409).json({ error: ALREADY_A_MEMBER });
+
+    const { token, tokenHash } = newInvitationToken();
+    const invitation = await createInvitation({
+      organisationId: account, email: input.email, role: input.role, tokenHash,
+      invitedBy: actorEmail(req), expiresAt: invitationExpiry().toISOString(),
+    });
+
+    const organisation = await getOrganisation(account);
+    const link = invitationLink(token);
+    const { subject, text } = invitationEmail({
+      organisation: organisation?.name || "A Tenderly workspace",
+      invitedBy: actorEmail(req), role: input.role, link,
+    });
+    const sent = await sendEmail({ to: invitation.email, subject, text });
+
+    res.status(201).json({
+      invitation: {
+        id: invitation.id, email: invitation.email, role: invitation.role,
+        invitedBy: invitation.invitedBy, expiresAt: invitation.expiresAt, expired: false,
+      },
+      delivered: sent.delivered,
+      // The owner can pass the link on by hand while email is unconfigured. It
+      // is shown once, to the person who just created it, and never stored.
+      link: sent.delivered ? undefined : link,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "INVITATION_PENDING") {
+      return res.status(409).json({ error: "That address already has an invitation waiting" });
+    }
+    const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message });
+  }
+});
+
+app.delete("/api/team/invitations/:id", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    if (!await isOwner(account, userId(req))) {
+      return res.status(403).json({ error: "Only the account owner can withdraw an invitation" });
+    }
+    if (!await revokeInvitation(account, routeParam(req.params.id))) {
+      return res.status(404).json({ error: "No invitation is waiting on that address" });
+    }
+    res.json({ revoked: true });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

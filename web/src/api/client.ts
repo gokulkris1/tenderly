@@ -72,6 +72,16 @@ export type ApiClientOptions = {
 export type DraftedAnswer = { answer: string; status: string; missingInputs: string[] };
 export type DownloadedAsset = { blob: Blob; filename: string };
 
+/** Who can see this organisation's bids, and who has been asked to. */
+export type TeamState = {
+  members: { userId: string; email: string; role: string; joinedAt: string; you: boolean }[];
+  invitations: { id: string; email: string; role: string; invitedBy: string; expiresAt: string; expired: boolean }[];
+  canInvite: boolean;
+};
+
+/** What an invitation link says about itself, before anyone signs in. */
+export type InvitationDetails = { organisation: string; email: string; role: string; expiresAt: string };
+
 /** Whether this account is scheduled for deletion, and the terms of doing it. */
 export type AccountDeletionState = {
   pending: { scheduledFor: string; requestedBy: string; daysRemaining: number } | null;
@@ -131,6 +141,26 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ email, password, companyName }),
       }),
+
+    // --- the team ---------------------------------------------------------
+    team: () => request<TeamState>("/api/team/members", "Load team"),
+    /**
+     * `link` comes back only while email is unconfigured (TLY-35), so an owner
+     * can pass the invitation on by hand rather than it going nowhere.
+     */
+    inviteMember: (email: string, role: string) =>
+      request<{ invitation: TeamState["invitations"][number]; delivered: boolean; link?: string }>(
+        "/api/team/invitations", "Invite", { method: "POST", body: JSON.stringify({ email, role }) }),
+    revokeInvitation: (id: string) =>
+      request<{ revoked: boolean }>(`/api/team/invitations/${encodeURIComponent(id)}`, "Withdraw invitation",
+        { method: "DELETE" }),
+    /** Both invitation calls run before there is a session, so neither sends a token. */
+    invitation: (token: string) =>
+      request<InvitationDetails>(`/api/invitations/${encodeURIComponent(token)}`, "Open invitation"),
+    acceptInvitation: (token: string, password: string) =>
+      request<{ token: string; hadAccount: boolean }>(
+        `/api/invitations/${encodeURIComponent(token)}/accept`, "Accept invitation",
+        { method: "POST", body: JSON.stringify({ password }) }),
 
     // --- workspace --------------------------------------------------------
     runbook: (tenderId: string) =>

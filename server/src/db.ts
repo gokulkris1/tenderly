@@ -63,6 +63,7 @@ const memory = {
   users: new Map<string, UserRow>(),
   organisations: new Map<string, { id: string; name: string; createdAt: string }>(),
   memberships: [] as Membership[],
+  invitations: [] as InvitationRecord[],
   companies: new Map<string, CompanyProfile>(),
   tenders: new Map<string, TenderRecord>(),
   documents: new Map<string, StoredDocument>(),
@@ -247,6 +248,15 @@ function toMembership(row: Record<string, unknown>): Membership {
   };
 }
 
+/** One organisation's identity row. */
+export async function getOrganisation(id: string) {
+  if (!isUuid(id)) return null;
+  if (!pool) return memory.organisations.get(id) ?? null;
+  const result = await pool.query("SELECT id,name FROM organisations WHERE id=$1", [id]);
+  const row = result.rows[0];
+  return row ? { id: String(row.id), name: String(row.name) } : null;
+}
+
 /** The organisations this person has accepted a place in. */
 export async function membershipsForUser(userId: string): Promise<Membership[]> {
   if (!pool) return memory.memberships.filter((entry) => entry.userId === userId && entry.acceptedAt);
@@ -300,6 +310,164 @@ export async function addMembership(
     [membership.id, organisationId, memberId, role, invitedBy],
   );
   return toMembership(result.rows[0]);
+}
+
+export type InvitationRecord = {
+  id: string;
+  organisationId: string;
+  email: string;
+  role: MembershipRole;
+  tokenHash: string;
+  invitedBy: string;
+  expiresAt: string;
+  acceptedAt?: string;
+  revokedAt?: string;
+  createdAt: string;
+};
+
+function toInvitation(row: Record<string, unknown>): InvitationRecord {
+  return {
+    id: String(row.id), organisationId: String(row.organisation_id), email: String(row.email),
+    role: String(row.role) as MembershipRole, tokenHash: String(row.token_hash),
+    invitedBy: String(row.invited_by ?? ""),
+    expiresAt: new Date(row.expires_at as string).toISOString(),
+    acceptedAt: row.accepted_at ? new Date(row.accepted_at as string).toISOString() : undefined,
+    revokedAt: row.revoked_at ? new Date(row.revoked_at as string).toISOString() : undefined,
+    createdAt: new Date(row.created_at as string).toISOString(),
+  };
+}
+
+const samePerson = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * Records an invitation. The caller holds the plain token; only its hash lands
+ * here.
+ *
+ * Throws INVITATION_PENDING when a live invitation to that address already
+ * exists, so two links to the same inbox never both work.
+ */
+export async function createInvitation(input: {
+  organisationId: string; email: string; role: MembershipRole; tokenHash: string;
+  invitedBy: string; expiresAt: string;
+}): Promise<InvitationRecord> {
+  const record: InvitationRecord = {
+    id: randomUUID(), ...input, email: input.email.trim().toLowerCase(), createdAt: new Date().toISOString(),
+  };
+  if (!pool) {
+    const live = memory.invitations.some((entry) =>
+      entry.organisationId === record.organisationId && samePerson(entry.email, record.email)
+      && !entry.acceptedAt && !entry.revokedAt);
+    if (live) throw new Error("INVITATION_PENDING");
+    memory.invitations.push(record);
+    return record;
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO invitations(id,organisation_id,email,role,token_hash,invited_by,expires_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [record.id, record.organisationId, record.email, record.role, record.tokenHash, record.invitedBy, record.expiresAt],
+    );
+    return toInvitation(result.rows[0]);
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") throw new Error("INVITATION_PENDING");
+    throw error;
+  }
+}
+
+/** The invitation a link points at, found by the hash of its token. */
+export async function invitationByTokenHash(tokenHash: string): Promise<InvitationRecord | null> {
+  if (!pool) return memory.invitations.find((entry) => entry.tokenHash === tokenHash) ?? null;
+  const result = await pool.query("SELECT * FROM invitations WHERE token_hash=$1", [tokenHash]);
+  return result.rows[0] ? toInvitation(result.rows[0]) : null;
+}
+
+/** Every invitation this organisation has issued, newest first. */
+export async function listInvitations(organisationId: string): Promise<InvitationRecord[]> {
+  if (!isUuid(organisationId)) return [];
+  if (!pool) {
+    return memory.invitations.filter((entry) => entry.organisationId === organisationId)
+      .slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const result = await pool.query(
+    "SELECT * FROM invitations WHERE organisation_id=$1 ORDER BY created_at DESC", [organisationId]);
+  return result.rows.map(toInvitation);
+}
+
+/** Withdraws an invitation. Returns false when there was no live one to withdraw. */
+export async function revokeInvitation(organisationId: string, invitationId: string) {
+  if (!isUuid(organisationId) || !isUuid(invitationId)) return false;
+  if (!pool) {
+    const invitation = memory.invitations.find((entry) =>
+      entry.id === invitationId && entry.organisationId === organisationId && !entry.acceptedAt && !entry.revokedAt);
+    if (!invitation) return false;
+    invitation.revokedAt = new Date().toISOString();
+    return true;
+  }
+  const result = await pool.query(
+    `UPDATE invitations SET revoked_at = now()
+      WHERE id=$1 AND organisation_id=$2 AND accepted_at IS NULL AND revoked_at IS NULL`,
+    [invitationId, organisationId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Marks an invitation used.
+ *
+ * Conditional on it still being unused, and reported by row count, so two
+ * clicks on the same link race for one row and exactly one of them wins.
+ */
+export async function markInvitationAccepted(invitationId: string) {
+  if (!pool) {
+    const invitation = memory.invitations.find((entry) => entry.id === invitationId && !entry.acceptedAt && !entry.revokedAt);
+    if (!invitation) return false;
+    invitation.acceptedAt = new Date().toISOString();
+    return true;
+  }
+  const result = await pool.query(
+    "UPDATE invitations SET accepted_at = now() WHERE id=$1 AND accepted_at IS NULL AND revoked_at IS NULL",
+    [invitationId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** True when this address already belongs to the organisation. */
+export async function emailIsMember(organisationId: string, email: string) {
+  if (!isUuid(organisationId)) return false;
+  if (!pool) {
+    return memory.memberships.some((entry) => {
+      if (entry.organisationId !== organisationId) return false;
+      const user = memory.users.get(entry.userId);
+      return user ? samePerson(user.email, email) : false;
+    });
+  }
+  const result = await pool.query(
+    `SELECT 1 FROM memberships m JOIN users u ON u.id = m.user_id
+      WHERE m.organisation_id=$1 AND lower(u.email)=lower($2)`,
+    [organisationId, email.trim()]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Creates a sign-in for somebody who has none.
+ *
+ * Unlike createUser this makes no organisation: the person is joining one that
+ * already exists, and giving them an empty workspace of their own alongside it
+ * would be a second thing to explain and nothing to put in it.
+ */
+export async function createUserWithoutOrganisation(email: string, passwordHash: string) {
+  const normalized = email.trim().toLowerCase();
+  const id = randomUUID();
+  if (!pool) {
+    if ([...memory.users.values()].some((user) => user.email === normalized)) throw new Error("EMAIL_EXISTS");
+    memory.users.set(id, { id, email: normalized, passwordHash });
+    return { id, email: normalized };
+  }
+  try {
+    await pool.query("INSERT INTO users(id,email,password_hash) VALUES($1,$2,$3)", [id, normalized, passwordHash]);
+    return { id, email: normalized };
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") throw new Error("EMAIL_EXISTS");
+    throw error;
+  }
 }
 
 /** Everyone in one organisation, owners first. */

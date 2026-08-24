@@ -72,6 +72,20 @@ npm run retention --prefix server           # applies the policy
 The dry run names every tender it would remove. Deleting customer data is the
 one operation where "run it and see" is not acceptable.
 
+## Invitations
+
+An invitation puts one person's email address in `invitations` along with the
+role they were offered and the SHA-256 of the link's token. The token itself is
+never stored — it exists in the email that was sent and nowhere else, so a
+leaked copy of this table lets nobody into any workspace. Links expire after
+seven days and work once.
+
+The transactional email provider has not been chosen yet (TLY-35), so today the
+message is written to the server log — recipient and subject only, never the
+body, because a link in a log file is a way into somebody's bids — and the API
+reports the invitation as undelivered rather than claiming it was sent. Until
+then the owner is shown the link once so they can pass it on themselves.
+
 ## Export and deletion on request
 
 Retention is what happens without anyone asking. These two are what happens

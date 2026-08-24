@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ApiError, createApiClient, type AccountDeletionState } from "../web/src/api/client";
+import { ApiError, createApiClient, type AccountDeletionState, type InvitationDetails, type TeamState } from "../web/src/api/client";
 import "./tenderly.css";
 
 import type {
@@ -1858,6 +1858,17 @@ export default function TenderlyApp() {
     }
   }
 
+  // An invitation link is opened by somebody who has no session yet, so it is
+  // answered before the sign-in gate rather than behind it.
+  const inviteToken = location.pathname.startsWith("/invite/") ? location.pathname.slice("/invite/".length) : "";
+  if (inviteToken) {
+    return <InviteScreen token={inviteToken} onToken={(nextToken) => {
+      window.localStorage.setItem("tenderly_token", nextToken);
+      setToken(nextToken);
+      navigate("/bids");
+    }} />;
+  }
+
   if (!authReady) return <div className="boot-screen"><Logo /><span className="spinner" /></div>;
   if (API_BASE && !token) return <AuthScreen onToken={(nextToken) => { window.localStorage.setItem("tenderly_token", nextToken); setToken(nextToken); }} />;
 
@@ -3345,6 +3356,140 @@ function AuditLogPanel({ entries, action, days, onFilter, loading }: {
 }
 
 /**
+ * The screen an invitation link lands on.
+ *
+ * It runs before there is a session, so it does its own loading and its own
+ * error text. A dead link says exactly what the server said and offers the
+ * ordinary sign-in — telling somebody "something went wrong" when the truth is
+ * "you already used this" leaves them refreshing a page that will never work.
+ */
+function InviteScreen({ token, onToken }: { token: string; onToken: (token: string) => void }) {
+  const [details, setDetails] = useState<InvitationDetails | null>(null);
+  const [problem, setProblem] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    apiClient.invitation(token)
+      .then((found) => { if (active) setDetails(found); })
+      .catch((err) => { if (active) setProblem(err instanceof Error ? err.message : "This invitation is no longer valid"); });
+    return () => { active = false; };
+  }, [token]);
+
+  async function accept(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true); setError("");
+    try {
+      const result = await apiClient.acceptInvitation(token, password);
+      onToken(result.token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not accept the invitation");
+    } finally { setBusy(false); }
+  }
+
+  if (problem) {
+    return <div className="auth-screen"><div className="auth-brand"><Logo /></div>
+      <div className="auth-card"><p className="eyebrow">INVITATION</p><h1>{problem}</h1>
+        <p className="muted">Ask whoever invited you to send a new link.</p>
+        <a className="continue-btn" href="/">Go to sign in →</a></div></div>;
+  }
+
+  if (!details) return <div className="boot-screen"><Logo /><span className="spinner" /></div>;
+
+  return <div className="auth-screen">
+    <div className="auth-brand"><Logo /><p>You have been invited to a bid workspace.</p></div>
+    <form className="auth-card" onSubmit={accept}>
+      <p className="eyebrow">INVITATION</p>
+      <h1>Join {details.organisation}</h1>
+      <p className="muted">Invited as {details.role} · {details.email}</p>
+      <label><span>Choose a password</span>
+        <input type="password" minLength={10} value={password} onChange={(event) => setPassword(event.target.value)}
+          placeholder="At least 10 characters" data-testid="invite-password" /></label>
+      <p className="muted">If you already have a Tenderly account with this address, sign in with your existing password instead — leave this blank.</p>
+      {error && <p className="auth-error" data-testid="invite-error">{error}</p>}
+      <button className="continue-btn" disabled={busy} data-testid="invite-accept">{busy ? "Joining…" : "Join the workspace →"}</button>
+    </form>
+  </div>;
+}
+
+/**
+ * Who can see this organisation's bids.
+ *
+ * Members and outstanding invitations in one list, because "who has access" is
+ * one question. While the email provider is unchosen the invitation link is
+ * shown once to the owner who created it, so an invitation that could not be
+ * emailed is still an invitation rather than a dead end.
+ */
+function TeamAccessPanel() {
+  const [team, setTeam] = useState<TeamState | null>(null);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("editor");
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [link, setLink] = useState("");
+
+  const refresh = () => apiClient.team().then(setTeam).catch(() => setTeam(null));
+  useEffect(() => { void refresh(); }, []);
+
+  async function sendInvite(event: FormEvent) {
+    event.preventDefault();
+    setBusy("invite"); setError(""); setLink("");
+    try {
+      const result = await apiClient.inviteMember(email.trim(), role);
+      setEmail("");
+      if (!result.delivered && result.link) setLink(result.link);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send that invitation");
+    } finally { setBusy(""); }
+  }
+
+  async function withdraw(id: string) {
+    setBusy(id); setError(""); setLink("");
+    try { await apiClient.revokeInvitation(id); await refresh(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Could not withdraw that invitation"); }
+    finally { setBusy(""); }
+  }
+
+  return <section className="panel settings-list" data-testid="team-access">
+    <div><span><strong>Who can see your bids</strong><small>Everyone here can open this workspace. Only the owner can invite or remove people.</small></span></div>
+
+    {(team?.members ?? []).map((member) => (
+      <div key={member.userId}><span><strong>{member.email}{member.you ? " (you)" : ""}</strong>
+        <small>{member.role}</small></span></div>
+    ))}
+
+    {(team?.invitations ?? []).map((invitation) => (
+      <div key={invitation.id}><span><strong>{invitation.email}</strong>
+        <small>{invitation.expired ? "Invitation expired" : `Invited as ${invitation.role} by ${invitation.invitedBy}`}</small></span>
+        {team?.canInvite && <button type="button" className="quiet-btn" onClick={() => void withdraw(invitation.id)}
+          disabled={busy === invitation.id} data-testid={`withdraw-${invitation.email}`}>
+          {busy === invitation.id ? "Withdrawing…" : "Withdraw"}</button>}</div>
+    ))}
+
+    {team?.canInvite && <form onSubmit={sendInvite}>
+      <div><span><strong>Invite a colleague</strong><small>They get a link that works once and expires in seven days.</small></span>
+        <span className="value-band">
+          <input type="email" required aria-label="Colleague's email" value={email}
+            onChange={(event) => setEmail(event.target.value)} placeholder="colleague@company.ie" data-testid="invite-email" />
+          <select aria-label="Role" value={role} onChange={(event) => setRole(event.target.value)} data-testid="invite-role">
+            <option value="editor">Editor</option>
+            <option value="viewer">Viewer</option>
+            <option value="owner">Owner</option>
+          </select>
+          <button className="quiet-btn" disabled={busy === "invite"} data-testid="send-invite">
+            {busy === "invite" ? "Inviting…" : "Send invitation"}</button>
+        </span></div>
+    </form>}
+
+    {link && <p className="muted" data-testid="invite-link">Email is not connected yet, so send them this link yourself — it is shown once: {link}</p>}
+    {error && <p className="auth-error" data-testid="team-error">{error}</p>}
+  </section>;
+}
+
+/**
  * Your data: take it away, or have it destroyed.
  *
  * Both are legal rights rather than product features, so neither is buried
@@ -3445,6 +3590,8 @@ function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage, au
     <div className="section-intro"><div><p className="eyebrow">SETTINGS</p><h2>What should Tenderly watch for?</h2><p>Pick the kind of work you bid for. Tenderly turns that into the CPV codes and keywords behind the scenes — you never have to go code-hunting on eTenders.</p></div></div>
 
     <AiUsagePanel usage={usage} />
+
+    <TeamAccessPanel />
 
     <YourDataPanel />
 

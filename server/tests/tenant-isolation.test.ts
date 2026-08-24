@@ -167,7 +167,9 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
   const source = readFileSync(path.resolve(process.cwd(), "src/index.ts"), "utf8");
   const routes = [...source.matchAll(/app\.(get|post|put|delete)\("(\/api\/[^"]*)"/g)]
     .map((m) => `${m[1].toUpperCase()} ${m[2]}`)
-    .filter((r) => !r.includes("/api/auth/") && !r.includes("/api/jobs/"));
+    // Auth, cron and invitation-link routes run before requireAuth: they have
+    // no caller to scope to, which is the point of them.
+    .filter((r) => !r.includes("/api/auth/") && !r.includes("/api/jobs/") && !r.includes("/api/invitations/"));
   // Routes that carry no tenant-owned resource: they read or write only the caller's own scope.
   const ownScopeOnly = [
     "GET /api/me", "GET /api/company", "PUT /api/company", "GET /api/sectors",
@@ -185,6 +187,9 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     // server/tests/account-erasure.test.ts proves the archive holds one tenant.
     "GET /api/account/export",
     "GET /api/account/deletion", "POST /api/account/deletion", "DELETE /api/account/deletion",
+    // The team is the caller's own organisation; server/tests/invitations.test.ts
+    // proves an invitation cannot be issued or withdrawn across one.
+    "GET /api/team/members", "POST /api/team/invitations", "DELETE /api/team/invitations/:id",
   ];
   const covered = new Set([
     ...ownScopeOnly,
