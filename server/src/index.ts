@@ -49,6 +49,7 @@ import {
   upsertTender,
 } from "./db.js";
 import { AUDIT_ACTIONS, audit } from "./audit.js";
+import { analysisHourlyLimiter, analysisLimiter, draftHourlyLimiter, draftLimiter, importLimiter, packLimiter } from "./limits.js";
 import { runDiscoveryJob } from "./jobs.js";
 import { createSubmissionPack, createSynopsisDeck, packFilename, submissionBlockers } from "./pack.js";
 import { attestationValid, contentVersion, provenanceSummary, type Attestation } from "./attestation.js";
@@ -274,7 +275,7 @@ app.get("/api/tenders", async (req: AuthenticatedRequest, res) => {
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
-app.post("/api/tenders/import", async (req: AuthenticatedRequest, res) => {
+app.post("/api/tenders/import", importLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
     const { url } = z.object({ url: z.string().url().max(2000) }).parse(req.body);
@@ -331,7 +332,7 @@ app.post("/api/tenders/:id/documents", upload.single("file"), async (req: Authen
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
-app.post("/api/tenders/:id/analyse", async (req: AuthenticatedRequest, res) => {
+app.post("/api/tenders/:id/analyse", analysisLimiter, analysisHourlyLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
     const tender = await analyseSavedTender(account, routeParam(req.params.id));
@@ -339,7 +340,7 @@ app.post("/api/tenders/:id/analyse", async (req: AuthenticatedRequest, res) => {
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
-app.post("/api/tenders/:id/answers/:questionId/draft", async (req: AuthenticatedRequest, res) => {
+app.post("/api/tenders/:id/answers/:questionId/draft", draftLimiter, draftHourlyLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
     const tender = await getTender(account, routeParam(req.params.id));
@@ -590,7 +591,7 @@ app.get("/api/tenders/:id/red-team", async (req: AuthenticatedRequest, res) => {
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
-app.get("/api/tenders/:id/deck", async (req: AuthenticatedRequest, res) => {
+app.get("/api/tenders/:id/deck", packLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
     const tender = await getTender(account, routeParam(req.params.id));
@@ -603,7 +604,7 @@ app.get("/api/tenders/:id/deck", async (req: AuthenticatedRequest, res) => {
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
-app.get("/api/tenders/:id/pack", async (req: AuthenticatedRequest, res) => {
+app.get("/api/tenders/:id/pack", packLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
     const tender = await getTender(account, routeParam(req.params.id));
