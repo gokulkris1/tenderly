@@ -17,6 +17,8 @@ import type {
   EvidenceItem,
   NotificationItem,
   PersonItem,
+  SavedSearch,
+  SavedSearchFilter,
   SectorPreset,
   Tender,
   UsageTotals,
@@ -133,11 +135,16 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       }),
 
     // --- discovery and import --------------------------------------------
-    discover: (query = "") =>
-      request<{ items: Tender[] }>(
-        `/api/tenders/discover${query ? `?query=${encodeURIComponent(query)}` : ""}`,
+    discover: (query = "", searchId = "") => {
+      const params = new URLSearchParams();
+      if (query) params.set("query", query);
+      if (searchId) params.set("search", searchId);
+      const suffix = params.toString();
+      return request<{ items: Tender[]; activeSearch: { id: string; name: string } | null }>(
+        `/api/tenders/discover${suffix ? `?${suffix}` : ""}`,
         "Refresh opportunities",
-      ),
+      );
+    },
     importTender: (url: string) =>
       request<{ tender: Tender; warnings?: string[] }>("/api/tenders/import", "Import tender", {
         method: "POST",
@@ -168,6 +175,13 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ confirmed: true }),
       }),
+    savedSearches: () => request<{ items: SavedSearch[] }>("/api/saved-searches", "Load saved searches"),
+    createSavedSearch: (name: string, filter: SavedSearchFilter) =>
+      request<{ search: SavedSearch }>("/api/saved-searches", "Save search", {
+        method: "POST", body: JSON.stringify({ name, filter }),
+      }),
+    deleteSavedSearch: (id: string) =>
+      request<unknown>(`/api/saved-searches/${encodeURIComponent(id)}`, "Delete saved search", { method: "DELETE" }),
     watchlist: () => request<{ items: WatchlistItem[] }>("/api/watchlist", "Load watchlist"),
     watch: (notice: { externalId: string; title: string; authority: string; deadline: string; sourceUrl: string }) =>
       request<unknown>("/api/watchlist", "Watch notice", { method: "POST", body: JSON.stringify(notice) }),

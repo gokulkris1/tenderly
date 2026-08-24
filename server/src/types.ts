@@ -218,6 +218,29 @@ export type ProvenanceEntry = {
 };
 
 /**
+ * A named slice of Discover.
+ *
+ * The same fields the preference profile uses, plus a buyer filter — so no new
+ * matching logic is introduced, only a different set of inputs to it.
+ */
+export type SavedSearchFilter = {
+  buyer: string;
+  sectors: string[];
+  keywords: string[];
+  cpvCodes: string[];
+  valueMin: number | null;
+  valueMax: number | null;
+};
+
+export type SavedSearch = {
+  id: string;
+  accountId: string;
+  name: string;
+  filter: SavedSearchFilter;
+  createdAt: string;
+};
+
+/**
  * A notice someone is keeping an eye on without committing to a bid.
  *
  * Deliberately not a tender: nothing is imported and no analysis is run, so

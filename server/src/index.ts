@@ -24,10 +24,13 @@ import {
   addPerson,
   awardIntelligence,
   companyWonBefore,
+  createSavedSearch,
+  deleteSavedSearch,
   createUser,
   findUserByEmail,
   getCompany,
   getPreferences,
+  getSavedSearch,
   getTender,
   getUserById,
   initializeDatabase,
@@ -40,6 +43,7 @@ import {
   listEvidence,
   listNotifications,
   listPeople,
+  listSavedSearches,
   listProvenance,
   listTenders,
   backfillTenderCpv,
@@ -266,8 +270,21 @@ app.put("/api/preferences", async (req: AuthenticatedRequest, res) => {
 app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
-    const [company, preferences] = await Promise.all([getCompany(account), getPreferences(account)]);
+    const [company, profilePreferences] = await Promise.all([getCompany(account), getPreferences(account)]);
     const query = z.string().max(200).catch("").parse(req.query.query);
+
+    // A saved search replaces the profile's filter fields for this request only.
+    // No new matching logic: the same fields, a different set of values.
+    const searchId = z.string().max(64).catch("").parse(req.query.search);
+    const saved = searchId ? await getSavedSearch(account, searchId) : null;
+    if (searchId && !saved) return res.status(404).json({ error: "Saved search not found" });
+    const preferences = saved
+      ? {
+          sectors: saved.filter.sectors, keywords: saved.filter.keywords, cpvCodes: saved.filter.cpvCodes,
+          valueMin: saved.filter.valueMin, valueMax: saved.filter.valueMax,
+        }
+      : profilePreferences;
+    const buyerFilter = saved?.filter.buyer?.trim().toLowerCase() ?? "";
     // Two sources, so a portal redesign no longer takes discovery down entirely.
     // TED failing must not cost the user their eTenders results, hence allSettled.
     const [crawled, ted] = await Promise.allSettled([discoverETenders(query), searchTed({ limit: 40 })]);
@@ -308,7 +325,13 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
           .map((item) => ({ item, reasons: matchNotice(`${item.title} ${item.description}`, preferences.sectors, preferences.keywords) }))
           .filter((entry) => entry.reasons.length > 0);
 
-    const withinBand = filtered.filter(({ item }) => {
+    // The buyer filter belongs to saved searches only; the profile has no such
+    // field, so an unsaved view is unaffected.
+    const byBuyer = buyerFilter
+      ? filtered.filter(({ item }) => item.authority.toLowerCase().includes(buyerFilter))
+      : filtered;
+
+    const withinBand = byBuyer.filter(({ item }) => {
       if (preferences.valueMin === null && preferences.valueMax === null) return true;
       // Parsed rather than digit-stripped: "250,000.00" with its punctuation
       // removed reads as 25,000,000, which hid every real contract above the
@@ -333,6 +356,7 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
     res.json({
       items: serialised,
       source: "eTenders public current opportunities and TED",
+      activeSearch: saved ? { id: saved.id, name: saved.name } : null,
       warnings: sourceWarnings,
       filtered: keywords.length > 0,
       profileCpvCodes: profileCpvCodes(preferences.sectors, preferences.cpvCodes),
@@ -700,6 +724,47 @@ app.get("/api/audit", async (req: AuthenticatedRequest, res) => {
     }).parse(req.query);
     const since = query.days ? new Date(Date.now() - query.days * 86_400_000) : undefined;
     res.json({ entries: await listAudit(accountId(req), { action: query.action, since, limit: query.limit }) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+const savedSearchFilterSchema = z.object({
+  buyer: z.string().max(300).default(""),
+  sectors: z.array(z.string().max(64)).max(30).default([]),
+  keywords: z.array(z.string().max(64)).max(50).default([]),
+  cpvCodes: z.array(z.string().regex(/^\d{8}$/)).max(50).default([]),
+  valueMin: z.number().int().min(0).nullable().default(null),
+  valueMax: z.number().int().min(0).nullable().default(null),
+});
+
+/** The account's named slices of Discover. The profile remains the default. */
+app.get("/api/saved-searches", async (req: AuthenticatedRequest, res) => {
+  try {
+    res.json({ items: await listSavedSearches(accountId(req)) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.post("/api/saved-searches", async (req: AuthenticatedRequest, res) => {
+  try {
+    const input = z.object({
+      name: z.string().trim().min(1).max(80),
+      filter: savedSearchFilterSchema,
+    }).parse(req.body);
+    const saved = await createSavedSearch(accountId(req), input.name, input.filter);
+    res.status(201).json({ search: saved });
+  } catch (error) {
+    if (error instanceof Error && error.message === "NAME_TAKEN") {
+      return res.status(409).json({ error: "A saved search with that name already exists" });
+    }
+    const mapped = safeError(error);
+    res.status(mapped.status).json({ error: mapped.message });
+  }
+});
+
+app.delete("/api/saved-searches/:id", async (req: AuthenticatedRequest, res) => {
+  try {
+    const removed = await deleteSavedSearch(accountId(req), routeParam(req.params.id));
+    if (!removed) return res.status(404).json({ error: "Saved search not found" });
+    res.json({ removed: true });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

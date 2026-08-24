@@ -15,6 +15,8 @@ import type {
   PersonRecord,
   ProvenanceEntry,
   PublicTender,
+  SavedSearch,
+  SavedSearchFilter,
   StoredDocument,
   TenderAnalysis,
   TenderRecord,
@@ -54,6 +56,7 @@ const memory = {
   audit: [] as AuditEntry[],
   bidDecisions: [] as BidDecisionRecord[],
   watchlist: [] as WatchlistEntry[],
+  savedSearches: [] as SavedSearch[],
 };
 
 /**
@@ -643,6 +646,75 @@ export async function removeFromWatchlist(accountId: string, externalId: string)
     return memory.watchlist.length < before;
   }
   const result = await pool.query("DELETE FROM watchlist WHERE account_id=$1 AND external_id=$2", [accountId, externalId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+const toSavedSearch = (row: Record<string, unknown>): SavedSearch => ({
+  id: String(row.id), accountId: String(row.account_id), name: String(row.name),
+  filter: (row.filter_json ?? {}) as SavedSearchFilter,
+  createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/**
+ * Saves a named search. Throws NAME_TAKEN rather than silently overwriting:
+ * a name is how a person picks a search, so two of them is a bug not a choice.
+ */
+export async function createSavedSearch(accountId: string, name: string, filter: SavedSearchFilter) {
+  const trimmed = name.trim();
+  if (!pool) {
+    if (memory.savedSearches.some((entry) => entry.accountId === accountId && entry.name.toLowerCase() === trimmed.toLowerCase())) {
+      throw new Error("NAME_TAKEN");
+    }
+    const entry: SavedSearch = { id: randomUUID(), accountId, name: trimmed, filter, createdAt: new Date().toISOString() };
+    memory.savedSearches.push(entry);
+    return entry;
+  }
+  try {
+    const result = await pool.query(
+      "INSERT INTO saved_searches(id,account_id,name,filter_json) VALUES($1,$2,$3,$4) RETURNING *",
+      [randomUUID(), accountId, trimmed, JSON.stringify(filter)],
+    );
+    return toSavedSearch(result.rows[0]);
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") throw new Error("NAME_TAKEN");
+    throw error;
+  }
+}
+
+export async function listSavedSearches(accountId: string) {
+  if (!pool) {
+    return memory.savedSearches.filter((entry) => entry.accountId === accountId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const result = await pool.query("SELECT * FROM saved_searches WHERE account_id=$1 ORDER BY name", [accountId]);
+  return result.rows.map(toSavedSearch);
+}
+
+/**
+ * Anything that is not a uuid cannot be a row id.
+ *
+ * Postgres raises 22P02 for a malformed uuid rather than returning no rows, so
+ * without this a stale or hand-edited identifier surfaced as a 500 instead of
+ * the 404 the caller expects.
+ */
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+export async function getSavedSearch(accountId: string, id: string) {
+  if (!isUuid(id)) return null;
+  if (!pool) return memory.savedSearches.find((entry) => entry.accountId === accountId && entry.id === id) ?? null;
+  const result = await pool.query("SELECT * FROM saved_searches WHERE account_id=$1 AND id=$2", [accountId, id]);
+  return result.rows[0] ? toSavedSearch(result.rows[0]) : null;
+}
+
+/** Returns false when there was nothing to delete, rather than a quiet success. */
+export async function deleteSavedSearch(accountId: string, id: string) {
+  if (!isUuid(id)) return false;
+  if (!pool) {
+    const before = memory.savedSearches.length;
+    memory.savedSearches = memory.savedSearches.filter((entry) => !(entry.accountId === accountId && entry.id === id));
+    return memory.savedSearches.length < before;
+  }
+  const result = await pool.query("DELETE FROM saved_searches WHERE account_id=$1 AND id=$2", [accountId, id]);
   return (result.rowCount ?? 0) > 0;
 }
 

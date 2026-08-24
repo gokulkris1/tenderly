@@ -27,6 +27,8 @@ import type {
   ProvenanceEntry,
   Recommendation,
   RequiredCertificateStatus,
+  SavedSearch,
+  SavedSearchFilter,
   ScoreBreakdown,
   SectorPreset,
   SubmissionItem,
@@ -597,6 +599,9 @@ export default function TenderlyApp() {
   const [blockers, setBlockers] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageTotals | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [activeSearchId, setActiveSearchId] = useState("");
+  const [activeSearchName, setActiveSearchName] = useState("");
   // The star state on Discover is derived from the watchlist, so the two can
   // never disagree about what is being watched.
   const watchedIds = useMemo(() => new Set(watchlist.map((item) => item.externalId)), [watchlist]);
@@ -654,6 +659,7 @@ export default function TenderlyApp() {
   useEffect(() => {
     if (!API_BASE || !token || isDemo) return;
     void refreshWatchlist();
+    void refreshSavedSearches();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, section]);
 
@@ -727,18 +733,68 @@ export default function TenderlyApp() {
     } finally { setLoading(""); }
   }
 
-  async function refreshDiscovery() {
+  async function refreshDiscovery(searchId = activeSearchId) {
     if (isDemo) {
       setToast("Demo feed refreshed · connect the Render API for live eTenders data");
       return;
     }
     try {
       setLoading("feed");
-      const data = await apiClient.discover(query);
+      const data = await apiClient.discover(query, searchId);
       setDiscoveries(data.items);
-      setToast(`${data.items.length} opportunities checked`);
+      setActiveSearchName(data.activeSearch?.name ?? "");
+      setToast(`${data.items.length} opportunities checked${data.activeSearch ? ` · ${data.activeSearch.name}` : ""}`);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Could not refresh feed");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function refreshSavedSearches() {
+    if (isDemo || !API_BASE || !token) return;
+    try {
+      const { items } = await apiClient.savedSearches();
+      setSavedSearches(items);
+    } catch {
+      // The selector is a convenience; its absence must not break Discover.
+    }
+  }
+
+  /** Selecting "All matches" (an empty id) falls back to the account profile. */
+  async function selectSavedSearch(searchId: string) {
+    setActiveSearchId(searchId);
+    if (!searchId) setActiveSearchName("");
+    await refreshDiscovery(searchId);
+  }
+
+  async function saveCurrentSearch(name: string, filter: SavedSearchFilter) {
+    if (isDemo) { setToast("Saved searches are disabled in the demo"); return; }
+    try {
+      setLoading("feed");
+      const { search } = await apiClient.createSavedSearch(name, filter);
+      await refreshSavedSearches();
+      setToast(`Saved "${search.name}"`);
+      await selectSavedSearch(search.id);
+    } catch (error) {
+      // A duplicate name is the server's 409; show its wording, not a guess.
+      setToast(error instanceof ApiError ? error.message : "Could not save that search");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function removeSavedSearch(searchId: string) {
+    if (isDemo) return;
+    try {
+      setLoading("feed");
+      await apiClient.deleteSavedSearch(searchId);
+      await refreshSavedSearches();
+      // Deleting the active search falls back to the profile view.
+      if (activeSearchId === searchId) await selectSavedSearch("");
+      setToast("Saved search deleted");
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not delete that search");
     } finally {
       setLoading("");
     }
@@ -1208,6 +1264,12 @@ export default function TenderlyApp() {
               onOpenSettings={() => setSection("Settings")}
               watching={watchedIds}
               onToggleWatch={toggleWatch}
+              savedSearches={savedSearches}
+              activeSearchId={activeSearchId}
+              activeSearchName={activeSearchName}
+              onSelectSearch={selectSavedSearch}
+              onSaveSearch={saveCurrentSearch}
+              onDeleteSearch={removeSavedSearch}
             />
           )}
           {section === "Watchlist" && (
@@ -1332,6 +1394,64 @@ function ScoreBreakdownDetail({ breakdown }: { breakdown?: ScoreBreakdown }) {
  * passed" under a Closed heading rather than a negative number — the item stays
  * because the user put it there, but it stops pretending to be an opportunity.
  */
+/**
+ * The saved-search selector above the Discover list.
+ *
+ * "All matches" is the account's preference profile, and it stays the default:
+ * saved searches are extra slices, not a replacement for the profile.
+ */
+function SavedSearchBar({ searches, activeId, activeName, onSelect, onSave, onDelete, busy }: {
+  searches: SavedSearch[]; activeId: string; activeName: string;
+  onSelect: (id: string) => void; onSave: (name: string, filter: SavedSearchFilter) => void;
+  onDelete: (id: string) => void; busy: boolean;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("");
+  const [buyer, setBuyer] = useState("");
+  const [cpv, setCpv] = useState("");
+  const [keywords, setKeywords] = useState("");
+
+  const list = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
+
+  return (
+    <section className="panel saved-search-bar" data-testid="saved-searches">
+      <div className="saved-search-row">
+        <label>
+          <span>View</span>
+          <select value={activeId} onChange={(event) => onSelect(event.target.value)} disabled={busy}>
+            <option value="">All matches</option>
+            {searches.map((search) => <option key={search.id} value={search.id}>{search.name}</option>)}
+          </select>
+        </label>
+        {activeId && activeName && <strong className="active-search" data-testid="active-search">{activeName}</strong>}
+        {activeId && <button className="text-action" onClick={() => onDelete(activeId)} disabled={busy}>Delete</button>}
+        <button className="text-action" onClick={() => setShowForm((open) => !open)}>{showForm ? "Cancel" : "＋ Save search"}</button>
+      </div>
+
+      {showForm && (
+        <div className="saved-search-form">
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Name, e.g. HSE energy" />
+          <input value={buyer} onChange={(event) => setBuyer(event.target.value)} placeholder="Buyer contains…" />
+          <input value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="CPV codes, comma separated" />
+          <input value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder="Keywords, comma separated" />
+          <button
+            className="quiet-btn"
+            disabled={busy || !name.trim()}
+            onClick={() => {
+              onSave(name.trim(), {
+                buyer: buyer.trim(), sectors: [], keywords: list(keywords),
+                cpvCodes: list(cpv), valueMin: null, valueMax: null,
+              });
+              setShowForm(false);
+              setName(""); setBuyer(""); setCpv(""); setKeywords("");
+            }}
+          >Save</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function WatchlistView({ items, loading, onUnwatch, onImport, onDiscover }: {
   items: WatchlistItem[]; loading: boolean;
   onUnwatch: (externalId: string) => void; onImport: (item: WatchlistItem) => void; onDiscover: () => void;
@@ -1377,8 +1497,8 @@ function WatchlistView({ items, loading, onUnwatch, onImport, onDiscover }: {
   );
 }
 
-function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid, setShowImport, hasPreferences, onOpenSettings, watching, onToggleWatch }: {
-  tenders: Tender[]; query: string; setQuery: (value: string) => void; refreshDiscovery: () => void; loading: boolean; openBid: (id: string) => void; setShowImport: (value: boolean) => void; hasPreferences: boolean; onOpenSettings: () => void; watching: Set<string>; onToggleWatch: (tender: Tender) => void;
+function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid, setShowImport, hasPreferences, onOpenSettings, watching, onToggleWatch, savedSearches, activeSearchId, activeSearchName, onSelectSearch, onSaveSearch, onDeleteSearch }: {
+  tenders: Tender[]; query: string; setQuery: (value: string) => void; refreshDiscovery: () => void; loading: boolean; openBid: (id: string) => void; setShowImport: (value: boolean) => void; hasPreferences: boolean; onOpenSettings: () => void; watching: Set<string>; onToggleWatch: (tender: Tender) => void; savedSearches: SavedSearch[]; activeSearchId: string; activeSearchName: string; onSelectSearch: (id: string) => void; onSaveSearch: (name: string, filter: SavedSearchFilter) => void; onDeleteSearch: (id: string) => void;
 }) {
   return (
     <div className="discover-page">
@@ -1415,6 +1535,15 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
           <button className="quiet-btn" onClick={onOpenSettings}>Choose sectors</button>
         </section>
       )}
+      <SavedSearchBar
+        searches={savedSearches}
+        activeId={activeSearchId}
+        activeName={activeSearchName}
+        onSelect={onSelectSearch}
+        onSave={onSaveSearch}
+        onDelete={onDeleteSearch}
+        busy={loading}
+      />
       <div className="tender-list">
         {tenders.map((tender) => (
           <article className="tender-card" key={tender.id} onClick={() => openBid(tender.id)}>
