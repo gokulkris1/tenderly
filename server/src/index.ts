@@ -11,6 +11,7 @@ import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer
 import { badgeFor, classForHumanEdit } from "./provenance.js";
 import { diffVersions } from "./versions.js";
 import { ESTIMATE_NOTICE, prioritisedGaps, scoreEvaluation } from "./evaluation.js";
+import { buildPortfolio } from "./portfolio.js";
 import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
@@ -1085,6 +1086,44 @@ app.post("/api/declarations/affirm", async (req: AuthenticatedRequest, res) => {
 app.get("/api/vault/completeness", async (req: AuthenticatedRequest, res) => {
   try {
     res.json({ completeness: vaultCompleteness(await listEvidence(accountId(req))) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * The pipeline on one board.
+ *
+ * Reuses what each tender already computes — recommendation, blockers, decision
+ * — rather than scoring anything again, so the board can never disagree with
+ * the tender it came from.
+ */
+app.get("/api/portfolio", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const sort = z.enum(["deadline", "recommendation", "blockers"]).catch("deadline").parse(req.query.sort);
+    const tenders = await listTenders(account);
+
+    const rows = await Promise.all(tenders.map(async (tender) => {
+      const serialized = await tenderWithAnswers(account, tender);
+      return {
+        id: tender.id,
+        title: serialized.title,
+        authority: serialized.authority,
+        deadline: serialized.deadline,
+        recommendation: serialized.recommendation?.decision ?? serialized.decision,
+        decision: serialized.bidDecisions?.[0]?.decision,
+        unresolvedBlockers: tender.analysis
+          ? submissionBlockers(tender, tender.analysis, await listAnswers(tender.id), await listDocuments(tender.id), await listEvidence(account)).length
+          : 0,
+        estimatedValue: serialized.value,
+      };
+    }));
+
+    res.json({
+      portfolio: buildPortfolio(rows, {
+        sort,
+        submittedIds: tenders.filter((tender) => tender.status === "SUBMITTED").map((tender) => tender.id),
+      }),
+    });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

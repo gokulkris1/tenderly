@@ -29,6 +29,8 @@ import type {
   NotificationItem,
   PersonFact,
   PersonItem,
+  Portfolio,
+  PortfolioRow,
   ProvenanceClass,
   ProvenanceEntry,
   Recommendation,
@@ -47,7 +49,7 @@ import type {
 } from "@tenderly/shared";
 
 // Screen navigation is local to the app, not part of the wire contract.
-type AppSection = "Discover" | "Watchlist" | "My bids" | "Evidence" | "Team" | "Company" | "Settings";
+type AppSection = "Discover" | "Watchlist" | "Portfolio" | "My bids" | "Evidence" | "Team" | "Company" | "Settings";
 type BidStage = "Qualify" | "Synopsis" | "Respond" | "Assemble" | "Submit";
 
 /** The URL is the source of truth for which screen is showing (TLY-23). */
@@ -58,6 +60,7 @@ const SECTION_PATHS: Record<AppSection, string> = {
   Team: "/team",
   Company: "/company",
   Watchlist: "/watchlist",
+  Portfolio: "/portfolio",
   Settings: "/settings",
 };
 const stageSlug = (stage: BidStage) => stage.toLowerCase().replace(/\s+/g, "-");
@@ -221,6 +224,7 @@ const demoNotifications: NotificationItem[] = [
 const navItems: { label: AppSection; icon: string; badge?: string }[] = [
   { label: "Discover", icon: "⌕", badge: "12" },
   { label: "Watchlist", icon: "★" },
+  { label: "Portfolio", icon: "▦" },
   { label: "My bids", icon: "▱", badge: "3" },
   { label: "Evidence", icon: "◇" },
   { label: "Team", icon: "◎" },
@@ -660,6 +664,8 @@ export default function TenderlyApp() {
   const [blockers, setBlockers] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageTotals | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [portfolioSort, setPortfolioSort] = useState<"deadline" | "recommendation" | "blockers">("deadline");
   const [personRecords, setPersonRecords] = useState<PersonFact[]>([]);
   const [recordsPersonId, setRecordsPersonId] = useState("");
   const [skillsMatrix, setSkillsMatrix] = useState<SkillMatrix | null>(null);
@@ -727,6 +733,7 @@ export default function TenderlyApp() {
     if (!API_BASE || !token || isDemo) return;
     void refreshWatchlist();
     void refreshSavedSearches();
+    if (section === "Portfolio") void loadPortfolio();
     void filterSkills(skillFilter);
     // Recomputed on the server from the vault itself, so it is never stale.
     apiClient.vaultCompleteness().then(({ completeness }) => setVaultReadiness(completeness)).catch(() => setVaultReadiness(null));
@@ -1135,6 +1142,20 @@ export default function TenderlyApp() {
       await apiClient.downloadEvidenceFile(item.id, item.filename);
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not download that file");
+    }
+  }
+
+  async function loadPortfolio(sort: "deadline" | "recommendation" | "blockers" = portfolioSort) {
+    setPortfolioSort(sort);
+    if (isDemo || !API_BASE || !token) return;
+    try {
+      setLoading("portfolio");
+      const { portfolio: board } = await apiClient.portfolio(sort);
+      setPortfolio(board);
+    } catch {
+      setPortfolio(null);
+    } finally {
+      setLoading("");
     }
   }
 
@@ -1607,6 +1628,16 @@ export default function TenderlyApp() {
               onDiscover={() => setSection("Discover")}
             />
           )}
+          {section === "Portfolio" && (
+            <PortfolioView
+              portfolio={portfolio}
+              sort={portfolioSort}
+              onSort={loadPortfolio}
+              onOpen={openBid}
+              onDiscover={() => setSection("Discover")}
+              loading={loading === "portfolio"}
+            />
+          )}
           {section === "My bids" && selected && (
             <>
             <BidList tenders={tenders} selectedId={selected.id} onSelect={setSelectedId} />
@@ -1783,6 +1814,85 @@ function SavedSearchBar({ searches, activeId, activeName, onSelect, onSave, onDe
         </div>
       )}
     </section>
+  );
+}
+
+const euros = (value: number) =>
+  new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
+
+/**
+ * The whole pipeline on one board.
+ *
+ * Bid decisions are made one tender at a time, but capacity is finite across
+ * the week. Nothing here is scored again — every figure comes from the tender
+ * it belongs to, so the board can never disagree with the tender.
+ */
+function PortfolioView({ portfolio, sort, onSort, onOpen, onDiscover, loading }: {
+  portfolio: Portfolio | null;
+  sort: "deadline" | "recommendation" | "blockers";
+  onSort: (sort: "deadline" | "recommendation" | "blockers") => void;
+  onOpen: (tenderId: string) => void;
+  onDiscover: () => void;
+  loading: boolean;
+}) {
+  const row = (entry: PortfolioRow) => (
+    <article className="portfolio-row" key={entry.id} onClick={() => onOpen(entry.id)} data-testid={`portfolio-${entry.id}`}>
+      <div>
+        <h3>{entry.title}</h3>
+        <p className="authority">{entry.authority}</p>
+      </div>
+      <span className={`decision-pill decision-${decisionSlug(entry.recommendation)}`}>{decisionLabel(entry.recommendation)}</span>
+      <div className="portfolio-facts">
+        <span><small>Deadline</small><strong>{entry.deadline}</strong></span>
+        <span><small>Time left</small><strong className={entry.closed ? "watch-passed" : ""}>{entry.closed ? "Passed" : entry.daysRemaining === null ? "Not stated" : `${entry.daysRemaining} days`}</strong></span>
+        <span><small>Open items</small><strong className={entry.unresolvedBlockers > 0 ? "portfolio-blockers" : ""}>{entry.unresolvedBlockers}</strong></span>
+        <span><small>Decision</small><strong>{entry.decision === "BID" ? "Bid" : entry.decision === "NO_BID" ? "No bid" : "Not recorded"}</strong></span>
+      </div>
+    </article>
+  );
+
+  return (
+    <div className="portfolio-page">
+      <div className="section-intro">
+        <div>
+          <p className="eyebrow">PORTFOLIO</p>
+          <h2>Triage the week.</h2>
+          <p>Every live opportunity with its recommendation, its deadline and what is still open on it.</p>
+        </div>
+        <label className="portfolio-sort">Sort by
+          <select value={sort} onChange={(event) => onSort(event.target.value as typeof sort)} disabled={loading}>
+            <option value="deadline">Deadline</option>
+            <option value="recommendation">Recommendation</option>
+            <option value="blockers">Open items</option>
+          </select>
+        </label>
+      </div>
+
+      {portfolio?.note && (
+        <section className="panel" data-testid="portfolio-empty">
+          <p>{portfolio.note} — <button className="text-action" onClick={onDiscover}>find one on Discover</button></p>
+        </section>
+      )}
+
+      {(portfolio?.pipeline.length ?? 0) > 0 && (
+        <section className="panel portfolio-summary" data-testid="pipeline-value">
+          {portfolio!.pipeline.map((entry) => (
+            <span key={entry.decision}>
+              <strong>{euros(entry.value)}</strong>
+              <small>{entry.decision === "BID" ? "Bidding" : "Not bidding"} · {entry.count} tender{entry.count === 1 ? "" : "s"}</small>
+            </span>
+          ))}
+        </section>
+      )}
+
+      {(portfolio?.live.length ?? 0) > 0 && <section className="panel portfolio-list">{portfolio!.live.map(row)}</section>}
+      {(portfolio?.closed.length ?? 0) > 0 && (
+        <section className="panel portfolio-list">
+          <p className="eyebrow">CLOSED</p>
+          {portfolio!.closed.map(row)}
+        </section>
+      )}
+    </div>
   );
 }
 

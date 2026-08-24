@@ -162,7 +162,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     "GET /api/me", "GET /api/company", "PUT /api/company", "GET /api/sectors",
     "GET /api/preferences", "PUT /api/preferences", "GET /api/tenders", "GET /api/usage", "GET /api/audit",
     "GET /api/skills-matrix",
-    "GET /api/watchlist", "POST /api/watchlist", "DELETE /api/watchlist/:externalId",
+    "GET /api/watchlist", "POST /api/watchlist", "DELETE /api/watchlist/:externalId", "GET /api/portfolio",
     "GET /api/vault/completeness",
     "GET /api/declarations", "PUT /api/declarations", "POST /api/declarations/affirm",
     "GET /api/saved-searches", "POST /api/saved-searches", "DELETE /api/saved-searches/:id",
