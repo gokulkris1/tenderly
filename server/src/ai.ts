@@ -3,6 +3,7 @@ import { z } from "zod";
 import { bidAnswerDraftSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
 import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, DRAFTING_PROMPT } from "./prompts/index.js";
 import { withStableIds } from "./analysis-schema.js";
+import { reconcileGates, rollUpEligibility } from "./eligibility.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, TenderAnalysis, TenderRecord } from "./types.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
@@ -101,7 +102,20 @@ export async function analyseTender(tender: TenderRecord, company: CompanyProfil
   });
   // The model invents ids; replace them with ones derived from the questions themselves.
   const analysis = parseToolResult(response, tenderAnalysisSchema, "analysis") as TenderAnalysis;
-  return withStableIds({ ...analysis, promptVersion: ANALYSIS_PROMPT_VERSION });
+  // Hard gates are arithmetic, so they are decided in code rather than trusted
+  // from the model. The model's extraction stands; only the verdict is redone.
+  const { gates } = reconcileGates({
+    gates: analysis.fatalGates,
+    company,
+    requiredCertificates: analysis.requiredCertificates,
+    evidence: bidderContext.evidence ?? [],
+  });
+  return withStableIds({
+    ...analysis,
+    fatalGates: gates,
+    eligibility: rollUpEligibility(gates),
+    promptVersion: ANALYSIS_PROMPT_VERSION,
+  });
 }
 
 export async function draftBidAnswer(args: {
