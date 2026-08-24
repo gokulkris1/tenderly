@@ -3,6 +3,7 @@ import { z } from "zod";
 import { answerCritiqueSchema, bidAnswerDraftSchema, cvExtractionSchema, decisionRationaleSchema, tenderAnalysisSchema, type BidAnswerDraft } from "./ai-schemas.js";
 import { ANALYSIS_PROMPT, ANALYSIS_PROMPT_VERSION, CRITIQUE_PROMPT, CV_PROMPT, DRAFTING_PROMPT, RATIONALE_PROMPT } from "./prompts/index.js";
 import { withStableIds } from "./analysis-schema.js";
+import { exclusionNotes, partitionEvidence, resolveCitations } from "./citations.js";
 import { reconcileGates, rollUpEligibility } from "./eligibility.js";
 import { recordUsage } from "./db.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, TenderAnalysis, TenderRecord, UsageEvent } from "./types.js";
@@ -167,13 +168,26 @@ export async function draftBidAnswer(args: {
   people: PersonRecord[];
   existingAnswers: BidAnswer[];
 }) {
-  if (!client) return { status: "NEEDS_INPUT" as const, answer: "", missingInputs: ["Configure ANTHROPIC_API_KEY to draft evidence-grounded bid responses"], evidenceUsed: [], claimsToVerify: [] };
+  if (!client) {
+    return {
+      status: "NEEDS_INPUT" as const, answer: "",
+      missingInputs: ["Configure ANTHROPIC_API_KEY to draft evidence-grounded bid responses"],
+      evidenceUsed: [] as string[], claimsToVerify: [] as string[],
+      citations: [] as { id: string; name: string; hasFile: boolean }[],
+    };
+  }
   const instructions = DRAFTING_PROMPT;
+  const { citable, excluded } = partitionEvidence(args.evidence);
   const payload = {
     tender: { title: args.tender.title, authority: args.tender.authority, analysis: args.tender.analysis },
     question: args.question,
     bidderProfile: args.company,
-    approvedEvidence: args.evidence.filter((item) => item.verified),
+    // Only verified, in-date items may be cited. Items that exist but cannot be
+    // used are named too: "you hold an ISO 9001 certificate but it expired in
+    // March" is what produces a useful [INPUT NEEDED], where silence produces a
+    // confident answer with nothing behind it.
+    approvedEvidence: citable.map((item) => ({ name: item.name, kind: item.kind, content: item.content })),
+    evidenceHeldButUnusable: exclusionNotes(excluded),
     people: args.people,
     priorAnswers: args.existingAnswers.map((answer) => ({ questionId: answer.questionId, response: answer.response })),
   };
@@ -190,7 +204,10 @@ export async function draftBidAnswer(args: {
       output_config: { effort: "high" },
     },
   });
-  return parseToolResult(response, bidAnswerDraftSchema, "drafting") as BidAnswerDraft;
+  const draft = parseToolResult(response, bidAnswerDraftSchema, "drafting") as BidAnswerDraft;
+  // The model names the evidence it used; the citation carries the identifier,
+  // so the UI can open the document rather than a name that points nowhere.
+  return { ...draft, citations: resolveCitations(draft.evidenceUsed, citable) };
 }
 
 /**

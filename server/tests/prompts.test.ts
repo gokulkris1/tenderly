@@ -49,5 +49,9 @@ test("TLY-65 AC4: the drafting prompt keeps the [INPUT NEEDED] instruction", () 
 
 test("TLY-65 AC4: the drafting prompt keeps the never-fabricate rule", () => {
   assert.match(DRAFTING_PROMPT, /Never fabricate client names, metrics, accreditations/i);
-  assert.match(DRAFTING_PROMPT, /evidenceUsed must name only supplied items actually used/i);
+  // The citation rule was tightened by TLY-58 — evidenceUsed must now name only
+  // items from approvedEvidence — but the constraint it enforces is the same:
+  // the model may cite only what it was actually given.
+  assert.match(DRAFTING_PROMPT, /evidenceUsed must name only supplied approvedEvidence items actually used/i);
+  assert.match(DRAFTING_PROMPT, /evidenceHeldButUnusable must NOT be cited/i);
 });
