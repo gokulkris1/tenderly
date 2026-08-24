@@ -52,12 +52,26 @@ async function makeResponseDoc(tender: TenderRecord, analysis: TenderAnalysis, a
   return Packer.toBuffer(doc);
 }
 
-async function makeEvidenceRegister(tender: TenderRecord, evidence: EvidenceRecord[]) {
+async function makeEvidenceRegister(tender: TenderRecord, evidence: EvidenceRecord[], answers: BidAnswer[] = []) {
   const children = [...titleBlock("Evidence Register", tender.title)];
   if (!evidence.length) children.push(paragraph("No reusable evidence items were attached."));
+
+  // Which answers cite each item, so a reviewer can see what rests on what.
+  const citedBy = new Map<string, string[]>();
+  for (const answer of answers) {
+    for (const id of answer.evidence) {
+      citedBy.set(id, [...(citedBy.get(id) ?? []), answer.questionId]);
+    }
+  }
+
   evidence.forEach((item, index) => {
     children.push(paragraph(`${index + 1}. ${item.name}`, { heading: HeadingLevel.HEADING_2 }));
-    children.push(paragraph(`${item.kind} · ${item.verified ? "Verified" : "Review required"}`));
+    const state = item.verified ? "Verified" : "Review required";
+    const expiry = item.expiresOn ? ` · expires ${item.expiresOn}` : "";
+    const file = item.filename ? ` · file: ${item.filename}` : "";
+    children.push(paragraph(`${item.kind} · ${state}${expiry}${file}`));
+    const cites = citedBy.get(item.id) ?? [];
+    if (cites.length) children.push(paragraph(`Cited by ${cites.length} answer${cites.length > 1 ? "s" : ""}.`));
     if (item.content) children.push(paragraph(item.content));
   });
   return Packer.toBuffer(new Document({ sections: [{ properties: {}, children }] }));
@@ -184,7 +198,7 @@ export async function createSubmissionPack(args: { tender: TenderRecord; analysi
   for (const [index, person] of args.people.entries()) zip.file(`${prefix}${String(index + 2).padStart(2, "0")}_CV_${safeFilename(person.name)}.docx`, await makeCv(person));
   for (const document of args.documents.filter((item) => item.role === "submission" && item.bytes)) zip.file(safeFilename(document.filename), document.bytes!);
   if (args.draft) {
-    zip.file("_Tenderly_Internal/Evidence_Register.docx", await makeEvidenceRegister(args.tender, args.evidence));
+    zip.file("_Tenderly_Internal/Evidence_Register.docx", await makeEvidenceRegister(args.tender, args.evidence, args.answers));
     zip.file("_Tenderly_Internal/Bid_Synopsis.pptx", await createSynopsisDeck(args.tender, args.analysis, args.company));
     zip.file("_Tenderly_Internal/READINESS.txt", `TENDERLY DRAFT PACK — NOT READY FOR SUBMISSION\n\n${blockers.length ? blockers.map((blocker) => `- ${blocker}`).join("\n") : "No automated blockers detected. Human final review is still required."}\n`);
   } else {

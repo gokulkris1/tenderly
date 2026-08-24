@@ -175,6 +175,12 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
         answer: saved?.response ?? "",
         evidence: question.evidenceNeeded,
         provenance: saved ? badgeFor(ledger.get(saved.id) ?? []) : undefined,
+        // Stored as ids; resolved here so a renamed document still resolves and
+        // a deleted one simply stops appearing rather than citing a ghost.
+        citations: (saved?.evidence ?? [])
+          .map((id) => evidence.find((item) => item.id === id))
+          .filter((item): item is EvidenceRecord => Boolean(item))
+          .map((item) => ({ id: item.id, name: item.name, hasFile: Boolean(item.filename) })),
       };
     }) ?? [],
     roles: analysis?.roles.map((role) => ({

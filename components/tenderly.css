@@ -629,3 +629,8 @@ button:disabled { cursor: wait; opacity: .62; }
 .role-candidates small { font-size: 11px; color: var(--muted); }
 .role-gap { margin-top: 8px !important; font-size: 12px; color: var(--red); }
 .role-unconfirmed { margin-top: 6px !important; font-size: 11px; color: var(--amber); }
+
+/* TLY-58 — a citation points at a document a buyer could be shown. */
+.answer-citations { margin-top: 14px; }
+.answer-citations .citation { margin: 8px 8px 0 0; padding: 5px 12px; border: 1px solid var(--green); border-radius: 999px; background: var(--green-soft); color: var(--green-2); font-size: 11px; cursor: pointer; }
+.answer-citations .citation:disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: default; }

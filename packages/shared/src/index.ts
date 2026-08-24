@@ -69,6 +69,8 @@ export type BidQuestion = {
   prompt: string;
   answer: string;
   evidence: string[];
+  /** Vault items this answer cites, resolvable to a downloadable document. */
+  citations?: { id: string; name: string; hasFile: boolean }[];
   /**
    * The badge shown against the answer: the class of its latest ledger entry.
    * Absent when nothing has been recorded — an answer with no ledger makes no

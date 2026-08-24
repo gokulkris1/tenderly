@@ -537,7 +537,13 @@ app.post("/api/tenders/:id/answers/:questionId/draft", draftLimiter, draftHourly
       : evidence;
 
     const draft = await draftBidAnswer({ tender, company, question, evidence: evidenceWithDeclarations, people, existingAnswers: answers });
-    const saved = await saveAnswer(tender.id, question.id, draft.answer, draft.missingInputs.length ? "needs-input" : "draft", draft.evidenceUsed);
+    // The citation stores the vault item's identifier, not just its name, so
+    // the UI can open the document a buyer could be shown.
+    const saved = await saveAnswer(
+      tender.id, question.id, draft.answer,
+      draft.missingInputs.length ? "needs-input" : "draft",
+      (draft.citations ?? []).map((citation) => citation.id),
+    );
     // The ledger records that a model wrote this text, and which one.
     await recordProvenance({
       answerId: saved.id, section: "body", class: "ai-generated",
