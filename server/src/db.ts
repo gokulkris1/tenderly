@@ -4,6 +4,7 @@ import path from "node:path";
 import pg from "pg";
 import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
 import type {
+  AuditEntry,
   BidAnswer,
   CompanyProfile,
   DiscoveryPreferences,
@@ -45,6 +46,7 @@ const memory = {
   notifications: new Map<string, NotificationRow>(),
   provenance: [] as ProvenanceEntry[],
   usage: [] as UsageEvent[],
+  audit: [] as AuditEntry[],
 };
 
 /**
@@ -402,6 +404,55 @@ export async function listUsage(accountId: string) {
     requestId: row.request_id ?? undefined, tenderId: row.tender_id ?? undefined,
     createdAt: new Date(row.created_at).toISOString(),
   } as UsageEvent));
+}
+
+/**
+ * Appends one entry to the audit log.
+ *
+ * There is deliberately no update or delete counterpart, and the table refuses
+ * UPDATE at the database level: a record that can be rewritten is not a record.
+ */
+export async function recordAudit(input: Omit<AuditEntry, "id" | "createdAt">) {
+  const entry: AuditEntry = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.audit.push(entry); return entry; }
+  await pool.query(
+    `INSERT INTO audit_log(id,account_id,actor,action,subject_type,subject_id,subject_label,metadata,request_id)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [entry.id, entry.accountId, entry.actor, entry.action, entry.subjectType, entry.subjectId,
+     entry.subjectLabel, JSON.stringify(entry.metadata), entry.requestId ?? null],
+  );
+  return entry;
+}
+
+/**
+ * One account's audit entries, newest first, optionally narrowed by action and
+ * by how far back to look. Never returns another account's rows.
+ */
+export async function listAudit(accountId: string, filter: { action?: string; since?: Date; limit?: number } = {}) {
+  const limit = Math.min(Math.max(filter.limit ?? 200, 1), 500);
+  if (!pool) {
+    return memory.audit
+      .filter((entry) => entry.accountId === accountId)
+      .filter((entry) => !filter.action || entry.action === filter.action)
+      .filter((entry) => !filter.since || entry.createdAt >= filter.since.toISOString())
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+  const clauses = ["account_id=$1"];
+  const values: unknown[] = [accountId];
+  if (filter.action) { values.push(filter.action); clauses.push(`action=$${values.length}`); }
+  if (filter.since) { values.push(filter.since.toISOString()); clauses.push(`created_at >= $${values.length}`); }
+  values.push(limit);
+  const result = await pool.query(
+    `SELECT * FROM audit_log WHERE ${clauses.join(" AND ")} ORDER BY created_at DESC LIMIT $${values.length}`,
+    values,
+  );
+  return result.rows.map((row) => ({
+    id: row.id, accountId: row.account_id, actor: row.actor, action: row.action,
+    subjectType: row.subject_type, subjectId: row.subject_id, subjectLabel: row.subject_label,
+    metadata: row.metadata ?? {}, requestId: row.request_id ?? undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+  } as AuditEntry));
 }
 
 export async function addEvidence(accountId: string, input: Omit<EvidenceRecord, "id" | "accountId">) {

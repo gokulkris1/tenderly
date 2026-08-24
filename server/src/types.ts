@@ -192,6 +192,27 @@ export type ProvenanceEntry = {
   createdAt: string;
 };
 
+/**
+ * One recorded action that changes what eventually leaves the company.
+ *
+ * Entries never contain document contents or secrets — only what was acted on,
+ * by whom, and when. See src/audit.ts.
+ */
+export type AuditEntry = {
+  id: string;
+  accountId: string;
+  actor: string;
+  /** Dotted action name: "evidence.verified", "pack.final.downloaded". */
+  action: string;
+  subjectType: string;
+  subjectId: string;
+  /** A label a person can recognise: a file name, an answer title. */
+  subjectLabel: string;
+  metadata: Record<string, unknown>;
+  requestId?: string;
+  createdAt: string;
+};
+
 /** One metered model call. See src/usage.ts. */
 export type UsageEvent = {
   id: string;

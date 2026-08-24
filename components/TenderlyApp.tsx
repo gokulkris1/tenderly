@@ -8,6 +8,7 @@ import "./tenderly.css";
 import type {
   AiUsePolicy,
   AttestationState,
+  AuditEntry,
   AwardCriterion,
   AwardIntelligence as AwardIntelligenceData,
   BidQuestion,
@@ -430,6 +431,10 @@ export default function TenderlyApp() {
   // The authoritative blocker list the API returns when it refuses a final pack.
   const [blockers, setBlockers] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageTotals | null>(null);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [auditFilter, setAuditFilter] = useState<{ action: string; days: number }>({ action: "", days: 30 });
+  const auditAction = auditFilter.action;
+  const auditDays = auditFilter.days;
   const [sectors, setSectors] = useState<SectorPreset[]>([]);
   const [preferences, setPreferences] = useState<DiscoveryPreferences>({ sectors: [], keywords: [], cpvCodes: [], valueMin: null, valueMax: null });
 
@@ -456,6 +461,18 @@ export default function TenderlyApp() {
     apiClient.usage().then(({ usage: totals }) => setUsage(totals)).catch(() => setUsage(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section, token]);
+
+  // Re-read whenever the filter changes: the server does the filtering, so the
+  // view always reflects the log rather than a stale slice of it.
+  useEffect(() => {
+    if (section !== "Settings" || isDemo || !API_BASE || !token) return;
+    setLoading("audit");
+    apiClient.audit({ action: auditFilter.action || undefined, days: auditFilter.days })
+      .then(({ entries }) => setAuditEntries(entries))
+      .catch(() => setAuditEntries([]))
+      .finally(() => setLoading(""));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, token, auditFilter.action, auditFilter.days]);
 
   // The attestation covers a specific version of the content, so it is reloaded
   // whenever the stage is opened rather than cached across edits.
@@ -960,7 +977,7 @@ export default function TenderlyApp() {
           }} />}
           {section === "Evidence" && <EvidenceView tab={evidenceTab} setTab={setEvidenceTab} evidence={evidence} people={people} onUploadEvidence={uploadEvidenceFile} onUploadCv={uploadCvFile} onVerify={setEvidenceVerification} loading={loading} />}
           {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} loading={loading === "cv-upload"} />}
-          {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} usage={usage} />}
+          {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} usage={usage} audit={{ entries: auditEntries, action: auditAction, days: auditDays, onFilter: setAuditFilter, loading: loading === "audit" }} />}
         </div>
       </main>
 
@@ -1396,7 +1413,69 @@ function AiUsagePanel({ usage }: { usage: UsageTotals | null }) {
   );
 }
 
-function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage }: { isDemo: boolean; sectors: SectorPreset[]; preferences: DiscoveryPreferences; onSave: (preferences: DiscoveryPreferences) => void; loading: string; usage: UsageTotals | null }) {
+const auditLabels: Record<string, string> = {
+  "evidence.verified": "Evidence verified",
+  "evidence.unverified": "Evidence verification withdrawn",
+  "answer.marked_ready": "Answer marked ready",
+  "attestation.recorded": "Attestation recorded",
+  "pack.final.downloaded": "Final pack downloaded",
+  "pack.draft.downloaded": "Draft pack downloaded",
+  "document.uploaded": "Document uploaded",
+  "no_ai_mode.enabled": "No-AI mode enabled",
+  "no_ai_mode.disabled": "No-AI mode disabled",
+  "ai_policy.acknowledged": "AI use policy acknowledged",
+};
+
+/**
+ * A read-only view of the actions that change what eventually reaches a buyer.
+ *
+ * Filterable by action and by how far back to look, which is what a diligence
+ * question actually asks. Nothing here can be edited or removed: the log is
+ * append-only in the database, not merely read-only in this view.
+ */
+function AuditLogPanel({ entries, action, days, onFilter, loading }: {
+  entries: AuditEntry[]; action: string; days: number;
+  onFilter: (next: { action: string; days: number }) => void; loading: boolean;
+}) {
+  return (
+    <section className="panel settings-list" data-testid="audit-log">
+      <div><span><strong>Audit log</strong><small>Who changed what, and when. Entries record the action and the item — never file contents.</small></span></div>
+      <div className="audit-filters">
+        <label>Action
+          <select value={action} onChange={(event) => onFilter({ action: event.target.value, days })}>
+            <option value="">All actions</option>
+            {Object.entries(auditLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <label>Period
+          <select value={days} onChange={(event) => onFilter({ action, days: Number(event.target.value) })}>
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+            <option value={365}>Last year</option>
+          </select>
+        </label>
+      </div>
+      {loading
+        ? <p className="usage-empty">Loading…</p>
+        : entries.length === 0
+          ? <p className="usage-empty">No entries for this filter.</p>
+          : (
+            <ul className="audit-list">
+              {entries.map((entry) => (
+                <li key={entry.id}>
+                  <strong>{auditLabels[entry.action] ?? entry.action}</strong>
+                  <span>{entry.subjectLabel || entry.subjectId}</span>
+                  <small>{entry.actor} · {new Date(entry.createdAt).toLocaleString()}</small>
+                </li>
+              ))}
+            </ul>
+          )}
+    </section>
+  );
+}
+
+function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage, audit }: { isDemo: boolean; sectors: SectorPreset[]; preferences: DiscoveryPreferences; onSave: (preferences: DiscoveryPreferences) => void; loading: string; usage: UsageTotals | null; audit: { entries: AuditEntry[]; action: string; days: number; onFilter: (next: { action: string; days: number }) => void; loading: boolean } }) {
   const [draft, setDraft] = useState<DiscoveryPreferences>(preferences);
   const [keywordText, setKeywordText] = useState(preferences.keywords.join(", "));
   const [cpvText, setCpvText] = useState(preferences.cpvCodes.join(", "));
@@ -1434,6 +1513,8 @@ function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage }: 
     <div className="section-intro"><div><p className="eyebrow">SETTINGS</p><h2>What should Tenderly watch for?</h2><p>Pick the kind of work you bid for. Tenderly turns that into the CPV codes and keywords behind the scenes — you never have to go code-hunting on eTenders.</p></div></div>
 
     <AiUsagePanel usage={usage} />
+
+    <AuditLogPanel entries={audit.entries} action={audit.action} days={audit.days} onFilter={audit.onFilter} loading={audit.loading} />
 
     <section className="panel settings-list" data-testid="discovery-preferences">
       <div><span><strong>Sectors you bid in</strong><small>Tick what applies. Discover shows only opportunities matching these.</small></span></div>
