@@ -6,6 +6,7 @@ import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
 import { allCpvCodes, cpvAncestors, normaliseCpv } from "./cpv.js";
 import { canonicalKey } from "./dedupe.js";
 import type { IngestionRun } from "./ingestion-health.js";
+import type { Affirmation, DeclarationAnswer } from "./declarations.js";
 import type {
   AuditEntry,
   BidAnswer,
@@ -59,6 +60,8 @@ const memory = {
   watchlist: [] as WatchlistEntry[],
   savedSearches: [] as SavedSearch[],
   ingestionRuns: [] as IngestionRun[],
+  declarations: new Map<string, DeclarationAnswer[]>(),
+  affirmations: new Map<string, Affirmation>(),
 };
 
 /**
@@ -784,6 +787,62 @@ const toEvidence = (row: Record<string, unknown>): EvidenceRecord => ({
  * Adds a vault item. `bytes` is the original file when one was uploaded; a
  * text-only item is still a valid item and simply has none.
  */
+/** This account's answers to the ESPD declarations. */
+export async function listDeclarationAnswers(accountId: string): Promise<DeclarationAnswer[]> {
+  if (!pool) return memory.declarations.get(accountId) ?? [];
+  const result = await pool.query("SELECT declaration_id, answer, notes FROM declarations WHERE account_id=$1", [accountId]);
+  return result.rows.map((row) => ({
+    declarationId: String(row.declaration_id),
+    answer: (row.answer as "yes" | "no" | null) ?? null,
+    notes: String(row.notes ?? ""),
+  }));
+}
+
+/** Saves the answers as a set: partial edits are how a set drifts out of step. */
+export async function saveDeclarationAnswers(accountId: string, answers: DeclarationAnswer[]) {
+  if (!pool) { memory.declarations.set(accountId, answers); return answers; }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const answer of answers) {
+      await client.query(
+        `INSERT INTO declarations(account_id,declaration_id,answer,notes) VALUES($1,$2,$3,$4)
+         ON CONFLICT(account_id,declaration_id) DO UPDATE SET answer=EXCLUDED.answer, notes=EXCLUDED.notes`,
+        [accountId, answer.declarationId, answer.answer, answer.notes],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  return answers;
+}
+
+/** The most recent affirmation of the whole set, or null if never affirmed. */
+export async function latestAffirmation(accountId: string): Promise<Affirmation | null> {
+  if (!pool) return memory.affirmations.get(accountId) ?? null;
+  const result = await pool.query(
+    "SELECT affirmed_by, created_at FROM declaration_affirmations WHERE account_id=$1 ORDER BY created_at DESC LIMIT 1",
+    [accountId],
+  );
+  const row = result.rows[0];
+  return row ? { affirmedBy: String(row.affirmed_by), at: new Date(row.created_at).toISOString() } : null;
+}
+
+/** Records an affirmation. Re-affirming adds an entry rather than replacing one. */
+export async function recordAffirmation(accountId: string, affirmedBy: string): Promise<Affirmation> {
+  const affirmation: Affirmation = { affirmedBy, at: new Date().toISOString() };
+  if (!pool) { memory.affirmations.set(accountId, affirmation); return affirmation; }
+  await pool.query(
+    "INSERT INTO declaration_affirmations(id,account_id,affirmed_by) VALUES($1,$2,$3)",
+    [randomUUID(), accountId, affirmedBy],
+  );
+  return affirmation;
+}
+
 export async function addEvidence(
   accountId: string,
   input: Omit<EvidenceRecord, "id" | "accountId">,

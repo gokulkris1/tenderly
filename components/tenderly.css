@@ -567,3 +567,18 @@ button:disabled { cursor: wait; opacity: .62; }
 .vault-group.missing strong { color: var(--muted); }
 .vault-group ul { list-style: none; margin: 6px 0 0; padding: 0; }
 .vault-group li { font-size: 12px; padding: 3px 0; color: var(--ink-2); }
+
+/* TLY-57 — answer the ESPD once, reuse it on every bid. */
+.declarations-affirmed { margin: 10px 0 0; font-size: 12px; color: var(--green-2); }
+.declarations-stale { margin: 10px 0 0; padding: 8px 12px; background: var(--amber-soft); color: var(--amber); border-radius: 8px; font-size: 12px; }
+.declaration-part { margin-top: 16px; }
+.declaration-row { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+.declaration-row p { margin: 0; display: grid; gap: 3px; }
+.declaration-row strong { font-size: 13px; }
+.declaration-row small { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.declaration-answer { display: flex; gap: 16px; }
+.declaration-answer label { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.declaration-row input[type="text"], .declaration-row input:not([type]) { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
+.declaration-row input.needs-detail { border-color: var(--red); }
+.declaration-actions { display: flex; gap: 10px; margin-top: 14px; }
+.declaration-warning { margin: 10px 0 0; font-size: 12px; color: var(--red); }
