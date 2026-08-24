@@ -958,6 +958,69 @@ export async function confirmAllPersonFacts(accountId: string, personId: string)
   return listPersonFacts(personId);
 }
 
+/**
+ * Applies the retention policy.
+ *
+ * Deletion is by cut-off date per class, in one transaction, and the tenders it
+ * removes are named in the result — a job that says "removed 14 things" is not
+ * something anyone can check.
+ *
+ * `dryRun` counts without deleting, so the policy can be inspected against real
+ * data before it is ever allowed to remove any.
+ */
+export async function applyRetention(policy: { id: string; label: string; cutoff: Date }[], options: { dryRun?: boolean } = {}) {
+  const dryRun = options.dryRun ?? false;
+  const removed: { id: string; label: string; count: number; cutoff: string }[] = [];
+  const removedTenders: { id: string; title: string }[] = [];
+  if (!pool) return { removed, removedTenders, dryRun };
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const entry of policy) {
+      const iso = entry.cutoff.toISOString();
+      let count = 0;
+
+      if (entry.id === "closed-tenders") {
+        // A tender is closed once its deadline has passed. Documents, answers
+        // and provenance go with it through ON DELETE CASCADE.
+        const doomed = await client.query(
+          `SELECT id, title FROM tenders
+            WHERE updated_at < $1
+              AND status <> 'SUBMITTED'`,
+          [iso],
+        );
+        removedTenders.push(...doomed.rows.map((row) => ({ id: String(row.id), title: String(row.title) })));
+        count = doomed.rowCount ?? 0;
+        if (!dryRun && count > 0) {
+          await client.query("DELETE FROM tenders WHERE id = ANY($1::uuid[])", [doomed.rows.map((row) => row.id)]);
+        }
+      } else {
+        const table = {
+          "usage-events": "usage_events",
+          "ingestion-runs": "ingestion_runs",
+          notifications: "notifications",
+          "audit-log": "audit_log",
+        }[entry.id];
+        if (!table) continue;
+        const counted = await client.query(`SELECT count(*)::int AS n FROM ${table} WHERE created_at < $1`, [iso]);
+        count = counted.rows[0]?.n ?? 0;
+        if (!dryRun && count > 0) {
+          await client.query(`DELETE FROM ${table} WHERE created_at < $1`, [iso]);
+        }
+      }
+      removed.push({ id: entry.id, label: entry.label, count, cutoff: iso });
+    }
+    await client.query(dryRun ? "ROLLBACK" : "COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  return { removed, removedTenders, dryRun };
+}
+
 export async function addEvidence(
   accountId: string,
   input: Omit<EvidenceRecord, "id" | "accountId">,
