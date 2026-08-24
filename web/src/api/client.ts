@@ -9,6 +9,7 @@
 import type {
   Affirmation,
   AiPolicyAcknowledgement,
+  AnalysisChanges,
   AnswerVersion,
   Attestation,
   AttestationState,
@@ -122,6 +123,8 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       }),
 
     // --- workspace --------------------------------------------------------
+    analysisVersions: (tenderId: string, versionId = "") =>
+      request<AnalysisChanges>(`/api/tenders/${tenderId}/analysis-versions${versionId ? `?version=${encodeURIComponent(versionId)}` : ""}`, "Load analysis history"),
     packQuestions: (tenderId: string) =>
       request<{ questions: PackQuestion[]; searchable: boolean }>(`/api/tenders/${tenderId}/ask`, "Load pack questions"),
     askThePack: (tenderId: string, question: string) =>

@@ -7,6 +7,7 @@ import "./tenderly.css";
 
 import type {
   AiUsePolicy,
+  AnalysisChanges,
   AnswerVersion,
   AttestationState,
   AuditEntry,
@@ -352,6 +353,38 @@ function BidDecisionPanel({ tender, onRecord, busy }: {
  * that does not address the question says so — an invented requirement is worse
  * than no answer, and a plausible one is worse still because nobody checks it.
  */
+/**
+ * What the buyer changed since the previous analysis.
+ *
+ * Answers to changed questions are flagged rather than invalidated, so this
+ * panel is where a bid team finds out that the deadline moved or a requirement
+ * was rewritten — the thing that used to happen silently.
+ */
+function WhatChanged({ state, onSelectVersion }: {
+  state: AnalysisChanges | null; onSelectVersion: (versionId: string) => void;
+}) {
+  if (!state || state.versions.length === 0) return null;
+  return (
+    <section className="panel what-changed" data-testid="what-changed">
+      <div className="panel-heading">
+        <div><h2>What changed</h2><p>{state.changedAt ? `Since the analysis of ${new Date(state.changedAt).toLocaleString()}` : "Between analyses of this tender"}</p></div>
+        {state.versions.length > 1 && (
+          <select onChange={(event) => onSelectVersion(event.target.value)} defaultValue="">
+            <option value="">Current analysis</option>
+            {state.versions.filter((version) => !version.current).map((version) => (
+              <option key={version.id} value={version.id}>{new Date(version.createdAt).toLocaleString()}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {state.changes.length === 0
+        ? <p className="changed-none" data-testid="no-changes">{state.note ?? "No changes since the previous analysis"}</p>
+        : <ul className="changed-list">{state.changes.map((change) => <li key={change}>{change}</li>)}</ul>}
+    </section>
+  );
+}
+
 function AskThePack({ questions, searchable, onAsk, busy }: {
   questions: PackQuestion[]; searchable: boolean; onAsk: (question: string) => void; busy: boolean;
 }) {
@@ -700,6 +733,7 @@ export default function TenderlyApp() {
   const [evaluation, setEvaluation] = useState<EvaluationState | null>(null);
   const [packQuestions, setPackQuestions] = useState<PackQuestion[]>([]);
   const [packSearchable, setPackSearchable] = useState(false);
+  const [analysisChanges, setAnalysisChanges] = useState<AnalysisChanges | null>(null);
   const [attestationState, setAttestationState] = useState<AttestationState | null>(null);
   const [tenders, setTenders] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [discoveries, setDiscoveries] = useState<Tender[]>(API_BASE ? [] : demoTenders);
@@ -810,6 +844,7 @@ export default function TenderlyApp() {
   useEffect(() => {
     if (!selectedId || isDemo) return;
     void refreshPackQuestions(selectedId);
+    void refreshAnalysisChanges(selectedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -1060,6 +1095,27 @@ export default function TenderlyApp() {
       setToast(error instanceof ApiError ? error.message : "Could not record the attestation");
     } finally {
       setLoading("");
+    }
+  }
+
+  async function refreshAnalysisChanges(tenderId: string) {
+    if (isDemo || !API_BASE || !token) return;
+    try {
+      setAnalysisChanges(await apiClient.analysisVersions(tenderId));
+    } catch {
+      setAnalysisChanges(null);
+    }
+  }
+
+  /** An earlier analysis is shown read-only: it records what the pack said then. */
+  async function viewAnalysisVersion(versionId: string) {
+    if (!selected || isDemo) return;
+    try {
+      const state = await apiClient.analysisVersions(selected.id, versionId);
+      setAnalysisChanges(state);
+      if (versionId) setToast("Showing an earlier analysis · read-only");
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not load that analysis");
     }
   }
 
@@ -1736,6 +1792,8 @@ export default function TenderlyApp() {
               packQuestions={packQuestions}
               packSearchable={packSearchable}
               askThePack={askThePack}
+              analysisChanges={analysisChanges}
+              viewAnalysisVersion={viewAnalysisVersion}
               onOpenCitation={openCitation}
               setSelectedLots={setSelectedLots}
               recordBidDecision={recordBidDecision}
@@ -2124,8 +2182,8 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, blockers }: {
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, blockers }: {
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; blockers: string[];
 }) {
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
@@ -2165,6 +2223,7 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
             </section>
 
             <RecommendationPanel recommendation={tender.recommendation} />
+            <WhatChanged state={analysisChanges} onSelectVersion={viewAnalysisVersion} />
             <AskThePack questions={packQuestions} searchable={packSearchable} onAsk={askThePack} busy={loading === "ask"} />
             <BidDecisionPanel tender={tender} onRecord={recordBidDecision} busy={loading === "decision"} />
             <RoleMatches matches={tender.roleMatches ?? []} onAssign={assignRole} busy={loading === "assign-role"} />

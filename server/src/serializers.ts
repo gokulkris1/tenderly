@@ -129,6 +129,7 @@ export function inScope(lotId: string | undefined, selection: string[]) {
 export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [], evidence: EvidenceRecord[] = [], provenance: ProvenanceEntry[] = []): Tender {
   const analysis = tender.analysis;
   const selection = selectedLots(tender);
+  const needsReview = (tender.metadata.questionsNeedingReview ?? []) as string[];
   const answerMap = new Map(answers.map((answer) => [answer.questionId, answer]));
   const ledger = new Map<string, ProvenanceEntry[]>();
   for (const entry of provenance) {
@@ -170,7 +171,14 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
         weight: question.weight,
         maxWords: question.maxWords,
         required: question.required,
-        status: saved?.status === "ready" ? "ready" : saved?.status === "needs-input" ? "needs-input" : "draft",
+        // An answer to a question the buyer amended is flagged, not discarded:
+        // a person wrote it, and it may still be exactly right.
+        status: needsReview.includes(question.id) && saved?.response.trim()
+          ? "needs-review"
+          : saved?.status === "ready" ? "ready" : saved?.status === "needs-input" ? "needs-input" : "draft",
+        reviewNote: needsReview.includes(question.id) && saved?.response.trim()
+          ? "The buyer amended this question after the answer was written"
+          : undefined,
         prompt: question.prompt,
         answer: saved?.response ?? "",
         evidence: question.evidenceNeeded,

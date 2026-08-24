@@ -19,7 +19,12 @@ export type GateState = "pass" | "review" | "fail";
 export type EligibilityState = "PASS" | "REVIEW" | "FAIL";
 
 /** Where a saved answer stands. `needs-input` means it carries `[INPUT NEEDED: …]` markers. */
-export type AnswerStatus = "ready" | "draft" | "needs-input";
+/**
+ * Where a saved answer stands. `needs-input` means it carries [INPUT NEEDED: …]
+ * markers; `needs-review` means the buyer amended the question after it was
+ * written — the answer is kept, not discarded.
+ */
+export type AnswerStatus = "ready" | "draft" | "needs-input" | "needs-review";
 
 export type SubmissionItemKind =
   | "RESPONSE"
@@ -45,6 +50,17 @@ export type Gate = {
 
 /** How much of a response section a machine produced. */
 export type ProvenanceClass = "ai-generated" | "ai-assisted" | "human";
+
+/** What changed between two analyses of the same tender. */
+export type AnalysisChanges = {
+  versions: { id: string; createdAt: string; actor: string; promptVersion: string; current: boolean }[];
+  changes: string[];
+  /** "No changes since the previous analysis" when there are none. */
+  note?: string;
+  changedAt: string | null;
+  /** Present when an earlier version was requested; read-only. */
+  analysis: unknown;
+};
 
 /** A question asked of the tender pack, with the passage the answer rests on. */
 export type PackQuestion = {
@@ -140,6 +156,8 @@ export type BidQuestion = {
   prompt: string;
   answer: string;
   evidence: string[];
+  /** Why the answer needs another look, when it does. */
+  reviewNote?: string;
   /** Vault items this answer cites, resolvable to a downloadable document. */
   citations?: { id: string; name: string; hasFile: boolean }[];
   /**

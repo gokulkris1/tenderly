@@ -8,6 +8,17 @@ import { canonicalKey } from "./dedupe.js";
 import type { IngestionRun } from "./ingestion-health.js";
 import type { AnswerVersion } from "./versions.js";
 import type { MockEvaluation } from "./evaluation.js";
+
+/** One stored analysis, so an amendment can be compared with what preceded it. */
+export type AnalysisVersionRecord = {
+  id: string;
+  tenderId: string;
+  analysis: TenderAnalysis;
+  promptVersion: string;
+  schemaVersion: string;
+  actor: string;
+  createdAt: string;
+};
 import type { PackQuestion } from "./types.js";
 import type { Affirmation, DeclarationAnswer } from "./declarations.js";
 import type {
@@ -66,6 +77,7 @@ const memory = {
   answerVersions: [] as AnswerVersion[],
   mockEvaluations: [] as MockEvaluation[],
   packQuestions: [] as PackQuestion[],
+  analysisVersions: [] as AnalysisVersionRecord[],
   savedSearches: [] as SavedSearch[],
   ingestionRuns: [] as IngestionRun[],
   declarations: new Map<string, DeclarationAnswer[]>(),
@@ -1140,6 +1152,50 @@ export async function listPackQuestions(tenderId: string) {
   }
   const result = await pool.query("SELECT * FROM pack_questions WHERE tender_id=$1 ORDER BY created_at DESC", [tenderId]);
   return result.rows.map(toPackQuestion);
+}
+
+const toAnalysisVersion = (row: Record<string, unknown>): AnalysisVersionRecord => ({
+  id: String(row.id), tenderId: String(row.tender_id), analysis: row.analysis as TenderAnalysis,
+  promptVersion: String(row.prompt_version ?? ""), schemaVersion: String(row.schema_version ?? ""),
+  actor: String(row.actor ?? ""), createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/** Keeps the analysis that was just produced, alongside the current pointer. */
+export async function recordAnalysisVersion(input: Omit<AnalysisVersionRecord, "id" | "createdAt">) {
+  const record: AnalysisVersionRecord = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  if (!pool) { memory.analysisVersions.push(record); return record; }
+  await pool.query(
+    "INSERT INTO analysis_versions(id,tender_id,analysis,prompt_version,schema_version,actor) VALUES($1,$2,$3,$4,$5,$6)",
+    [record.id, record.tenderId, JSON.stringify(record.analysis), record.promptVersion, record.schemaVersion, record.actor],
+  );
+  return record;
+}
+
+/** One tender's analyses, newest first. */
+export async function listAnalysisVersions(tenderId: string) {
+  if (!pool) {
+    return memory.analysisVersions.filter((entry) => entry.tenderId === tenderId)
+      .slice().reverse()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const result = await pool.query("SELECT * FROM analysis_versions WHERE tender_id=$1 ORDER BY created_at DESC", [tenderId]);
+  return result.rows.map(toAnalysisVersion);
+}
+
+/** One stored analysis, scoped to the account that owns its tender. */
+export async function getAnalysisVersion(accountId: string, versionId: string) {
+  if (!isUuid(versionId)) return null;
+  if (!pool) {
+    const version = memory.analysisVersions.find((entry) => entry.id === versionId);
+    if (!version) return null;
+    return memory.tenders.get(version.tenderId)?.accountId === accountId ? version : null;
+  }
+  const result = await pool.query(
+    `SELECT v.* FROM analysis_versions v JOIN tenders t ON t.id = v.tender_id
+      WHERE v.id=$1 AND t.account_id=$2`,
+    [versionId, accountId],
+  );
+  return result.rows[0] ? toAnalysisVersion(result.rows[0]) : null;
 }
 
 export async function addEvidence(
