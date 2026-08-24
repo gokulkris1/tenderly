@@ -82,6 +82,29 @@ export type TeamState = {
 /** What an invitation link says about itself, before anyone signs in. */
 export type InvitationDetails = { organisation: string; email: string; role: string; expiresAt: string };
 
+/** A whole-questionnaire drafting run, as the Respond stage watches it. */
+export type DraftRun = {
+  id: string;
+  tenderId: string;
+  startedAt: string;
+  finishedAt?: string;
+  total: number;
+  completed: number;
+  questions: {
+    questionId: string;
+    title: string;
+    state: "pending" | "drafting" | "drafted" | "needs-input" | "skipped" | "failed";
+    error?: string;
+    citations?: { id: string; name: string; hasFile: boolean }[];
+  }[];
+};
+
+export type DraftRunState = {
+  run: DraftRun | null;
+  summary: { drafted: number; needsInput: number; skipped: number; failed: number } | null;
+  running: boolean;
+};
+
 /** Whether this account is scheduled for deletion, and the terms of doing it. */
 export type AccountDeletionState = {
   pending: { scheduledFor: string; requestedBy: string; daysRemaining: number } | null;
@@ -178,6 +201,12 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       request<{ completed: number; total: number }>(`/api/tenders/${tenderId}/runbook/${encodeURIComponent(stepId)}`, "Update runbook", {
         method: "POST", body: JSON.stringify({ done }),
       }),
+    /** Starts a run and returns immediately; progress comes from draftRun. */
+    draftAll: (tenderId: string) =>
+      request<{ run: DraftRun; summary: DraftRunState["summary"] }>(
+        `/api/tenders/${tenderId}/draft-all`, "Draft all answers", { method: "POST", body: "{}" }),
+    draftRun: (tenderId: string) =>
+      request<DraftRunState>(`/api/tenders/${tenderId}/draft-all`, "Check drafting progress"),
     tasks: (tenderId: string) => request<{ tasks: BidTask[] }>(`/api/tenders/${tenderId}/tasks`, "Load tasks"),
     addTask: (tenderId: string, title: string, owner: string, dueOn: string) =>
       request<{ task: BidTask }>(`/api/tenders/${tenderId}/tasks`, "Add task", {

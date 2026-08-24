@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -7,7 +8,7 @@ import multer from "multer";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { accountId, actorEmail, requireAuth, signToken, userId, type AuthenticatedRequest } from "./auth.js";
-import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftBidAnswer, draftDecisionRationale, evaluateDraft, extractCvRecords } from "./ai.js";
+import { aiConfigured, aiModel, analyseTender, critiqueBidAnswer, draftDecisionRationale, evaluateDraft, extractCvRecords } from "./ai.js";
 import { askThePack } from "./ai.js";
 import { badgeFor, classForHumanEdit } from "./provenance.js";
 import { diffVersions } from "./versions.js";
@@ -16,7 +17,6 @@ import { buildPortfolio } from "./portfolio.js";
 import { buildRunbook } from "./runbook.js";
 import { NO_ANSWER, chunkDocument, rankChunks } from "./retrieval.js";
 import { NO_CHANGES, describeChange, diffAnalyses, questionsNeedingReview } from "./analysis-diff.js";
-import { DRAFTING_PROMPT_VERSION } from "./prompts/index.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
 import { searchTed } from "./sources/ted.js";
 import { DOCUMENT_CLOSE, DOCUMENT_OPEN, combineSourceText, extractDocumentText, neutraliseEnvelopeMarkers } from "./documents.js";
@@ -29,12 +29,14 @@ import {
   invitationLink, invitationProblem, newInvitationToken,
 } from "./invitations.js";
 import { sendEmail } from "./mail.js";
+import { draftAndSaveAnswer, draftContext } from "./drafting.js";
+import { isRunning, runFor, startBatchDraft, summarise } from "./batch-draft.js";
 import { LAST_OWNER, attachMembership, requireEditorForWrites, requireRole } from "./roles.js";
 import { buildAccountExport } from "./account-export.js";
 import { CONFIRMATION_PHRASE, GRACE_DAYS, confirmsDeletion, daysRemaining, isOwner } from "./account-erasure.js";
 import { skillMatrix, skillMatrixCsv } from "./skills.js";
 import { matchRoles, roleBlockers } from "./role-matching.js";
-import { DECLARATIONS, affirmationProblems, declarationEvidence, needsReaffirmation } from "./declarations.js";
+import { DECLARATIONS, affirmationProblems, needsReaffirmation } from "./declarations.js";
 import { decide, unsupportedFigures } from "./decision.js";
 import { parseContractValue, scoreNotice } from "./scoring.js";
 import {
@@ -677,40 +679,11 @@ app.post("/api/tenders/:id/answers/:questionId/draft", draftLimiter, draftHourly
     const questionId = routeParam(req.params.questionId);
     const question = tender.analysis.questions.find((item) => item.id === questionId);
     if (!question) return res.status(404).json({ error: "Scored question not found" });
-    const [company, evidence, people, answers] = await Promise.all([getCompany(account), listEvidence(account), listActivePeople(account), listAnswers(tender.id)]);
 
-    // Affirmed ESPD declarations are citable evidence: a person has stood
-    // behind them. An unaffirmed or stale set is not offered, because citing it
-    // in a tender response would be a claim nobody actually made.
-    const [declarationAnswers, affirmation] = await Promise.all([listDeclarationAnswers(account), latestAffirmation(account)]);
-    const declarationText = declarationEvidence({ answers: declarationAnswers, affirmation });
-    const evidenceWithDeclarations = declarationText
-      ? [...evidence, {
-          id: "espd-declarations", accountId: account, kind: "ESPD self-declaration",
-          name: "ESPD self-declarations", content: declarationText, tags: ["espd"], verified: true,
-        }]
-      : evidence;
-
-    const draft = await draftBidAnswer({ tender, company, question, evidence: evidenceWithDeclarations, people, existingAnswers: answers });
-    // The citation stores the vault item's identifier, not just its name, so
-    // the UI can open the document a buyer could be shown.
-    const saved = await saveAnswer(
-      tender.id, question.id, draft.answer,
-      draft.missingInputs.length ? "needs-input" : "draft",
-      (draft.citations ?? []).map((citation) => citation.id),
-    );
-    // The ledger records that a model wrote this text, and which one.
-    await recordProvenance({
-      answerId: saved.id, section: "body", class: "ai-generated",
-      model: aiModel(), promptVersion: DRAFTING_PROMPT_VERSION,
-      evidenceIds: draft.evidenceUsed, actor: actorEmail(req),
-    });
-    // No saved state is ever lost, so every path that writes an answer also
-    // records the version it wrote.
-    await recordAnswerVersion({
-      answerId: saved.id, response: saved.response, status: saved.status,
-      provenanceClass: "ai-generated", actor: actorEmail(req),
-    });
+    // The same path the whole-questionnaire run takes, so the two can never
+    // disagree about what gets written to the provenance ledger.
+    const context = await draftContext(account, tender.id);
+    const { draft } = await draftAndSaveAnswer({ tender, question, context, actor: actorEmail(req) });
     res.json(draft);
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
@@ -2175,6 +2148,42 @@ app.get("/api/billing", requireRole("owner"), async (req: AuthenticatedRequest, 
       status: "not-configured",
       message: "Subscriptions are not switched on yet",
     });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Drafts every scored question that nobody has signed off yet.
+ *
+ * Answers immediately with the opening state and keeps working: twelve model
+ * calls do not fit inside one HTTP request, and a company should not sit on a
+ * spinner wondering whether anything is happening. Progress is read back from
+ * the GET below.
+ */
+app.post("/api/tenders/:id/draft-all", draftHourlyLimiter, async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    if (!tender.analysis) return res.status(409).json({ error: "Run tender analysis before drafting responses" });
+    if (noAiMode(tender)) return res.status(409).json({ error: NO_AI_REFUSAL });
+    if (!tender.analysis.questions.length) return res.status(409).json({ error: "This tender has no scored questions" });
+    // Two runs on one tender would race each other for the same answers.
+    if (isRunning(tender.id)) return res.status(409).json({ error: "A drafting run is already in progress" });
+
+    const run = await startBatchDraft({ runId: randomUUID(), account, tender, actor: actorEmail(req) });
+    res.status(202).json({ run, summary: summarise(run) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** How far the run has got, and what happened to each question. */
+app.get("/api/tenders/:id/draft-all", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const run = runFor(tender.id);
+    if (!run) return res.json({ run: null, summary: null, running: false });
+    res.json({ run, summary: summarise(run), running: !run.finishedAt });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
