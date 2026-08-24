@@ -231,6 +231,23 @@ export type Recommendation = {
   note?: string;
 };
 
+/**
+ * A notice being watched without a bid record. `daysRemaining` is null once the
+ * deadline has passed, which the view shows as "Deadline passed" rather than a
+ * negative number.
+ */
+export type WatchlistItem = {
+  externalId: string;
+  title: string;
+  authority: string;
+  deadline: string;
+  sourceUrl: string;
+  note: string;
+  daysRemaining: number | null;
+  closed: boolean;
+  createdAt: string;
+};
+
 /** The company's own decision about a tender, and why. */
 export type BidDecisionRecord = {
   id: string;

@@ -20,6 +20,7 @@ import type {
   TenderRecord,
   UsageEvent,
   UsageTotals,
+  WatchlistEntry,
 } from "./types.js";
 
 const { Pool } = pg;
@@ -52,6 +53,7 @@ const memory = {
   usage: [] as UsageEvent[],
   audit: [] as AuditEntry[],
   bidDecisions: [] as BidDecisionRecord[],
+  watchlist: [] as WatchlistEntry[],
 };
 
 /**
@@ -591,6 +593,57 @@ export async function listBidDecisions(tenderId: string) {
     decidedBy: row.decided_by, recommendationAtTheTime: row.recommendation_at_the_time,
     createdAt: new Date(row.created_at).toISOString(),
   } as BidDecisionRecord));
+}
+
+/**
+ * Adds a notice to the watchlist, or updates the note on one already there.
+ * Watching the same notice twice is not an error — it is the same intent.
+ */
+export async function addToWatchlist(accountId: string, input: Omit<WatchlistEntry, "id" | "accountId" | "createdAt">) {
+  const entry: WatchlistEntry = { ...input, id: randomUUID(), accountId, createdAt: new Date().toISOString() };
+  if (!pool) {
+    const existing = memory.watchlist.find((item) => item.accountId === accountId && item.externalId === input.externalId);
+    if (existing) { Object.assign(existing, input); return existing; }
+    memory.watchlist.push(entry);
+    return entry;
+  }
+  const result = await pool.query(
+    `INSERT INTO watchlist(id,account_id,external_id,title,authority,deadline,source_url,note)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT(account_id,external_id) DO UPDATE SET title=EXCLUDED.title,authority=EXCLUDED.authority,
+       deadline=EXCLUDED.deadline,source_url=EXCLUDED.source_url,note=EXCLUDED.note
+     RETURNING *`,
+    [entry.id, accountId, entry.externalId, entry.title, entry.authority, entry.deadline, entry.sourceUrl, entry.note],
+  );
+  return toWatchlistEntry(result.rows[0]);
+}
+
+const toWatchlistEntry = (row: Record<string, unknown>): WatchlistEntry => ({
+  id: String(row.id), accountId: String(row.account_id), externalId: String(row.external_id),
+  title: String(row.title), authority: String(row.authority), deadline: String(row.deadline),
+  sourceUrl: String(row.source_url), note: String(row.note),
+  createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/** Everything this account is watching, newest first. */
+export async function listWatchlist(accountId: string) {
+  if (!pool) {
+    return memory.watchlist.filter((entry) => entry.accountId === accountId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const result = await pool.query("SELECT * FROM watchlist WHERE account_id=$1 ORDER BY created_at DESC", [accountId]);
+  return result.rows.map(toWatchlistEntry);
+}
+
+/** Removes a watched notice. Returns false when it was not there to remove. */
+export async function removeFromWatchlist(accountId: string, externalId: string) {
+  if (!pool) {
+    const before = memory.watchlist.length;
+    memory.watchlist = memory.watchlist.filter((entry) => !(entry.accountId === accountId && entry.externalId === externalId));
+    return memory.watchlist.length < before;
+  }
+  const result = await pool.query("DELETE FROM watchlist WHERE account_id=$1 AND external_id=$2", [accountId, externalId]);
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function addEvidence(accountId: string, input: Omit<EvidenceRecord, "id" | "accountId">) {

@@ -534,3 +534,13 @@ button:disabled { cursor: wait; opacity: .62; }
 .decision-history ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 2px; }
 .decision-history li { display: grid; gap: 2px; padding: 8px 0; border-top: 1px solid var(--line-soft); font-size: 12px; }
 .decision-history small { font-size: 11px; color: var(--muted); }
+
+/* TLY-39 — interesting, not yet a bid. */
+.watch-star { background: none; border: none; cursor: pointer; font-size: 19px; line-height: 1; color: var(--muted); padding: 2px 6px; }
+.watch-star.active { color: var(--amber); }
+.watch-list { display: grid; gap: 2px; }
+.watch-row { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; padding: 16px 0; border-top: 1px solid var(--line-soft); }
+.watch-row:first-of-type { border-top: none; }
+.watch-row h3 { margin: 0; font-size: 15px; }
+.watch-actions { display: flex; gap: 10px; flex: none; align-items: center; }
+.watch-passed { color: var(--muted); font-weight: 500; }

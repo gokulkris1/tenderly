@@ -146,6 +146,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
   const ownScopeOnly = [
     "GET /api/me", "GET /api/company", "PUT /api/company", "GET /api/sectors",
     "GET /api/preferences", "PUT /api/preferences", "GET /api/tenders", "GET /api/usage", "GET /api/audit",
+    "GET /api/watchlist", "POST /api/watchlist", "DELETE /api/watchlist/:externalId",
     "GET /api/tenders/discover", "POST /api/tenders/import", "GET /api/evidence",
     "POST /api/evidence", "POST /api/evidence/upload", "GET /api/people",
     "POST /api/people", "POST /api/people/upload", "GET /api/notifications",
