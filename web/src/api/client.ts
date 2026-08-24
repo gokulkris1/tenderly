@@ -24,6 +24,7 @@ import type {
   NotificationItem,
   PersonFact,
   PersonItem,
+  Portfolio,
   SavedSearch,
   SavedSearchFilter,
   SectorPreset,
@@ -120,6 +121,8 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       }),
 
     // --- workspace --------------------------------------------------------
+    portfolio: (sort: "deadline" | "recommendation" | "blockers" = "deadline") =>
+      request<{ portfolio: Portfolio }>(`/api/portfolio?sort=${sort}`, "Load portfolio"),
     listTenders: () => request<{ items: Tender[] }>("/api/tenders", "Load bids"),
     tender: (tenderId: string) => request<{ tender: Tender }>(`/api/tenders/${tenderId}`, "Load bid"),
     getCompany: () => request<{ company: CompanyProfile }>("/api/company", "Load company profile"),

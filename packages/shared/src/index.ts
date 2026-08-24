@@ -46,6 +46,28 @@ export type Gate = {
 /** How much of a response section a machine produced. */
 export type ProvenanceClass = "ai-generated" | "ai-assisted" | "human";
 
+/** One row of the pipeline board. */
+export type PortfolioRow = {
+  id: string;
+  title: string;
+  authority: string;
+  deadline: string;
+  daysRemaining: number | null;
+  recommendation: Decision;
+  decision?: "BID" | "NO_BID";
+  unresolvedBlockers: number;
+  estimatedValue: string;
+  closed: boolean;
+};
+
+export type Portfolio = {
+  live: PortfolioRow[];
+  closed: PortfolioRow[];
+  pipeline: { decision: string; count: number; value: number }[];
+  /** "No live opportunities" when there is nothing to draw. */
+  note?: string;
+};
+
 /** One criterion's mock score, with the weakness costing the marks. */
 export type CriterionScore = {
   name: string;
