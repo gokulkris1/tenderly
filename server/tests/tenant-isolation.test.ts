@@ -5,7 +5,7 @@ import path from "node:path";
 import bcrypt from "bcryptjs";
 import { signToken } from "../src/auth.js";
 import {
-  addEvidence, addPerson, createUser, initializeDatabase, saveAnswer,
+  addEvidence, addPerson, createUser, initializeDatabase, replacePersonFacts, saveAnswer,
   saveTenderAnalysis, savePreferences, upsertTender,
 } from "../src/db.js";
 import { withStableIds } from "../src/analysis-schema.js";
@@ -33,7 +33,7 @@ const analysis = (): TenderAnalysis => withStableIds({
   synopsisSlides: [],
 });
 
-type Tenant = { token: string; tenderId: string; evidenceId: string; personId: string; questionId: string; checklistId: string };
+type Tenant = { token: string; tenderId: string; evidenceId: string; personId: string; factId: string; questionId: string; checklistId: string };
 
 async function makeTenant(label: string): Promise<Tenant> {
   const user = await createUser(`${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.test`, await bcrypt.hash("x", 4), `${label} Ltd`);
@@ -48,9 +48,13 @@ async function makeTenant(label: string): Promise<Tenant> {
   await saveAnswer(tender.id, question.id, `${label} confidential answer`, "ready", []);
   const ev = await addEvidence(user.id, { kind: "Certificate", name: `${label} ISO`, content: `${label} confidential evidence`, tags: [], verified: true });
   const person = await addPerson(user.id, { name: `${label} Person`, title: "Lead", cvText: `${label} confidential CV`, skills: [] });
+  const facts = await replacePersonFacts(person.id, [{
+    type: "certification", value: `${label} confidential certification`, detail: "Body",
+    period: "2026", quote: "…", confidence: "HIGH",
+  }]);
   await savePreferences(user.id, { sectors: ["software-development"], keywords: [label], cpvCodes: [], valueMin: null, valueMax: null });
   return {
-    token: signToken({ id: user.id, email: user.email }), tenderId: tender.id, evidenceId: ev.id, personId: person.id,
+    token: signToken({ id: user.id, email: user.email }), tenderId: tender.id, evidenceId: ev.id, personId: person.id, factId: facts[0].id,
     questionId: question.id, checklistId: stored.submissionChecklist[0].id,
   };
 }
@@ -97,6 +101,9 @@ function crossTenantCases(owner: Tenant) {
     { method: "PUT", path: `/api/evidence/${owner.evidenceId}/verification`, body: { verified: false } },
     { method: "GET", path: `/api/evidence/${owner.evidenceId}/file` },
     { method: "PUT", path: `/api/people/${owner.personId}`, body: { title: "stolen" } },
+    { method: "GET", path: `/api/people/${owner.personId}/records` },
+    { method: "POST", path: `/api/people/${owner.personId}/records/confirm`, body: {} },
+    { method: "PUT", path: `/api/people/records/${owner.factId}`, body: { value: "stolen", confirmed: true } },
     { method: "POST", path: `/api/people/${owner.personId}/archive`, body: { archived: true } },
   ];
 }
@@ -171,6 +178,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     "GET /api/tenders/:id/deck", "GET /api/tenders/:id/pack",
     "PUT /api/evidence/:id/verification", "GET /api/evidence/:id/file",
     "PUT /api/people/:id", "POST /api/people/:id/archive",
+    "GET /api/people/:id/records", "POST /api/people/:id/records/confirm", "PUT /api/people/records/:factId",
   ]);
   const uncovered = routes.filter((r) => !covered.has(r));
   assert.deepEqual(uncovered, [], `these authenticated routes have no isolation case:\n${uncovered.join("\n")}`);

@@ -24,6 +24,7 @@ import type {
   GateState,
   Lot,
   NotificationItem,
+  PersonFact,
   PersonItem,
   ProvenanceClass,
   ProvenanceEntry,
@@ -602,6 +603,8 @@ export default function TenderlyApp() {
   const [blockers, setBlockers] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageTotals | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [personRecords, setPersonRecords] = useState<PersonFact[]>([]);
+  const [recordsPersonId, setRecordsPersonId] = useState("");
   const [vaultReadiness, setVaultReadiness] = useState<VaultCompleteness | null>(null);
   const [declarations, setDeclarations] = useState<DeclarationState | null>(null);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
@@ -1222,6 +1225,49 @@ export default function TenderlyApp() {
     }
   }
 
+  async function loadPersonRecords(personId: string) {
+    setRecordsPersonId(personId);
+    if (!personId || isDemo) { setPersonRecords([]); return; }
+    try {
+      setLoading("cv-records");
+      const { records } = await apiClient.personRecords(personId);
+      setPersonRecords(records);
+    } catch (error) {
+      setPersonRecords([]);
+      setToast(error instanceof ApiError ? error.message : "Could not load the CV records");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function confirmPersonRecords() {
+    if (!recordsPersonId || isDemo) return;
+    try {
+      setLoading("cv-records");
+      const { records } = await apiClient.confirmPersonRecords(recordsPersonId);
+      setPersonRecords(records);
+      setToast(`${records.length} record${records.length === 1 ? "" : "s"} confirmed`);
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not confirm those records");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  /** Correcting a record confirms it: the user has just read and fixed it. */
+  async function correctPersonRecord(factId: string, value: string) {
+    if (isDemo) return;
+    try {
+      setLoading("cv-records");
+      const { record } = await apiClient.updatePersonRecord(factId, { value, confirmed: true });
+      setPersonRecords((items) => items.map((item) => (item.id === record.id ? record : item)));
+    } catch (error) {
+      setToast(error instanceof ApiError ? error.message : "Could not update that record");
+    } finally {
+      setLoading("");
+    }
+  }
+
   async function uploadCvFile(file: File) {
     if (isDemo) { setPeople((items) => [{ id: `demo-${Date.now()}`, name: file.name.replace(/\.[^.]+$/, ""), title: "CV uploaded", cvText: "Demo CV", skills: [] }, ...items]); setToast(`${file.name} added to the demo CV library`); return; }
     try {
@@ -1412,7 +1458,7 @@ export default function TenderlyApp() {
             try { await apiClient.saveCompany(company); setToast("Company profile saved"); } catch (error) { setToast(error instanceof Error ? error.message : "Could not save profile"); }
           }} />}
           {section === "Evidence" && <EvidenceView tab={evidenceTab} setTab={setEvidenceTab} evidence={evidence} people={people} onUploadEvidence={uploadEvidenceFile} onUploadCv={uploadCvFile} onVerify={setEvidenceVerification} onDownload={downloadEvidence} loading={loading} />}
-          {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} onRename={renamePerson} onArchive={archivePerson} busyPersonId={busyPersonId} loading={loading === "cv-upload"} />}
+          {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} onRename={renamePerson} onArchive={archivePerson} busyPersonId={busyPersonId} loading={loading === "cv-upload"} records={personRecords} selectedPersonId={recordsPersonId} onSelectPerson={loadPersonRecords} onConfirmAll={confirmPersonRecords} onCorrect={correctPersonRecord} busyRecords={loading === "cv-records"} />}
           {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} usage={usage} audit={{ entries: auditEntries, action: auditAction, days: auditDays, onFilter: setAuditFilter, loading: loading === "audit" }} />}
         </div>
       </main>
@@ -2152,8 +2198,66 @@ function PersonCard({ person, onRename, onArchive, busy }: {
   );
 }
 
-function TeamView({ people, onUploadCv, onRename, onArchive, busyPersonId, loading }: { people: PersonItem[]; onUploadCv: (file: File) => void; onRename: (id: string, title: string) => void; onArchive: (person: PersonItem, archived: boolean) => void; busyPersonId: string; loading: boolean }) {
-  return <div className="library-page"><div className="section-intro"><div><p className="eyebrow">TEAM & PARTNERS</p><h2>Know your bid shape before you write.</h2><p>Tenderly maps required roles to CV evidence and only flags a tie-up when a concrete capability, capacity or credential gap remains.</p></div><FileButton label={loading ? "Extracting…" : "＋ Add person / CV"} accept=".pdf,.docx,.txt" onFile={onUploadCv} /></div><div className="team-grid">{people.map((person) => <PersonCard key={person.id} person={person} onRename={onRename} onArchive={onArchive} busy={busyPersonId === person.id} />)}<section className="panel gap-card"><span>＋</span><h3>Build your partner bench</h3><p>Add trusted associates or partner CVs here. A tender analysis will identify exactly which required role or credential still lacks evidence.</p><FileButton label="Add partner CV" accept=".pdf,.docx,.txt" onFile={onUploadCv} /></section></div></div>;
+const factSectionTitles: Record<PersonFact["type"], string> = {
+  certification: "Certifications",
+  skill: "Skills",
+  role: "Roles held",
+  experience: "Experience",
+};
+
+/**
+ * What Tenderly read out of a CV, for a person to check.
+ *
+ * Every record shows the line it came from, because the reviewer's job is to
+ * compare the two. Nothing is confirmed until someone says so: a parsed claim
+ * about a named individual is a suggestion, and it is their credibility in
+ * front of a buyer.
+ */
+function CvRecords({ records, onConfirmAll, onCorrect, busy }: {
+  records: PersonFact[];
+  onConfirmAll: () => void;
+  onCorrect: (factId: string, value: string) => void;
+  busy: boolean;
+}) {
+  const [editing, setEditing] = useState("");
+  const [draft, setDraft] = useState("");
+  const unconfirmed = records.filter((record) => !record.confirmed).length;
+
+  return (
+    <section className="panel cv-records" data-testid="cv-records">
+      <div className="panel-heading">
+        <div><h3>Read from the CV</h3><p>Check each line against the quote beside it. Nothing is used for role matching until it is confirmed.</p></div>
+        {unconfirmed > 0 && <button className="quiet-btn" onClick={onConfirmAll} disabled={busy}>Confirm all</button>}
+      </div>
+
+      {(Object.keys(factSectionTitles) as PersonFact["type"][]).map((type) => {
+        const group = records.filter((record) => record.type === type);
+        return (
+          <div className="cv-record-group" key={type}>
+            <p className="eyebrow">{factSectionTitles[type].toUpperCase()}</p>
+            {group.length === 0
+              ? <p className="cv-record-empty">None found in CV</p>
+              : group.map((record) => (
+                <div className="cv-record" key={record.id} data-testid={`cv-record-${record.id}`}>
+                  {editing === record.id
+                    ? <div className="person-edit"><input value={draft} onChange={(event) => setDraft(event.target.value)} /><button className="text-action" disabled={busy} onClick={() => { onCorrect(record.id, draft); setEditing(""); }}>Save</button></div>
+                    : <p><strong>{record.value}</strong><small>{[record.detail, record.period].filter(Boolean).join(" · ")}</small></p>}
+                  <blockquote>“{record.quote}”</blockquote>
+                  <div className="cv-record-foot">
+                    <span className={record.confirmed ? "verified" : "review-state"}>{record.confirmed ? "✓ Confirmed" : "Unconfirmed"}</span>
+                    <button className="text-action" onClick={() => { setDraft(record.value); setEditing(record.id); }}>Correct</button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function TeamView({ people, onUploadCv, onRename, onArchive, busyPersonId, loading, records, selectedPersonId, onSelectPerson, onConfirmAll, onCorrect, busyRecords }: { people: PersonItem[]; onUploadCv: (file: File) => void; onRename: (id: string, title: string) => void; onArchive: (person: PersonItem, archived: boolean) => void; busyPersonId: string; loading: boolean; records: PersonFact[]; selectedPersonId: string; onSelectPerson: (id: string) => void; onConfirmAll: () => void; onCorrect: (factId: string, value: string) => void; busyRecords: boolean }) {
+  return <div className="library-page"><div className="section-intro"><div><p className="eyebrow">TEAM & PARTNERS</p><h2>Know your bid shape before you write.</h2><p>Tenderly maps required roles to CV evidence and only flags a tie-up when a concrete capability, capacity or credential gap remains.</p></div><FileButton label={loading ? "Extracting…" : "＋ Add person / CV"} accept=".pdf,.docx,.txt" onFile={onUploadCv} /></div><div className="team-grid">{people.map((person) => <PersonCard key={person.id} person={person} onRename={onRename} onArchive={onArchive} busy={busyPersonId === person.id} />)}<section className="panel gap-card"><span>＋</span><h3>Build your partner bench</h3><p>Add trusted associates or partner CVs here. A tender analysis will identify exactly which required role or credential still lacks evidence.</p><FileButton label="Add partner CV" accept=".pdf,.docx,.txt" onFile={onUploadCv} /></section></div>{people.length > 0 && <div className="cv-review"><div className="cv-review-picker"><label>Review CV records for<select value={selectedPersonId} onChange={(event) => onSelectPerson(event.target.value)}><option value="">Choose a person</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></div>{selectedPersonId && <CvRecords records={records} onConfirmAll={onConfirmAll} onCorrect={onCorrect} busy={busyRecords} />}</div>}</div>;
 }
 
 /**

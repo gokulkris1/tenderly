@@ -446,6 +446,24 @@ export type VaultCompleteness = {
   awaitingVerification: string[];
 };
 
+/**
+ * One fact read from a CV. Unconfirmed until a person accepts it: a parsed
+ * claim about a named individual is a suggestion, and it is their credibility
+ * in front of a buyer.
+ */
+export type PersonFact = {
+  id: string;
+  personId: string;
+  type: "skill" | "role" | "certification" | "experience";
+  value: string;
+  detail: string;
+  period: string;
+  /** The line in the CV this was read from. */
+  quote: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  confirmed: boolean;
+};
+
 export type PersonItem = {
   id: string;
   name: string;

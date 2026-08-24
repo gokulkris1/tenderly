@@ -588,3 +588,17 @@ button:disabled { cursor: wait; opacity: .62; }
 .person-edit { display: flex; gap: 8px; align-items: center; }
 .person-edit input { flex: 1; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
 .person-actions { display: flex; gap: 12px; margin-top: 10px; }
+
+/* TLY-59 — what Tenderly read out of a CV, for a person to check. */
+.cv-review { margin-top: 20px; }
+.cv-review-picker label { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
+.cv-review-picker select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 13px; }
+.cv-records { margin-top: 14px; }
+.cv-record-group { margin-top: 16px; }
+.cv-record-empty { margin: 6px 0 0; font-size: 12px; color: var(--muted); font-style: italic; }
+.cv-record { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+.cv-record p { margin: 0; display: grid; gap: 2px; }
+.cv-record strong { font-size: 13px; }
+.cv-record small { font-size: 11px; color: var(--muted); }
+.cv-record blockquote { margin: 0; padding: 6px 12px; border-left: 2px solid var(--line); background: var(--paper); font-size: 11px; color: var(--ink-2); }
+.cv-record-foot { display: flex; gap: 12px; align-items: center; }

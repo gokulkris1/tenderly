@@ -14,6 +14,7 @@ import type {
   CompanyProfile,
   DiscoveryPreferences,
   EvidenceRecord,
+  PersonFact,
   PersonRecord,
   ProvenanceEntry,
   PublicTender,
@@ -58,6 +59,7 @@ const memory = {
   audit: [] as AuditEntry[],
   bidDecisions: [] as BidDecisionRecord[],
   watchlist: [] as WatchlistEntry[],
+  personFacts: [] as PersonFact[],
   savedSearches: [] as SavedSearch[],
   ingestionRuns: [] as IngestionRun[],
   declarations: new Map<string, DeclarationAnswer[]>(),
@@ -841,6 +843,105 @@ export async function recordAffirmation(accountId: string, affirmedBy: string): 
     [randomUUID(), accountId, affirmedBy],
   );
   return affirmation;
+}
+
+const toPersonFact = (row: Record<string, unknown>): PersonFact => ({
+  id: String(row.id), personId: String(row.person_id), type: row.record_type as PersonFact["type"],
+  value: String(row.value), detail: String(row.detail ?? ""), period: String(row.period ?? ""),
+  quote: String(row.quote ?? ""), confidence: row.confidence as PersonFact["confidence"],
+  confirmed: Boolean(row.confirmed), createdAt: new Date(row.created_at as string).toISOString(),
+});
+
+/**
+ * Replaces the parsed records for a person.
+ *
+ * Confirmed records survive a re-parse: a person corrected them by hand, and
+ * throwing that away because a CV was re-uploaded would lose real work.
+ */
+export async function replacePersonFacts(personId: string, facts: Omit<PersonFact, "id" | "personId" | "createdAt" | "confirmed">[]) {
+  if (!pool) {
+    const confirmed = memory.personFacts.filter((fact) => fact.personId === personId && fact.confirmed);
+    memory.personFacts = memory.personFacts.filter((fact) => fact.personId !== personId);
+    memory.personFacts.push(...confirmed);
+    for (const fact of facts) {
+      const duplicate = confirmed.some((existing) => existing.type === fact.type && existing.value.toLowerCase() === fact.value.toLowerCase());
+      if (duplicate) continue;
+      memory.personFacts.push({ ...fact, id: randomUUID(), personId, confirmed: false, createdAt: new Date().toISOString() });
+    }
+    return memory.personFacts.filter((fact) => fact.personId === personId);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM person_records WHERE person_id=$1 AND confirmed = false", [personId]);
+    const existing = await client.query("SELECT record_type, lower(value) AS value FROM person_records WHERE person_id=$1", [personId]);
+    const held = new Set(existing.rows.map((row) => `${row.record_type}:${row.value}`));
+    for (const fact of facts) {
+      if (held.has(`${fact.type}:${fact.value.toLowerCase()}`)) continue;
+      await client.query(
+        `INSERT INTO person_records(id,person_id,record_type,value,detail,period,quote,confidence)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [randomUUID(), personId, fact.type, fact.value, fact.detail, fact.period, fact.quote, fact.confidence],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  return listPersonFacts(personId);
+}
+
+export async function listPersonFacts(personId: string): Promise<PersonFact[]> {
+  if (!pool) return memory.personFacts.filter((fact) => fact.personId === personId);
+  const result = await pool.query("SELECT * FROM person_records WHERE person_id=$1 ORDER BY record_type, value", [personId]);
+  return result.rows.map(toPersonFact);
+}
+
+/**
+ * Confirms or corrects one parsed record. Returns null when the record does not
+ * belong to this account, so a cross-tenant edit is a 404 rather than a change.
+ */
+export async function updatePersonFact(accountId: string, factId: string, patch: { value?: string; detail?: string; confirmed?: boolean }) {
+  if (!isUuid(factId)) return null;
+  if (!pool) {
+    const fact = memory.personFacts.find((entry) => entry.id === factId);
+    if (!fact) return null;
+    const person = memory.people.get(fact.personId);
+    if (!person || person.accountId !== accountId) return null;
+    Object.assign(fact, patch);
+    return fact;
+  }
+  const result = await pool.query(
+    `UPDATE person_records SET value=COALESCE($3,value), detail=COALESCE($4,detail), confirmed=COALESCE($5,confirmed)
+      WHERE id=$1 AND person_id IN (SELECT id FROM people WHERE account_id=$2) RETURNING *`,
+    [factId, accountId, patch.value ?? null, patch.detail ?? null, patch.confirmed ?? null],
+  );
+  return result.rows[0] ? toPersonFact(result.rows[0]) : null;
+}
+
+/**
+ * Confirms every parsed record for one person at once.
+ *
+ * Ownership is checked before anything is read back. The UPDATE was already
+ * account-scoped, but returning listPersonFacts(personId) afterwards was not —
+ * so another account got the records handed to it even though it changed none
+ * of them. A scoped write with an unscoped read is still a leak.
+ */
+export async function confirmAllPersonFacts(accountId: string, personId: string) {
+  if (!isUuid(personId)) return [];
+  if (!pool) {
+    const person = memory.people.get(personId);
+    if (!person || person.accountId !== accountId) return [];
+    for (const fact of memory.personFacts) if (fact.personId === personId) fact.confirmed = true;
+    return memory.personFacts.filter((fact) => fact.personId === personId);
+  }
+  const owned = await pool.query("SELECT 1 FROM people WHERE id=$1 AND account_id=$2", [personId, accountId]);
+  if (owned.rowCount === 0) return [];
+  await pool.query("UPDATE person_records SET confirmed = true WHERE person_id=$1", [personId]);
+  return listPersonFacts(personId);
 }
 
 export async function addEvidence(
