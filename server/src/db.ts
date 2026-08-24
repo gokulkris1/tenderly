@@ -894,6 +894,20 @@ export async function replacePersonFacts(personId: string, facts: Omit<PersonFac
   return listPersonFacts(personId);
 }
 
+/** Every parsed record across an account's people, for the skills matrix. */
+export async function listAccountPersonFacts(accountId: string): Promise<PersonFact[]> {
+  if (!pool) {
+    const ids = new Set([...memory.people.values()].filter((person) => person.accountId === accountId).map((person) => person.id));
+    return memory.personFacts.filter((fact) => ids.has(fact.personId));
+  }
+  const result = await pool.query(
+    `SELECT r.* FROM person_records r JOIN people p ON p.id = r.person_id
+      WHERE p.account_id=$1 ORDER BY r.record_type, r.value`,
+    [accountId],
+  );
+  return result.rows.map(toPersonFact);
+}
+
 export async function listPersonFacts(personId: string): Promise<PersonFact[]> {
   if (!pool) return memory.personFacts.filter((fact) => fact.personId === personId);
   const result = await pool.query("SELECT * FROM person_records WHERE person_id=$1 ORDER BY record_type, value", [personId]);

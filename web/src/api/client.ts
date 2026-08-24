@@ -24,6 +24,7 @@ import type {
   SavedSearch,
   SavedSearchFilter,
   SectorPreset,
+  SkillMatrix,
   Tender,
   UsageTotals,
   VaultCompleteness,
@@ -264,6 +265,21 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         `/api/people/${encodeURIComponent(personId)}/archive`, "Archive person",
         { method: "POST", body: JSON.stringify({ archived }) },
       ),
+    skillsMatrix: (skill = "") =>
+      request<{ matrix: SkillMatrix }>(`/api/skills-matrix${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`, "Load skills matrix"),
+    downloadSkillsMatrix: async (skill = "") => {
+      const params = new URLSearchParams({ format: "csv" });
+      if (skill) params.set("skill", skill);
+      const response = await fetch(`${baseUrl}/api/skills-matrix?${params}`, { headers: authHeaders() });
+      if (!response.ok) throw await failure(response, "Export skills matrix");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "tenderly-skills-matrix.csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
     personRecords: (personId: string) =>
       request<{ records: PersonFact[] }>(`/api/people/${encodeURIComponent(personId)}/records`, "Load CV records"),
     updatePersonRecord: (factId: string, patch: { value?: string; detail?: string; confirmed?: boolean }) =>
