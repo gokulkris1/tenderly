@@ -58,6 +58,14 @@ function safeAbsoluteHref(href: string | undefined, base: string) {
   } catch { return ""; }
 }
 
+/** The listing publishes "dd/mm/yyyy hh:mm:ss". Returns null when it publishes nothing readable. */
+function publishedAt(value: string): number | null {
+  const match = String(value ?? "").match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!match) return null;
+  const time = Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+  return Number.isNaN(time) ? null : time;
+}
+
 export function parseSearchHtml(html: string, baseUrl = START_URL): { items: PublicTender[]; nextUrl: string } {
   const $ = cheerio.load(html);
   const items: PublicTender[] = [];
@@ -84,30 +92,63 @@ export function parseSearchHtml(html: string, baseUrl = START_URL): { items: Pub
     });
   });
 
+  // eTenders renders "Next" as a <button> carrying an href attribute, driven by
+  // an inline onclick — not as a link. Scanning only anchors found nothing, so
+  // paging silently stopped after page one and the run saw ten notices out of
+  // twenty-one thousand. Both shapes are accepted now, and a disabled control
+  // is ignored so the last page reports no next rather than looping on itself.
   let nextUrl = "";
-  $("a").each((_index, node) => {
+  $("a, button").each((_index, node) => {
     if (nextUrl) return;
-    const label = clean($(node).text()).toLowerCase();
-    const title = clean($(node).attr("title") || "").toLowerCase();
-    const rel = clean($(node).attr("rel") || "").toLowerCase();
-    if (label === "next" || label === ">" || title.includes("next") || rel === "next") {
-      nextUrl = safeAbsoluteHref($(node).attr("href"), baseUrl);
+    const element = $(node);
+    if (element.attr("disabled") !== undefined) return;
+    const label = clean(element.text()).toLowerCase();
+    const title = clean(element.attr("title") || "").toLowerCase();
+    const rel = clean(element.attr("rel") || "").toLowerCase();
+    const id = clean(element.attr("id") || "").toLowerCase();
+    if (label === "next" || label === ">" || title === "next" || rel === "next" || id === "nextnav") {
+      nextUrl = safeAbsoluteHref(element.attr("href"), baseUrl);
     }
   });
   return { items, nextUrl };
 }
 
-export async function discoverETenders(query = "", options: { maxPages?: number; delayMs?: number } = {}) {
-  const maxPages = Math.max(1, Math.min(options.maxPages ?? Number(process.env.ETENDERS_MAX_PAGES || 2), 8));
+/**
+ * How far back a run reads before it stops paging.
+ *
+ * eTenders holds 21,695 notices across 2,170 pages, so "read everything" is not
+ * a strategy. The listing is ordered newest first, so a run that stops once it
+ * reaches notices older than it cares about reads a few pages on an ordinary
+ * day and still cannot miss one — where a fixed page count silently truncates
+ * the moment a busy day publishes more than it allows for.
+ */
+const DEFAULT_SINCE_DAYS = 3;
+
+export async function discoverETenders(
+  query = "",
+  options: { maxPages?: number; delayMs?: number; sinceDays?: number } = {},
+) {
+  // The backstop is generous rather than tight: it exists to stop a runaway
+  // crawl, not to decide how much gets read. The date is what decides that.
+  const maxPages = Math.max(1, Math.min(options.maxPages ?? Number(process.env.ETENDERS_MAX_PAGES || 40), 200));
   const delayMs = Math.max(200, Number(options.delayMs ?? process.env.ETENDERS_REQUEST_DELAY_MS ?? 850));
+  const sinceDays = Math.max(1, options.sinceDays ?? Number(process.env.ETENDERS_SINCE_DAYS || DEFAULT_SINCE_DAYS));
+  const cutoff = Date.now() - sinceDays * 86_400_000;
+
   const discovered = new Map<string, PublicTender>();
   let url = START_URL;
-  for (let page = 0; page < maxPages && url; page += 1) {
+  let reachedCutoff = false;
+  for (let page = 0; page < maxPages && url && !reachedCutoff; page += 1) {
     const { html, url: fetchedUrl } = await fetchHtml(url);
     const parsed = parseSearchHtml(html, fetchedUrl);
     parsed.items.forEach((item) => discovered.set(item.externalId, item));
+    // A page whose every notice predates the cutoff is the end of what this run
+    // wants. A page with no readable dates is not evidence of anything, so it
+    // does not stop the crawl.
+    const dates = parsed.items.map((item) => publishedAt(item.published)).filter((value): value is number => value !== null);
+    if (dates.length && dates.every((value) => value < cutoff)) reachedCutoff = true;
     url = parsed.nextUrl;
-    if (url && page + 1 < maxPages) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    if (url && !reachedCutoff && page + 1 < maxPages) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   const needle = query.trim().toLowerCase();
   const items = [...discovered.values()];
@@ -192,6 +233,29 @@ export async function importETender(inputUrl: string): Promise<ImportedETender> 
   const detailUrl = `https://www.etenders.gov.ie/epps/cft/prepareViewCfTWS.do?resourceId=${encodeURIComponent(resourceId)}`;
   const detail = safeUrl.pathname.includes("prepareViewCfTWS.do") ? initial : await fetchHtml(detailUrl);
   return parseNoticeDetailHtml(detail.html, resourceId);
+}
+
+/**
+ * One notice's detail page, which is the only place its CPV is published.
+ *
+ * The search listing carries no CPV at all — measured against live eTenders,
+ * zero of ten sampled notices had one — so the nightly run has to come here to
+ * find out what a tender is actually for. Lighter than importETender: no URL to
+ * validate because the resource id came from our own parser, and no documents
+ * fetched, because at ingest time nobody has decided to bid yet.
+ */
+export async function fetchNoticeDetail(resourceId: string): Promise<ImportedETender> {
+  const id = String(resourceId).trim();
+  if (!/^\d{5,}$/.test(id)) throw new Error(`Not an eTenders resource id: ${id}`);
+  const detailUrl = `https://www.etenders.gov.ie/epps/cft/prepareViewCfTWS.do?resourceId=${encodeURIComponent(id)}`;
+  const { html } = await fetchHtml(detailUrl);
+  return parseNoticeDetailHtml(html, id);
+}
+
+/** The CPV a detail page publishes, or null when it publishes none. */
+export function cpvFromDetail(detail: Pick<ImportedETender, "metadata">) {
+  const raw = detail.metadata?.["CPV Codes"];
+  return raw ? String(raw) : null;
 }
 
 export type RemoteTenderDocument = { filename: string; url: string; description: string; bytes?: Buffer; mimeType?: string; warning?: string };
