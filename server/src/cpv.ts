@@ -35,11 +35,30 @@ export type NormalisedCpv = CpvCode & {
   ancestors: CpvCode[];
 };
 
+/**
+ * Where the CPV list can be, depending on how the server was started.
+ *
+ * Running from source it sits beside src. In a build it is copied next to the
+ * compiled output, and if that copy is ever missed the source tree is still
+ * two levels up. Production spent weeks refusing to boot because tsc compiles
+ * .ts and copies nothing, so dist had no data directory at all and the very
+ * first thing the server did on startup was read a file that was not there.
+ */
+const DATA_CANDIDATES = ["../data/cpv-2008.csv", "../../data/cpv-2008.csv"];
+
 function loadCodes(): Map<string, CpvCode> {
   // Resolved from this module rather than the working directory: the server is
   // started from several places and the data must be found from all of them.
-  const file = path.resolve(import.meta.dirname, "../data/cpv-2008.csv");
-  const text = readFileSync(file, "utf8");
+  let text: string | null = null;
+  const tried: string[] = [];
+  for (const candidate of DATA_CANDIDATES) {
+    const file = path.resolve(import.meta.dirname, candidate);
+    tried.push(file);
+    try { text = readFileSync(file, "utf8"); break; } catch { /* try the next */ }
+  }
+  if (text === null) {
+    throw new Error(`CPV list not found. Looked in: ${tried.join(", ")}. The build must copy server/data next to the compiled output.`);
+  }
   const codes = new Map<string, CpvCode>();
   for (const line of text.split(/\r?\n/).slice(1)) {
     if (!line.trim()) continue;
