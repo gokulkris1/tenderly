@@ -2,6 +2,7 @@ import type { AiUsePolicy as AiUsePolicyWire, ScoreBreakdown, TenderCpv as Tende
 import { ANALYSIS_SCHEMA_VERSION, orphanedAnswers } from "./analysis-schema.js";
 import { normaliseCpv } from "./cpv.js";
 import { badgeFor } from "./provenance.js";
+import { summariseNotice } from "./notice-summary.js";
 import type { BidAnswer, EvidenceRecord, ProvenanceEntry, PublicTender, RequiredCertificate, TenderAnalysis, TenderRecord } from "./types.js";
 
 function accessLabel(access: TenderRecord["analysis"] extends infer _T ? string : never) {
@@ -151,6 +152,14 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
     summary: analysis?.executiveSummary || tender.description || "Imported opportunity — run qualification after the full tender pack is available.",
     sourceUrl: tender.sourceUrl,
     published: tender.published || "",
+    // The 05:00 run reads the notice, not the pack, so the board gets a summary
+    // that states the four facts a go/no-go turns on and names the judgements
+    // it has not made. Replaced by the real analysis once the pack is uploaded.
+    noticeSummary: summariseNotice(tender),
+    // Why this tender is on the board at all, in the words the run recorded.
+    ingestReason: String(tender.metadata.ingestReason ?? ""),
+    matchedCpv: String(tender.metadata.matchedCpv ?? ""),
+    deadlineUnknown: Boolean(tender.metadata.deadlineUnknown),
     framework: bidTypeLabel(analysis?.bidType ?? "UNKNOWN"),
     partnerNote: analysis?.partnerNeeded ? analysis.partnerGaps.join(" · ") : undefined,
     eligibility: analysis?.eligibility ?? "REVIEW",

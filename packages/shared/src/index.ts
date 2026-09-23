@@ -538,6 +538,28 @@ export type Tender = {
    * template auto-fill. Analysis, checklists, gap analysis and critique remain.
    */
   noAiMode?: boolean;
+  /**
+   * The summary the 05:00 run produces from the published notice alone, before
+   * anyone has uploaded the tender pack. Its `unassessed` list names the
+   * judgements it has deliberately not made.
+   */
+  noticeSummary?: {
+    ask: string;
+    buyer: string;
+    value: string;
+    duration: string;
+    deadline: string;
+    procedure: string;
+    cpv: string;
+    packUnread: boolean;
+    unassessed: string[];
+  };
+  /** Why the nightly run put this tender on the board. */
+  ingestReason?: string;
+  /** The profile CPV that included it, when a CPV match is what did. */
+  matchedCpv?: string;
+  /** True when the notice stated no deadline, so silence is not read as "open". */
+  deadlineUnknown?: boolean;
 };
 
 export type EvidenceItem = {
