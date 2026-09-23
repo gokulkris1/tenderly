@@ -22,21 +22,39 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         value: https://tenderly.netlify.app
+      # A backstop against a runaway crawl, not the thing that decides how much
+      # is read — ETENDERS_SINCE_DAYS does that, because the listing is ordered
+      # newest first and a fixed page count truncates a busy day silently.
       - key: ETENDERS_MAX_PAGES
+        value: "40"
+      # Three days rather than one: a run that fails on Tuesday is covered by
+      # Wednesday's without anyone noticing, and re-reading a notice is free
+      # because a tender already on the board is skipped.
+      - key: ETENDERS_SINCE_DAYS
         value: "3"
       - key: ETENDERS_REQUEST_DELAY_MS
         value: "850"
+      # One detail fetch per new notice is what reveals its CPV. Roughly
+      # twenty-five notices are published a day, so this is generous headroom.
+      - key: TENDERLY_ENRICHMENT_CAP
+        value: "200"
       - key: TENDERLY_DISCOVERY_MIN_SCORE
         value: "45"
       - key: CRON_SECRET
         generateValue: true
 
+  # TLY-169. The owner asked for the board to be ready at 05:00 Irish time.
+  # Cron has no timezone and Ireland changes its clocks, so 05:00 local is
+  # 04:00 UTC in summer and 05:00 UTC in winter. 04:00 UTC is chosen: it is
+  # 05:00 in summer and 04:00 in winter, and being an hour early in winter
+  # costs nothing, where being an hour late in summer means the board is not
+  # ready when it was promised. Written here rather than remembered.
   - type: cron
     name: tenderly-discovery
     runtime: node
     plan: starter
     rootDir: server
-    schedule: "15 7 * * *"
+    schedule: "0 4 * * *"
     buildCommand: npm ci && npm run build
     startCommand: npm run job:discover
     envVars:

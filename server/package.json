@@ -16,7 +16,8 @@
     "retention": "node --import tsx src/retention-job.ts",
     "retention:dry-run": "node --import tsx src/retention-job.ts --dry-run",
     "deletions": "node --import tsx src/deletion-job.ts",
-    "deletions:dry-run": "node --import tsx src/deletion-job.ts --dry-run"
+    "deletions:dry-run": "node --import tsx src/deletion-job.ts --dry-run",
+    "seed:ingenie": "node --import tsx src/seed-ingenie.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.118.0",
