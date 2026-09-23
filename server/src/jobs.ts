@@ -16,12 +16,17 @@ import type { PublicTender } from "./types.js";
  * preferences, and it must be visible even when nobody's profile matches.
  */
 export async function runDiscoveryJob() {
-  const maxPages = Math.max(1, Math.min(Number(process.env.ETENDERS_MAX_PAGES || 2), 4));
   const sources: { source: string; notices: PublicTender[]; seen: number }[] = [];
 
   // One source failing must not hide what the other yielded.
   const [etenders, ted] = await Promise.allSettled([
-    discoverETenders("", { maxPages }),
+    // No page count is passed. The job used to cap this at four pages, which
+    // silently overrode the date window and meant a run read forty notices out
+    // of the twenty-one thousand eTenders holds — and since roughly one IT
+    // tender is published a day against twenty-five of everything else, a
+    // four-page read found none of them. How far back to read is a date
+    // decision now, and discoverETenders owns it.
+    discoverETenders(""),
     searchTed({ limit: 40 }),
   ]);
   const etendersItems = etenders.status === "fulfilled" ? etenders.value : [];
