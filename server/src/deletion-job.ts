@@ -1,6 +1,11 @@
 import "dotenv/config";
+import { loadOperatorEnv } from "./ops-env.js";
 import { closeDatabase, deleteAccount, dueDeletions, initializeDatabase } from "./db.js";
 import { log } from "./logging.js";
+
+// Run by hand from a laptop as often as by a scheduler, so it finds the
+// operator credentials rather than demanding they be exported first.
+loadOperatorEnv();
 
 /**
  * Runs the deletions whose grace period has expired.

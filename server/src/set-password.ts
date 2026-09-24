@@ -1,7 +1,12 @@
 import "dotenv/config";
+import { loadOperatorEnv } from "./ops-env.js";
 import { createInterface } from "node:readline";
 import bcrypt from "bcryptjs";
 import pg from "pg";
+
+// Run by hand from a laptop as often as by a scheduler, so it finds the
+// operator credentials rather than demanding they be exported first.
+loadOperatorEnv();
 
 /**
  * Sets the password on an existing account.
