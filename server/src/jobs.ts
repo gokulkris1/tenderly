@@ -66,17 +66,28 @@ export async function runDiscoveryJob() {
 
   let createdOrUpdated = 0;
   let tendersIngested = 0;
+  let accountsSkipped = 0;
   for (const { accountId, company } of companies) {
     const preferences = await getPreferences(accountId);
+
+    // An account that has set no CPV codes, no sectors and no keywords has told
+    // us nothing to match against, so every notice would be scored and written
+    // for no one's benefit. The first production run spent forty-six minutes
+    // doing exactly that for three abandoned test accounts and had its database
+    // connection dropped before it ever reached the real one.
+    const profileCpvCodes = [
+      ...preferences.cpvCodes,
+      ...String(company.cpv ?? "").split(/[^0-9]+/).filter((value) => value.length === 8),
+    ];
+    if (!profileCpvCodes.length && !preferences.sectors.length && !preferences.keywords.length) {
+      accountsSkipped += 1;
+      continue;
+    }
     const knownBuyers = await knownBuyersFor(company.name).catch(() => [] as string[]);
     // Read once per account rather than per notice. Re-upserting a tender that
     // is already on the board would reset its status, and a bid the owner had
     // moved to Pursuing would quietly go back to being an unread notice.
     const alreadyOnBoard = new Set((await listTenders(accountId)).map((record) => record.externalId));
-    const profileCpvCodes = [
-      ...preferences.cpvCodes,
-      ...String(company.cpv ?? "").split(/[^0-9]+/).filter((value) => value.length === 8),
-    ];
 
     for (const tender of opportunities) {
       // The breakdown is stored with the notification, so the Discover list can
@@ -135,6 +146,7 @@ export async function runDiscoveryJob() {
     companyProfilesChecked: companies.length,
     matchesStored: createdOrUpdated,
     tendersIngested,
+    accountsSkipped,
     enriched: enrichment.enriched,
     enrichmentDeferred: enrichment.deferred,
     threshold,

@@ -44,7 +44,6 @@ import type {
   Runbook,
   SavedSearch,
   SavedSearchFilter,
-  ScoreBreakdown,
   SectorPreset,
   SkillMatrix,
   SubmissionItem,
@@ -2171,45 +2170,6 @@ function BidList({ tenders, selectedId, onSelect }: { tenders: Tender[]; selecte
   );
 }
 
-/**
- * Why a notice scored what it scored.
- *
- * The total is the sum of what is listed, so a user can check the number rather
- * than take it on trust — and can see which profile fact to change. A notice
- * that matched nothing shows the reason rather than a bare zero.
- */
-function ScoreBreakdownDetail({ breakdown }: { breakdown?: ScoreBreakdown }) {
-  if (!breakdown) return null;
-  return (
-    <details className="score-breakdown" data-testid="score-breakdown" onClick={(event) => event.stopPropagation()}>
-      <summary>Why {breakdown.total}?</summary>
-      {breakdown.contributions.length === 0
-        ? <p className="score-note">{breakdown.note ?? "No profile facts matched"}</p>
-        : (
-          <ul>
-            {breakdown.contributions.map((item) => (
-              <li key={`${item.kind}-${item.matched}`}><span>{item.label}</span><b>+{item.points}</b></li>
-            ))}
-            <li className="score-total"><span>Total</span><b>{breakdown.total}</b></li>
-          </ul>
-        )}
-    </details>
-  );
-}
-
-/**
- * Notices being watched without a bid record.
- *
- * Live items first, soonest deadline first. A passed deadline reads "Deadline
- * passed" under a Closed heading rather than a negative number — the item stays
- * because the user put it there, but it stops pretending to be an opportunity.
- */
-/**
- * The saved-search selector above the Discover list.
- *
- * "All matches" is the account's preference profile, and it stays the default:
- * saved searches are extra slices, not a replacement for the profile.
- */
 function SavedSearchBar({ searches, activeId, activeName, onSelect, onSave, onDelete, busy }: {
   searches: SavedSearch[]; activeId: string; activeName: string;
   onSelect: (id: string) => void; onSave: (name: string, filter: SavedSearchFilter) => void;
@@ -2433,41 +2393,47 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
         onDelete={onDeleteSearch}
         busy={loading}
       />
-      <div className="tender-list">
+      {/*
+        A work queue, not a product tour. One row per tender, the five facts a
+        decision needs, and one action. The card layout spent most of its pixels
+        on a match circle and a row of badges, so eight tenders filled a screen
+        that should comfortably hold thirty.
+      */}
+      <div className="tender-table" role="table" aria-label="Tenders">
+        <div className="tt-head" role="row">
+          <span role="columnheader">Tender</span>
+          <span role="columnheader">Buyer</span>
+          <span role="columnheader">Value</span>
+          <span role="columnheader">Closes</span>
+          <span role="columnheader">Why it matched</span>
+          <span role="columnheader" />
+        </div>
         {tenders.map((tender) => (
-          <article className="tender-card" key={tender.id} onClick={() => openBid(tender.id)}>
-            <div className={`score-ring ${scoreTone(tender.match)}`}><strong>{tender.match}</strong><small>match</small></div>
-            <div className="tender-main">
-              <div className="tender-meta"><span className={`notice-source ${(tender.noticeSource ?? "eTenders") === "TED" ? "ted" : "etenders"}`}>{tender.noticeSource ?? "eTenders"}</span><i>•</i><span>{tender.category}</span><i>•</i><span>{tender.procedure}</span><i>•</i><span>Published {tender.published}</span></div>
-              <h3>{tender.title}</h3>
-              <p className="authority">{tender.authority}</p>
-              <div className="tender-facts"><span><small>Deadline</small><strong>{tender.deadline}</strong></span><span><small>Value</small><strong>{tender.value}</strong></span><span><small>Access</small><strong>{tender.access}</strong></span></div>
-              {(tender.matchedBy?.length ?? 0) > 0 && (
-                <div className="match-reasons" data-testid="match-reasons">
-                  {tender.matchedBy!.map((reason) => <i key={`${reason.sector}-${reason.keyword}`} title={`matched on "${reason.keyword}"`}>{reason.label}</i>)}
-                </div>
-              )}
-              {(tender.alternateSources?.length ?? 0) > 1 && (
-                <p className="alternate-sources" data-testid="alternate-sources">
-                  Published on {tender.alternateSources!.map((entry, index) => (
-                    <span key={entry.url}>{index > 0 && " and "}<a href={entry.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{entry.label}</a></span>
-                  ))}
-                  {tender.mergeReason === "heuristic" && <small title="Matched on buyer, title and deadline rather than a shared OJEU reference"> · matched without a shared reference</small>}
-                </p>
-              )}
-              <ScoreBreakdownDetail breakdown={tender.scoreBreakdown} />
-            </div>
-            <div className="tender-decision">
+          <div className="tt-row" role="row" key={tender.id} tabIndex={0}
+            onClick={() => openBid(tender.id)}
+            onKeyDown={(event) => { if (event.key === "Enter") openBid(tender.id); }}>
+            <span className="tt-title" role="cell">
+              <strong>{tender.title}</strong>
+              <small>{tender.noticeSource ?? "eTenders"} · {tender.procedure}</small>
+            </span>
+            <span className="tt-buyer" role="cell">{tender.authority}</span>
+            <span className="tt-value" role="cell">{tender.value}</span>
+            <span className={`tt-closes ${tender.deadlineUnknown ? "unknown" : ""}`} role="cell">
+              {tender.deadlineUnknown ? "not stated" : tender.deadline}
+            </span>
+            <span className="tt-why" role="cell" title={tender.ingestReason || undefined}>
+              {tender.ingestReason || (tender.matchedBy?.[0]?.label ?? `Match ${tender.match}`)}
+            </span>
+            <span className="tt-act" role="cell">
               <button
                 className={`watch-star ${watching.has(tender.resourceId) ? "active" : ""}`}
                 data-testid={`watch-${tender.resourceId}`}
                 title={watching.has(tender.resourceId) ? "Remove from watchlist" : "Watch this notice"}
                 onClick={(event) => { event.stopPropagation(); onToggleWatch(tender); }}
               >{watching.has(tender.resourceId) ? "★" : "☆"}</button>
-              <span className={`decision-pill decision-${decisionSlug(tender.decision)}`}>{tender.decision === "GO" ? "✓" : tender.decision === "PARTNER" ? "↔" : tender.decision === "NO_GO" ? "×" : "!"} {decisionLabel(tender.decision)}</span>
-              <button aria-label={`Review ${tender.title}`}>Review <span>→</span></button>
-            </div>
-          </article>
+              <button className="tt-open" aria-label={`Open ${tender.title}`}>Open</button>
+            </span>
+          </div>
         ))}
         {tenders.length === 0 && <div className="empty-state"><span>⌕</span><h3>No matches in this view</h3><p>Try a broader search or paste an eTenders link directly.</p></div>}
       </div>
