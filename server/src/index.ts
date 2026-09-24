@@ -2311,10 +2311,25 @@ if (process.env.TENDERLY_NO_LISTEN !== "1") {
   if (migrated.tenders) console.log(`analysis schema migration · tenders=${migrated.tenders} answers=${migrated.answers} checklistOverrides=${migrated.overrides}`);
   // The CPV list and the backfill both run after migrations: the table and the
   // column have to exist first, and both are idempotent.
-  const cpv = await seedCpvCodes();
-  if (cpv.seeded) console.log(`cpv lookup seeded · codes=${cpv.seeded}`);
-  const backfilled = await backfillTenderCpv();
-  if (backfilled.updated) console.log(`cpv backfill · tenders=${backfilled.updated}`);
+  //
+  // Neither may take the API down. Seeding a reference table is housekeeping;
+  // answering requests is the job. Production spent weeks refusing to boot
+  // because this threw on a missing data file and the process exited before it
+  // ever listened — a CPV lookup that degrades is an inconvenience, an API that
+  // will not start is an outage.
+  try {
+    const cpv = await seedCpvCodes();
+    if (cpv.seeded) console.log(`cpv lookup seeded · codes=${cpv.seeded}`);
+    const backfilled = await backfillTenderCpv();
+    if (backfilled.updated) console.log(`cpv backfill · tenders=${backfilled.updated}`);
+  } catch (error) {
+    log("error", {
+      event: "startup",
+      step: "cpv-reference-data",
+      message: error instanceof Error ? error.message : "Unexpected error",
+      consequence: "CPV normalisation and ancestor matching are degraded until this is fixed. The API is serving.",
+    });
+  }
   app.listen(port, "0.0.0.0", () => {
     console.log(`Tenderly API listening on port ${port} · database=${persistentDatabase ? "postgres" : "memory"} · ai=${aiConfigured() ? "configured" : "not-configured"}`);
   });
