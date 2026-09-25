@@ -273,7 +273,7 @@ button:disabled { cursor: wait; opacity: .62; }
 @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 11.3px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
 @media (max-width: 1521.1px) {
-  .side-rail { width: 162.8px; }
+  .side-rail { width: 196px; }
   .content-wrap { padding-left: 31.1px; padding-right: 31.1px; }
   .discover-hero { grid-template-columns: 1fr; gap: 21.5px; }
   .hero-stats { max-width: 646.5px; }
