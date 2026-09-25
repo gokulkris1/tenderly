@@ -976,21 +976,40 @@ export default function TenderlyApp() {
     async function loadWorkspace() {
       setLoading("initial");
       try {
-        const [bidsData, companyData, evidenceData, peopleData, notificationsData, sectorsData, preferencesData, meData] = await Promise.all([
-          apiClient.listTenders(), apiClient.getCompany(), apiClient.listEvidence(), apiClient.listPeople(), apiClient.listNotifications(),
-          apiClient.listSectors(), apiClient.getPreferences(), apiClient.me(),
+        // Each piece lands as it arrives rather than waiting for the slowest of
+        // eight. A single Promise.all meant the bids never appeared until every
+        // other call had finished, so a cold API left the whole workspace empty
+        // with no indication that anything was on its way — and one endpoint
+        // failing took the other seven down with it.
+        const settle = async <T,>(what: string, load: () => Promise<T>, apply: (value: T) => void) => {
+          try {
+            const value = await load();
+            if (active) apply(value);
+          } catch (error) {
+            if (!active) return;
+            if (error instanceof ApiError && error.isSessionExpired) throw error;
+            console.error(`could not load ${what}:`, error);
+          }
+        };
+
+        // Bids first and on their own: it is the screen the owner opens on.
+        const bids = settle("bids", () => apiClient.listTenders(), (data) => {
+          setTenders(data.items ?? []);
+          // Remember a default bid without navigating: the URL the user arrived on wins.
+          if (data.items?.[0]) setFallbackId(data.items[0].id);
+        });
+
+        await Promise.all([
+          bids,
+          settle("your account", () => apiClient.me(), (data) => setRole(data.role === "owner" || data.role === "editor" ? data.role : "viewer")),
+          settle("the company profile", () => apiClient.getCompany(), (data) => setCompany((current) => ({ ...current, ...(data.company ?? {}) }))),
+          settle("evidence", () => apiClient.listEvidence(), (data) => setEvidence(data.items ?? [])),
+          settle("people", () => apiClient.listPeople(), (data) => setPeople(data.items ?? [])),
+          settle("notifications", () => apiClient.listNotifications(), (data) => setNotifications(data.items ?? [])),
+          settle("sectors", () => apiClient.listSectors(), (data) => setSectors(data.items ?? [])),
+          settle("preferences", () => apiClient.getPreferences(), (data) => setPreferences(data.preferences)),
         ]);
         if (!active) return;
-        setRole(meData.role === "owner" || meData.role === "editor" ? meData.role : "viewer");
-        setTenders(bidsData.items ?? []);
-        setCompany((current) => ({ ...current, ...(companyData.company ?? {}) }));
-        setEvidence(evidenceData.items ?? []);
-        setPeople(peopleData.items ?? []);
-        setNotifications(notificationsData.items ?? []);
-        setSectors(sectorsData.items ?? []);
-        setPreferences(preferencesData.preferences);
-        // Remember a default bid without navigating: the URL the user arrived on wins.
-        if (bidsData.items?.[0]) setFallbackId(bidsData.items[0].id);
 
         try {
           const discoveryData = await apiClient.discover();
