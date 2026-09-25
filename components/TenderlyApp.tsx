@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Component, FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiError, createApiClient, type AccountDeletionState, type DraftRunState, type InvitationDetails, type TeamState } from "../web/src/api/client";
 import "./tenderly.css";
@@ -659,7 +659,7 @@ function AwardCriteria({ criteria, warning }: { criteria: AwardCriterion[]; warn
                 <strong>{criterion.name}</strong>
                 <b>{criterion.weight}%</b>
                 {criterion.rawWeight && criterion.rawWeight !== `${criterion.weight}%` && <em>{criterion.rawWeight}</em>}
-                <small className={`confidence ${criterion.confidence.toLowerCase()}`}>{criterion.confidence}</small>
+                <small className={`confidence ${(criterion.confidence ?? "unstated").toLowerCase()}`}>{criterion.confidence ?? "not stated"}</small>
                 <small title={criterion.quote}>{criterion.source}{criterion.quote ? ` · “${criterion.quote.slice(0, 70)}”` : ""}</small>
               </div>
             ))}
@@ -773,6 +773,44 @@ function Logo() {
       <span className="brand-name">tenderly</span>
     </div>
   );
+}
+
+/**
+ * Stops one bad record blanking the whole product.
+ *
+ * A single tender whose analysis predated the confidence field threw inside a
+ * map, React unmounted the tree, and the entire bids section rendered as a white
+ * page with nothing in the console a user could see. Thirty-six perfectly good
+ * tenders were unreachable because of one field on the thirty-seventh.
+ *
+ * A screen that fails should say so and leave the rest of the app standing.
+ */
+class ScreenErrorBoundary extends Component<{ children: ReactNode; onReset: () => void }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    // Goes to Sentry via the global handler; logged here so it is visible in a
+    // browser console during development too.
+    console.error("screen failed to render:", error);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="screen-error" data-testid="screen-error">
+        <h2>This screen could not be displayed</h2>
+        <p>Something in this bid is not in a shape the page understands. The rest of Tenderly still works, and nothing has been lost.</p>
+        <pre>{this.state.error.message}</pre>
+        <div>
+          <button className="continue-btn" onClick={() => { this.setState({ error: null }); this.props.onReset(); }}>Back to the list →</button>
+        </div>
+      </div>
+    );
+  }
 }
 
 export default function TenderlyApp() {
@@ -2062,7 +2100,7 @@ export default function TenderlyApp() {
             />
           )}
           {section === "My bids" && selected && (
-            <>
+            <ScreenErrorBoundary onReset={() => navigate(SECTION_PATHS["Discover"])}>
             <BidList tenders={tenders} selectedId={selected.id} onSelect={setSelectedId} />
             <BidWorkspace
               readOnly={readOnly}
@@ -2115,7 +2153,7 @@ export default function TenderlyApp() {
               blockers={blockers}
               updateQuestion={(questionId, answer) => setTenders((items) => items.map((item) => item.id !== selected.id ? item : { ...item, questions: item.questions.map((q) => q.id === questionId ? { ...q, answer, status: "draft" } : q) }))}
             />
-            </>
+            </ScreenErrorBoundary>
           )}
           {section === "My bids" && tenderNotFound && (
             <div className="no-questions panel" data-testid="bid-not-found">
@@ -2868,7 +2906,7 @@ function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, on
             ))}
           </section>
         )}
-        <section className="evidence-strip"><div className="evidence-title"><span>◇</span><p><strong>Evidence Tenderly will use</strong><small>Only approved library facts are passed into the draft.</small></p></div>{active.evidence.map((item) => <span className={item.toLowerCase().includes("needed") ? "missing" : ""} key={item}>{item.toLowerCase().includes("needed") ? "!" : "✓"} {item}</span>)}<button>＋ Attach evidence</button></section>
+        <section className="evidence-strip"><div className="evidence-title"><span>◇</span><p><strong>Evidence Tenderly will use</strong><small>Only approved library facts are passed into the draft.</small></p></div>{active.evidence.filter(Boolean).map((item) => <span className={String(item).toLowerCase().includes("needed") ? "missing" : ""} key={item}>{String(item).toLowerCase().includes("needed") ? "!" : "✓"} {item}</span>)}<button>＋ Attach evidence</button></section>
         <div className="response-next"><span><strong>Response readiness</strong><small>{tender.questions.filter((q) => q.status === "ready").length} of {tender.questions.length} sections ready</small></span><button className="continue-btn" onClick={onContinue}>Assemble pack <span>→</span></button></div>
       </section>
     </div>
