@@ -1,7 +1,12 @@
 import "dotenv/config";
+import { loadOperatorEnv } from "./ops-env.js";
 import { applyRetention, closeDatabase, initializeDatabase, recordAudit } from "./db.js";
 import { cutoffFor, retentionPolicy, summarise, type RetentionResult } from "./retention.js";
 import { log } from "./logging.js";
+
+// Run by hand from a laptop as often as by a scheduler, so it finds the
+// operator credentials rather than demanding they be exported first.
+loadOperatorEnv();
 
 /**
  * Applies the retention policy and records what it did.
