@@ -289,10 +289,15 @@ export type RequiredCertificateStatus = {
   name: string;
   issuingBody: string;
   mandatory: boolean;
-  /** True when a verified evidence item covers it. */
+  /** True when a verified, in-date evidence item covers it. */
   satisfied: boolean;
   /** The evidence item cited, when satisfied. */
   satisfiedBy?: string;
+  /** Set when the only match is a verified item whose cover has lapsed, so the
+   *  action is renewal rather than upload. Never set alongside `satisfiedBy`. */
+  expiredBy?: string;
+  /** The expiry date of `expiredBy`, as the vault recorded it. */
+  expiredOn?: string;
   source: string;
   quote: string;
 };

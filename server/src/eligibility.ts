@@ -1,4 +1,5 @@
 import type { CompanyProfile, EligibilityGate, EvidenceRecord, RequiredCertificate, SourceEvidence } from "./types.js";
+import { isExpired } from "./vault.js";
 
 /**
  * Hard-gate eligibility, decided in code rather than by the model.
@@ -150,18 +151,34 @@ export function certificateGate(certificate: RequiredCertificate, evidence: Evid
     const shared = [...needle].filter((w) => haystack.has(w)).length;
     return needle.size > 0 && shared >= Math.min(2, needle.size);
   };
-  const verified = evidence.find((item) => item.verified && overlaps(item));
+  const id = `cert-${certificate.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  // In date as well as verified. A certificate whose cover has lapsed is not
+  // evidence that the company holds it, and passing this gate on one meant a
+  // bid could be submitted against a requirement it no longer met.
+  const verified = evidence.find((item) => item.verified && overlaps(item) && !isExpired(item.expiresOn));
   if (verified) {
     return {
-      id: `cert-${certificate.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-      requirement: certificate.name, status: "PASS",
+      id, requirement: certificate.name, status: "PASS",
       bidderEvidence: `Evidenced by ${verified.name}`, action: "",
+      evidence: certificate.evidence,
+    };
+  }
+  // REVIEW rather than FAIL: the company may well hold a current certificate it
+  // has not uploaded yet, and this product does not assert a failure it cannot
+  // evidence. But it names the expiry, so the action is renewal rather than a
+  // search for a document already on file.
+  const expired = evidence.find((item) => item.verified && overlaps(item) && isExpired(item.expiresOn));
+  if (expired) {
+    return {
+      id, requirement: certificate.name, status: "REVIEW",
+      bidderEvidence: `${expired.name} expired on ${expired.expiresOn}`,
+      action: `Renew ${expired.name} and upload the current certificate`,
       evidence: certificate.evidence,
     };
   }
   const unverified = evidence.find((item) => !item.verified && overlaps(item));
   return {
-    id: `cert-${certificate.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    id,
     requirement: certificate.name,
     status: "REVIEW",
     bidderEvidence: unverified ? `${unverified.name} is on file but not verified` : "No verified evidence on file",

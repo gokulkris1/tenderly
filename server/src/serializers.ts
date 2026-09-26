@@ -3,6 +3,7 @@ import { ANALYSIS_SCHEMA_VERSION, orphanedAnswers } from "./analysis-schema.js";
 import { normaliseCpv } from "./cpv.js";
 import { badgeFor } from "./provenance.js";
 import { summariseNotice } from "./notice-summary.js";
+import { isExpired } from "./vault.js";
 import type { BidAnswer, EvidenceRecord, ProvenanceEntry, PublicTender, RequiredCertificate, TenderAnalysis, TenderRecord } from "./types.js";
 
 function accessLabel(access: TenderRecord["analysis"] extends infer _T ? string : never) {
@@ -34,26 +35,40 @@ export function awardCriteriaWarning(criteria: { weight: number }[]): string | u
 }
 
 /**
- * A required certificate counts as satisfied only when a VERIFIED evidence item
- * plausibly covers it. Unverified evidence never satisfies a requirement — that
- * is the same rule the drafting path follows.
+ * A required certificate counts as satisfied only when a VERIFIED, IN-DATE
+ * evidence item plausibly covers it. Unverified evidence never satisfies a
+ * requirement — that is the same rule the drafting path follows.
+ *
+ * Expiry is checked here because it was not, and a lapsed tax clearance
+ * certificate stayed `verified`, satisfied its mandatory requirement, passed its
+ * gate and left `submissionBlockers()` empty — while the vault screen showed the
+ * very same document as expired. A certificate that has run out is not evidence
+ * that the company holds it, so an expired match reports as unsatisfied and says
+ * so, rather than reading as "missing" and sending the user looking for a
+ * document they already uploaded.
  */
 export function certificateStatus(certificates: RequiredCertificate[], evidence: EvidenceRecord[] = []) {
   const verified = evidence.filter((item) => item.verified);
   const words = (value: string) => new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3));
   return certificates.map((certificate) => {
     const needle = words(certificate.name);
-    const match = verified.find((item) => {
+    const covers = (item: EvidenceRecord) => {
       const haystack = words(`${item.name} ${item.kind}`);
       const overlap = [...needle].filter((w) => haystack.has(w)).length;
       return needle.size > 0 && overlap >= Math.min(2, needle.size);
-    });
+    };
+    const match = verified.find((item) => covers(item) && !isExpired(item.expiresOn));
+    // Only reported when nothing in date covers the requirement, so a company
+    // holding both a current and a lapsed certificate is simply satisfied.
+    const expired = match ? undefined : verified.find((item) => covers(item) && isExpired(item.expiresOn));
     return {
       name: certificate.name,
       issuingBody: certificate.issuingBody,
       mandatory: certificate.mandatory,
       satisfied: Boolean(match),
       satisfiedBy: match?.name,
+      expiredBy: expired?.name,
+      expiredOn: expired?.expiresOn || undefined,
       source: certificate.evidence.sourceDocument,
       quote: certificate.evidence.quote,
     };
