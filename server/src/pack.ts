@@ -164,7 +164,12 @@ export function submissionBlockers(
   // A certificate the tender makes a condition of participation, with nothing
   // verified to show for it, is a hard blocker (TLY-43).
   for (const certificate of certificateStatus(analysis.requiredCertificates ?? [], evidence)) {
-    if (certificate.mandatory && !certificate.satisfied) blockers.push(`${certificate.name} — missing`);
+    if (!certificate.mandatory || certificate.satisfied) continue;
+    // "Missing" sent the user hunting for a document that was already uploaded.
+    // Naming the expiry makes the action renewal instead of a search.
+    blockers.push(certificate.expiredBy
+      ? `${certificate.name} — ${certificate.expiredBy} expired on ${certificate.expiredOn}`
+      : `${certificate.name} — missing`);
   }
   // A gate on a lot the user is not bidding is not a reason to block their pack.
   const selection = selectedLots(tender);

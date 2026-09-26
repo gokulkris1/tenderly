@@ -113,3 +113,27 @@ test("TLY-46 AC9: a gate we cannot decide keeps the model's own wording", () => 
   assert.deepEqual(gates[0], original);
   assert.equal(recomputed.length, 0);
 });
+
+test("an expired certificate never passes its gate, and the action is renewal", () => {
+  const certificate: RequiredCertificate = { name: "ISO 27001", issuingBody: "NSAI", mandatory: true, evidence };
+  // Verified but lapsed. This used to PASS, because the gate read `verified`
+  // and never looked at `expiresOn` — so a bid could be submitted against a
+  // requirement the company no longer met, while the vault screen showed the
+  // very same document as expired.
+  const lapsed = certificateGate(certificate, [record({ expiresOn: "2020-01-31" })]);
+  assert.equal(lapsed.status, "REVIEW", "an expired certificate must not satisfy a mandatory gate");
+  assert.match(lapsed.bidderEvidence, /expired on 2020-01-31/);
+  assert.match(lapsed.action, /Renew/);
+
+  // REVIEW, not FAIL: the company may hold a current certificate it has not
+  // uploaded. The product does not assert a failure it cannot evidence.
+  assert.notEqual(lapsed.status, "FAIL");
+
+  // A current certificate alongside a lapsed one is simply satisfied.
+  const both = certificateGate(certificate, [record({ id: "old", expiresOn: "2020-01-31" }), record({ id: "new", expiresOn: "2099-12-31" })]);
+  assert.equal(both.status, "PASS");
+
+  // No expiry recorded is not the same as expired.
+  assert.equal(certificateGate(certificate, [record({ expiresOn: "" })]).status, "PASS");
+  assert.equal(certificateGate(certificate, [record()]).status, "PASS");
+});

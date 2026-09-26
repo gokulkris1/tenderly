@@ -3,7 +3,8 @@ import test from "node:test";
 import ExcelJS from "exceljs";
 import { extractDocumentText } from "../src/documents.js";
 import { createSubmissionPack, createSynopsisDeck, submissionBlockers } from "../src/pack.js";
-import type { CompanyProfile, TenderAnalysis, TenderRecord } from "../src/types.js";
+import { certificateStatus } from "../src/serializers.js";
+import type { CompanyProfile, EvidenceRecord, RequiredCertificate, TenderAnalysis, TenderRecord } from "../src/types.js";
 
 const evidence = { sourceDocument: "RFT.docx", quote: "The competition is open to suitably qualified tenderers.", confidence: "HIGH" as const };
 const analysis: TenderAnalysis = {
@@ -48,4 +49,27 @@ test("generates a real PPTX synopsis deck", async () => {
   const deck = await createSynopsisDeck(tender, analysis, company);
   assert.ok(deck.length > 10_000);
   assert.equal(deck.subarray(0, 2).toString(), "PK");
+});
+
+test("an expired certificate blocks the final pack and the blocker names the expiry", () => {
+  const certificate: RequiredCertificate = {
+    name: "Tax clearance certificate", issuingBody: "Revenue", mandatory: true,
+    evidence: { sourceDocument: "ITT.pdf", quote: "A current tax clearance certificate is required.", confidence: "HIGH" },
+  };
+  const lapsed: EvidenceRecord = {
+    id: "ev-tax", accountId: "a", kind: "tax-clearance", name: "Tax clearance certificate",
+    content: "", tags: [], verified: true, expiresOn: "2020-06-30",
+  };
+
+  const status = certificateStatus([certificate], [lapsed])[0];
+  assert.equal(status.satisfied, false, "a lapsed certificate must not satisfy a mandatory requirement");
+  assert.equal(status.expiredBy, "Tax clearance certificate");
+  assert.equal(status.expiredOn, "2020-06-30");
+  assert.equal(status.satisfiedBy, undefined, "satisfiedBy and expiredBy must never both be set");
+
+  // "missing" sent the user hunting for a document already uploaded.
+  const current: EvidenceRecord = { ...lapsed, id: "ev-tax-2", expiresOn: "2099-01-01" };
+  const satisfied = certificateStatus([certificate], [current])[0];
+  assert.equal(satisfied.satisfied, true);
+  assert.equal(satisfied.expiredBy, undefined);
 });
