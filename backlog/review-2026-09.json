@@ -1,0 +1,2943 @@
+{
+  "project": "TLY",
+  "generatedAt": "2026-09-26T04:56:23.302Z",
+  "bootstrapLabel": "review-2026-09",
+  "note": "Merged output of the September 2026 seven-expert review pass. 121 raw proposals deduplicated to 87 stories across 11 epics. Duplicates of existing board items were dropped, not imported.",
+  "epics": [
+    {
+      "slug": "pack-gate",
+      "summary": "Phase 1: The pack gate must actually hold",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "pack-gate"
+      ],
+      "priority": "High"
+    },
+    {
+      "slug": "data-loss",
+      "summary": "Phase 1: Data the product must not lose",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "data-loss"
+      ],
+      "priority": "High"
+    },
+    {
+      "slug": "board-truth",
+      "summary": "Phase 1: The board tells the truth",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "board-truth"
+      ],
+      "priority": "High"
+    },
+    {
+      "slug": "dates",
+      "summary": "Phase 1: Deadlines and dates done properly",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "dates"
+      ],
+      "priority": "High"
+    },
+    {
+      "slug": "etenders-model",
+      "summary": "Phase 1: What an Irish tender actually demands",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "High"
+    },
+    {
+      "slug": "proof",
+      "summary": "Phase 1: Proof it works — CI, deploy and smoke",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "High"
+    },
+    {
+      "slug": "resilience",
+      "summary": "Phase 1: The interface cannot white-screen",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "resilience"
+      ],
+      "priority": "High"
+    },
+    {
+      "slug": "cost",
+      "summary": "Phase 2: Knowing and capping what it costs to run",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "cost"
+      ],
+      "priority": "High"
+    },
+    {
+      "slug": "reuse",
+      "summary": "Phase 2: The library that compounds",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "reuse"
+      ],
+      "priority": "High"
+    },
+    {
+      "slug": "sellable",
+      "summary": "Phase 3: Sellable — trust, auth and the public surface",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "sellable"
+      ],
+      "priority": "High"
+    },
+    {
+      "slug": "beyond-one",
+      "summary": "Phase 3: Beyond one company and one country",
+      "description": "**Context**\n\nRaised by the September 2026 multi-expert review pass: seven independent reviewers (eTenders domain, acceptance testing, product, business analysis, acquisitions, monetisation, marketing) read the running code and the deployed environment. Every story under this epic cites the file and line that prompted it.\n\n**Notes**\n\nThese stories were merged from 121 proposals down to 87 by removing duplicates across reviewers and against the existing board. Where several reviewers raised the same point independently, the story says so — that agreement is the strongest signal in the pass.",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "High"
+    }
+  ],
+  "stories": [
+    {
+      "id": "R-01",
+      "summary": "Block the final pack on unresolved [INPUT NEEDED] markers and over-limit answers",
+      "type": "Story",
+      "epic": "pack-gate",
+      "labels": [
+        "review-2026-09",
+        "pack-gate"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nStops the one failure the product's own rules exist to prevent — a placeholder or an over-length answer reaching the buyer.\n\n**Context**\n\nThe word-count and placeholder checks live only in `GET /api/tenders/:id/red-team` (`index.ts:1613-1617`), which nothing forces a user to call. `submissionBlockers` (`pack.ts:157-190`) checks only `answer.status === \"ready\"`, and `POST /api/tenders/:id/answers/:questionId` (`index.ts:699`) accepts `status: \"ready\"` on any text. Irish packs commonly state that text beyond the word limit will not be evaluated, and a visible `[INPUT NEEDED: …]` in a submitted response is a credibility failure.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a required answer whose text contains `[INPUT NEEDED:`, When a user requests the final pack, Then the request is refused and the blocker names the question and the placeholder subject."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a required answer of 1,140 words against a question with `maxWords` of 1,000, When a user requests the final pack, Then the request is refused with a blocker naming both counts."
+        },
+        {
+          "id": "AC3",
+          "text": "Given an answer containing `[INPUT NEEDED:`, When a user saves it with `status: \"ready\"`, Then the save is rejected with a message naming the unresolved placeholders, And the answer's stored status is unchanged."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a question with `maxWords` of 0, When the answer is 3,000 words, Then no word-limit blocker is raised, because the pack stated no limit."
+        },
+        {
+          "id": "AC5",
+          "text": "Given an answer over the word limit, When the user views the answer editor, Then the over-limit word count is shown as a blocker before they attempt the pack, not only at pack time."
+        }
+      ]
+    },
+    {
+      "id": "R-02",
+      "summary": "Refuse to mark a checklist item ready when it requires a file and no file is attached",
+      "type": "Story",
+      "epic": "pack-gate",
+      "labels": [
+        "review-2026-09",
+        "pack-gate"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nThe pack gate means something, so the ZIP Gokul uploads at 5pm on deadline day is complete.\n\n**Context**\n\n`POST /api/tenders/:id/checklist/:itemId` writes a metadata override with no check on attachments, and `pack.ts:183` gates the final ZIP on those overrides. A user can tick \"Pricing schedule — Ready\" with nothing behind it and the pack lets him through. Everything else about the blocker check is rigorous; this is the hole a tired human falls into.\n\n**Notes**\n\nRaised by the product manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a checklist item of kind BUYER_TEMPLATE, PRICING or SIGNATURE with no attached file, When the user marks it ready, Then the request is refused and the message names the missing file."
+        },
+        {
+          "id": "AC2",
+          "text": "Given such an item with a file attached, When the user marks it ready, Then it is accepted and the attachment is recorded against the item."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a required item marked ready whose file is later removed, When the final pack is requested, Then it is blocked and the item is listed as a blocker."
+        }
+      ]
+    },
+    {
+      "id": "R-03",
+      "summary": "Treat an expired certificate as unsatisfied in gates, certificate status and blockers",
+      "type": "Story",
+      "epic": "pack-gate",
+      "labels": [
+        "review-2026-09",
+        "pack-gate"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nRemoves the case where a lapsed certificate clears a mandatory gate and an ineligible bid is submitted.\n\n**Context**\n\n`vault.ts` has `isExpired()`, used only for the completeness widget. `certificateStatus()` (`serializers.ts:41`) sets `satisfied: Boolean(match)` over items filtered on `verified` alone, and `certificateGate()` in `eligibility.ts` does the same. The vault page reports \"expired\" for the same document the pack reports as satisfying a requirement.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a verified certificate whose expiry has passed, When the certificate gate is evaluated, Then it is REVIEW with an action to renew, never PASS."
+        },
+        {
+          "id": "AC2",
+          "text": "Given that certificate is the only evidence for a mandatory requirement, When the final pack is requested, Then it is blocked naming the expired document and its expiry date."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a certificate expires between drafting and submission, When the bid is reopened, Then the blocker appears without needing re-analysis."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a certificate has no recorded expiry, When it is evaluated, Then it is not treated as expired and the missing expiry is surfaced as a separate action."
+        }
+      ]
+    },
+    {
+      "id": "R-04",
+      "summary": "Include only the selected lots' questions and only cited people in the final pack",
+      "type": "Story",
+      "epic": "pack-gate",
+      "labels": [
+        "review-2026-09",
+        "pack-gate"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nStops the pack sent to a buyer containing other lots' unanswered questions and uninvolved staff's CVs.\n\n**Context**\n\n`makeResponseDoc` in `pack.ts` iterates all `analysis.questions` with no `inScope` filter, while blockers, gates and the screen all filter by `selectedLots`. `GET /api/tenders/:id/pack` passes `listPeople(account)` — every person on the account, archived included — and `createSubmissionPack` writes a CV for each, despite the comment claiming it lists only whoever the bid cites.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a bidder selected lot 2 of four, When the response document is generated, Then it contains only lot 2's questions and the whole-tender questions."
+        },
+        {
+          "id": "AC2",
+          "text": "Given three people are assigned to required roles and eleven exist on the account, When the pack is generated, Then exactly those three CVs are included."
+        },
+        {
+          "id": "AC3",
+          "text": "Given an assigned person is archived, When the pack is generated, Then their CV is included with their archived status stated, and no unassigned archived person appears."
+        }
+      ]
+    },
+    {
+      "id": "R-05",
+      "summary": "Revalidate the lot selection after every re-analysis",
+      "type": "Story",
+      "epic": "pack-gate",
+      "labels": [
+        "review-2026-09",
+        "pack-gate"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nStops a lot renumbered in an amendment from removing every required answer from scope and unblocking the final pack.\n\n**Context**\n\n`PUT /api/tenders/:id/lots` validates ids against `analysis.lots` on write, but nothing rechecks them afterwards. A rename leaves dangling ids in `metadata.selectedLots`; `inScope` then returns false for every real lot-scoped question, so `submissionBlockers()` demands no answers at all. Separately, `inScope` treating an empty selection as \"everything\" makes an undivided tender and an unselected multi-lot tender indistinguishable.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a stored lot selection and a re-analysis that renames or removes a lot, When the analysis is saved, Then the dangling ids are reported as an amendment requiring the user to re-confirm the selection."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a lot selection contains ids not in the current analysis, When the final pack is requested, Then it is blocked until the selection is re-confirmed."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a divided tender with no lot selection recorded, When the final pack is requested, Then it is blocked asking which lots are being bid, rather than silently scoping to all of them."
+        }
+      ]
+    },
+    {
+      "id": "R-06",
+      "summary": "Block the final pack on answers flagged by a buyer amendment",
+      "type": "Story",
+      "epic": "pack-gate",
+      "labels": [
+        "review-2026-09",
+        "pack-gate"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nStops a pre-amendment answer being submitted against a question the buyer has since rewritten.\n\n**Context**\n\n`needs-review` is derived only in `serializeTender` from `metadata.questionsNeedingReview`; `bid_answers.status` stays `'ready'` and the PUT enum doesn't accept `needs-review`. `submissionBlockers()` tests `answer.status !== \"ready\"`, so the flag is advisory only. No route clears the flag, and `analyseSavedTender` writes it only when `changes.length > 0`.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given an answer flagged because the buyer amended its question, When the final pack is requested, Then it is blocked naming that answer."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the user reviews a flagged answer and confirms it still stands, When they confirm, Then the flag clears, an audit entry records who confirmed it, and a provenance entry records the review."
+        },
+        {
+          "id": "AC3",
+          "text": "Given an answer is flagged and then edited and re-marked ready, When it is saved, Then the flag clears."
+        }
+      ]
+    },
+    {
+      "id": "R-07",
+      "summary": "Invalidate the attestation when anything in the submission changes, not just answer text",
+      "type": "Story",
+      "epic": "pack-gate",
+      "labels": [
+        "review-2026-09",
+        "pack-gate"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nCloses the gap where the human review statement survives changes to the documents, lots and analysis it was made against.\n\n**Context**\n\n`contentVersion()` in `attestation.ts` hashes `questionId + status + response` per answer and nothing else. Swapping a `role='submission'` document, changing `selectedLots`, overriding a checklist item, re-analysing the pack or archiving a cited person all leave `attestationValid()` true. Orphan answers from removed questions also enter the hash, so it moves for reasons nobody can see.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a valid attestation, When a submission document is added, replaced or removed, Then the attestation reads as invalidated."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a valid attestation, When the lot selection, a checklist override, an assigned person or the analysis version changes, Then the attestation reads as invalidated naming what changed."
+        },
+        {
+          "id": "AC3",
+          "text": "Given an attestation was invalidated, When the final pack is requested, Then it is blocked until a named person attests again."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a question was removed by re-analysis, When the content version is computed, Then its orphaned answer is excluded and reported separately."
+        }
+      ]
+    },
+    {
+      "id": "R-08",
+      "summary": "Give a bid an explicit state machine with legal transitions enforced server-side",
+      "type": "Story",
+      "epic": "pack-gate",
+      "labels": [
+        "review-2026-09",
+        "pack-gate"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nRemoves decisions, analyses and pack downloads happening in orders that contradict each other.\n\n**Context**\n\nBid state today is implied by the presence of rows: `bid_decisions` (append-only, no current-state column, no uniqueness), `bid_answers`, and `metadata.attestation`. `POST /api/tenders/:id/decision` has no date or state check, so a BID decision can be recorded after the deadline or after the final pack was downloaded, and nothing re-opens a decision when re-analysis moves the deadline or flips a gate to FAIL.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender whose deadline has passed, When a bid decision is attempted, Then it is refused and the bid is offered the abandoned state instead."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a recorded BID decision, When re-analysis moves the deadline earlier or turns an in-scope gate to FAIL, Then the decision is flagged as needing re-confirmation and the reason is stated."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a bid decision is recorded, When the row is written, Then it references the analysis version the recommendation was computed from."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a committed bid whose deadline passes with no submission recorded, When the nightly run completes, Then the bid is marked abandoned with the reason, and it stops counting as competing live work."
+        }
+      ]
+    },
+    {
+      "id": "R-09",
+      "summary": "Resolve the recommendation to one source of truth across screen, deck and decision record",
+      "type": "Story",
+      "epic": "pack-gate",
+      "labels": [
+        "review-2026-09",
+        "pack-gate"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nStops the synopsis deck taken into a go/no-go meeting disagreeing with the screen beside it.\n\n**Context**\n\n`ai.ts:161` stores `eligibility: rollUpEligibility(gates)` and the model's `decision` in `tenders.analysis`. `tenderWithAnswers` (`index.ts:268`) recomputes the band with `decide()` over lot-scoped gates and overwrites `serialized.decision`, while `createSynopsisDeck` prints `analysis.decision` and `analysis.fitScore` from the stored jsonb.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender whose stored decision and recomputed band differ, When the synopsis deck is generated, Then it prints the recomputed band and the facts behind it."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the deck and the screen are generated from the same tender, When both are produced, Then the decision, fit score and eligibility shown are identical."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the band is decided in code, When an analysis is saved, Then the stored decision is either the computed one or is not stored as an authoritative field."
+        }
+      ]
+    },
+    {
+      "id": "R-10",
+      "summary": "Stop the retention job deleting submitted bids and their append-only ledgers",
+      "type": "Story",
+      "epic": "data-loss",
+      "labels": [
+        "review-2026-09",
+        "data-loss"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nPrevents irreversible destruction of the provenance record that the product's central compliance claim rests on.\n\n**Context**\n\n`db.ts:1357` guards on `status <> 'SUBMITTED'`, which never holds. Cascades from `tenders` remove `bid_answers` → `answer_provenance` and `answer_versions`, whose append-only triggers cover UPDATE only (migration 004 leaves DELETE alone by design). The policy's `measuredFrom` claims the submission deadline but the query uses `updated_at`.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender with a submission record, When retention runs, Then it is never selected, in dry-run or live mode."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a tender with answers carrying provenance entries, When retention would delete it, Then the run refuses and reports it for explicit review instead of cascading."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the policy states it is measured from the submission deadline, When retention selects tenders, Then it compares the deadline, not `updated_at`."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a live retention run, When it deletes anything, Then a persisted audit entry names each deleted tender and the run fails loudly if that entry cannot be written."
+        }
+      ]
+    },
+    {
+      "id": "R-11",
+      "summary": "Seed the system organisation so job audit entries cannot silently fail",
+      "type": "Story",
+      "epic": "data-loss",
+      "labels": [
+        "review-2026-09",
+        "data-loss"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nRemoves the case where bulk deletion of customer data leaves no record that it happened.\n\n**Context**\n\n`retention-job.ts` writes its audit entry under account id `00000000-0000-0000-0000-000000000000`; migration 025 repointed `audit_log.account_id` to `organisations(id)`, and no zero-uuid organisation is ever created. The insert raises a foreign-key violation caught by `.catch()` and downgraded to a log line.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a fresh database, When migrations have run, Then a reserved system organisation exists for job-level audit entries."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the retention or deletion job completes, When it writes its audit entry, Then the row is present in `audit_log` and readable by an operator."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the audit write fails for any reason, When the job finishes, Then it exits non-zero rather than reporting success."
+        }
+      ]
+    },
+    {
+      "id": "R-12",
+      "summary": "Merge tender metadata on re-import instead of replacing it",
+      "type": "Story",
+      "epic": "data-loss",
+      "labels": [
+        "review-2026-09",
+        "data-loss"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nStops a re-import to pick up a buyer's addendum from silently destroying the attestation, lot selection and no-AI flag.\n\n**Context**\n\n`POST /api/tenders/import` passes a fresh metadata object to `upsertTender`, whose `ON CONFLICT` clause at `db.ts:649` sets `metadata=EXCLUDED.metadata`. That jsonb holds `attestation`, `selectedLots`, `checklistOverrides`, `noAiMode`, `aiPolicyAcknowledgement`, `roleAssignments`, `runbookTicks` and `questionsNeedingReview` — every decision a human has made about the bid.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender with an attestation, selected lots and no-AI mode set, When the same notice is imported again, Then all three are still present afterwards."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a re-import brings changed notice facts, When the row is updated, Then title, deadline and value update while user-owned metadata keys are preserved."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a re-import would change the deadline, When the update completes, Then an amendment record is written and any recorded bid decision is flagged for re-confirmation."
+        }
+      ]
+    },
+    {
+      "id": "R-13",
+      "summary": "Deduplicate source documents on re-import",
+      "type": "Story",
+      "epic": "data-loss",
+      "labels": [
+        "review-2026-09",
+        "data-loss"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nStops the analysis prompt being fed two or three copies of every clause, doubling cost and making quoted evidence ambiguous.\n\n**Context**\n\n`tender_documents` has only `tender_documents_tender_idx` (migration 001) — no uniqueness. `POST /api/tenders/import` re-downloads and re-saves every remote document each time, and `combineSourceText` concatenates all of them into the model input.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender with source documents already stored, When the same notice is imported again, Then a document with the same source URL and unchanged content is not stored a second time."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a remote document's content has changed, When it is re-imported, Then it is stored as a new revision and the previous one is retained as superseded."
+        },
+        {
+          "id": "AC3",
+          "text": "Given duplicates already exist, When a one-off cleanup runs, Then identical documents per tender are collapsed and the count is reported."
+        }
+      ]
+    },
+    {
+      "id": "R-14",
+      "summary": "Preserve evidence citations when a human edits an answer",
+      "type": "Story",
+      "epic": "data-loss",
+      "labels": [
+        "review-2026-09",
+        "data-loss"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nStops every manual edit silently erasing the vault evidence an answer rests on and recording that erasure permanently.\n\n**Context**\n\n`PUT /api/tenders/:id/answers/:questionId` calls `saveAnswer(tender.id, questionId, input.response, input.status)` with `evidence` omitted, defaulting to `[]`; `db.ts:769` then sets `evidence_json=EXCLUDED.evidence_json`. The following `recordProvenance({ evidenceIds: answer.evidence })` writes the emptied list into an append-only table.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given an AI-drafted answer citing three vault items, When a user edits its wording and saves, Then the three citations are still attached."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a user explicitly removes a citation, When the answer is saved, Then only that citation is removed and the provenance entry records the remaining ones."
+        },
+        {
+          "id": "AC3",
+          "text": "Given an answer is saved, When the provenance entry is written, Then its evidence ids match the answer's citations at that moment."
+        }
+      ]
+    },
+    {
+      "id": "R-15",
+      "summary": "Reject a concurrent answer save instead of overwriting the other editor's work",
+      "type": "Story",
+      "epic": "data-loss",
+      "labels": [
+        "review-2026-09",
+        "data-loss"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nRemoves silent loss of a colleague's text on a bid two people are drafting against a deadline.\n\n**Context**\n\n`PUT .../answers/:questionId` performs a blind upsert with no version check. `memberships` supports `editor`, so simultaneous editing is the intended workflow. `answer_versions` preserves the overwritten text but nothing tells anyone to look for it.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given two users loaded the same answer, When the second saves after the first, Then the save is refused with a conflict naming who saved and when."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a conflict is refused, When the user reloads, Then they see the current text and their own unsaved text side by side."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a conflict was refused, When the user retries against the current version, Then the save succeeds."
+        }
+      ]
+    },
+    {
+      "id": "R-16",
+      "summary": "Snapshot the evidence, declarations and people a bid cited at the moment of submission",
+      "type": "Story",
+      "epic": "data-loss",
+      "labels": [
+        "review-2026-09",
+        "data-loss"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes what was actually sent to a buyer reproducible after the underlying records change.\n\n**Context**\n\nAnswers store evidence ids resolved live against `listEvidence(account)`, and `serializeTender` drops ids that no longer resolve by design. `evidence_library` rows are freely mutable with no version history, `declarations` is a mutable key-value table with one per-account affirmation timestamp, and `people` records change after archiving. Nothing captures the state at submission.\n\n**Notes**\n\nRaised by the business analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a bid is confirmed submitted, When the submission record is written, Then it stores each cited evidence item's name, issuer, expiry, verification state and file digest as at that moment."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the ESPD declarations were part of the submission, When the record is written, Then the answered values and the affirmation timestamp are captured with it."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a cited evidence item is later edited, re-verified or deleted, When the submitted bid is reopened, Then it shows what was sent, marked as a historical snapshot, and flags that the live record now differs."
+        }
+      ]
+    },
+    {
+      "id": "R-17",
+      "summary": "Stop showing a fit score and fit bars for a tender that has not been analysed",
+      "type": "Story",
+      "epic": "board-truth",
+      "labels": [
+        "review-2026-09",
+        "board-truth"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nEvery number on screen is one Gokul can act on, so he keeps trusting the ones that matter.\n\n**Context**\n\nWith no analysis, `serializeTender` yields `match: 0` and `decision: \"REVIEW\"`, which the Qualify hero renders as \"0/100 bid fit — Review before committing\". Immediately below, the Bid fit panel renders the hardcoded constants 92/78/84/73/89. A user cannot distinguish a real score from furniture, and after two of these he distrusts all of them.\n\n**Notes**\n\nRaised by the product manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender with no stored analysis, When the Qualify stage opens, Then no fit score and no fit bars are shown, and the panel states that scoring needs the tender pack."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a tender with a completed analysis, When the Bid fit panel renders, Then every bar's value is read from the analysis and no hardcoded percentage array remains in the component."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a tender with no analysis, When the decision hero renders, Then it shows no recommendation band rather than showing REVIEW by default."
+        }
+      ]
+    },
+    {
+      "id": "R-18",
+      "summary": "Tell the user when tender documents were login-gated instead of reporting success",
+      "type": "Story",
+      "epic": "board-truth",
+      "labels": [
+        "review-2026-09",
+        "board-truth"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nGokul learns in the same second that he must fetch the pack himself, and knows exactly what to do.\n\n**Context**\n\n`fetchPublicTenderDocuments` correctly returns `\"Document requires portal access; upload it manually\"` per file and the import route stores these in `metadata.documentWarnings` and returns `warnings` plus `analysisError`. `openBid` (TenderlyApp.tsx:1169-1188) discards both and toasts \"Tender pack imported and qualification started\". All 28 measured documents are gated, so this is the normal path, not the edge case.\n\n**Notes**\n\nRaised by the product manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given an import where no document could be downloaded, When it completes, Then the screen states that the documents are login-gated, names the files it saw, and shows an upload control alongside a link to the eTenders page."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an import that returned `analysisError`, When it completes, Then that error is shown to the user rather than swallowed."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a tender with stored `documentWarnings`, When its screen opens later, Then those warnings are still visible until a pack is uploaded."
+        },
+        {
+          "id": "AC4",
+          "text": "Given an import where documents were downloaded successfully, When it completes, Then the success message names how many were read."
+        }
+      ]
+    },
+    {
+      "id": "R-19",
+      "summary": "Make importing a notice a background job with visible progress",
+      "type": "Story",
+      "epic": "board-truth",
+      "labels": [
+        "review-2026-09",
+        "board-truth"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nGokul can start three imports and go to a client call instead of watching one spinner.\n\n**Context**\n\n`POST /api/tenders/import` crawls the notice, fetches every document, extracts text and runs the full AI analysis inside one HTTP request. On a sleeping Render instance with a cold start this is minutes with no progress and one timeout away from nothing. A solo operator working in 25-minute gaps cannot spend a gap on a request.\n\n**Notes**\n\nRaised by the product manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a user imports a notice, When the request returns, Then it returns immediately with a job id and the tender already visible on the board in a pending state."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an import job is running, When the user opens the tender, Then the current step is named (crawling, downloading, extracting, analysing)."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the user closes the tab mid-import, When they return, Then the job has continued and its result or failure is shown."
+        },
+        {
+          "id": "AC4",
+          "text": "Given an import job fails, When the user opens the tender, Then the failure reason is shown with a retry that does not duplicate the tender."
+        }
+      ]
+    },
+    {
+      "id": "R-20",
+      "summary": "Let the user dismiss a tender with a reason so the board stays the size of the work",
+      "type": "Story",
+      "epic": "board-truth",
+      "labels": [
+        "review-2026-09",
+        "board-truth"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nThe board shows the seven tenders Gokul is working on, not the 150 he has ever seen.\n\n**Context**\n\nThere is no dismiss. A `NO_BID` decision writes a `bid_decisions` row and leaves the tender sitting beside the one closing in nine days. At roughly one matching IT tender a day the board reaches ~150 rows in three months, at which point the morning board is the screen he avoids.\n\n**Notes**\n\nRaised by the product manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender on the board, When the user dismisses it, Then it leaves the active board and the reason is stored against it."
+        },
+        {
+          "id": "AC2",
+          "text": "Given dismissed tenders exist, When the user opens the dismissed view, Then they are listed with their reasons and dates and can be restored to the board."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a dismissed tender, When the 05:00 run next sees the same notice, Then it is not re-added to the active board."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a dismissal, When it is recorded, Then the recommendation that stood at the time is stored with it."
+        }
+      ]
+    },
+    {
+      "id": "R-21",
+      "summary": "Surface the cross-bid task and next-action feed so work resumes in minutes",
+      "type": "Story",
+      "epic": "board-truth",
+      "labels": [
+        "review-2026-09",
+        "board-truth"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nGokul sits down with 25 minutes and knows the next thing to do without clicking through five stage tabs.\n\n**Context**\n\n`GET /api/my-tasks` is a built cross-bid task feed that no UI calls. Selecting a bid fires six parallel sub-loads and shows no last-touched, no progress and no next action. A solo operator working in gaps pays a re-orientation tax on every gap, and the tax is often bigger than the gap.\n\n**Notes**\n\nRaised by the product manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given tasks exist across several bids, When the user opens the board, Then the open tasks are listed across all bids, overdue first, each naming its bid."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a bid in Pursuing, When its row renders, Then it shows the single next action, taken from the first unresolved blocker or checklist item."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a bid the user has worked on before, When they open it, Then it opens on the stage they last worked on and shows when that was."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a bid with drafted answers, When its row renders, Then it shows how many required answers are ready out of the total."
+        }
+      ]
+    },
+    {
+      "id": "R-22",
+      "summary": "Paginate the board and stop refetching account-wide data per tender",
+      "type": "Story",
+      "epic": "board-truth",
+      "labels": [
+        "review-2026-09",
+        "board-truth",
+        "multi-reviewer"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nThe board opens in a couple of seconds and stays that way as Gokul's history grows.\n\n**Context**\n\n`GET /api/tenders` maps `tenderWithAnswers` over every tender; each call runs `listAnswers`, `listEvidence`, `tenderProvenance`, `getCompany`, `awardIntelligence` and `companyWonBefore`. `listEvidence` and `getCompany` are account-wide and re-fetched 37 times — roughly 200 queries against a pool of 5, with no pagination. The last two commits treated the symptom rather than the cause.\n\n**Notes**\n\nRaised independently by the product manager and the business analyst, whose proposals are merged here.\n\nThe merged proposals were: \"Paginate the board and stop refetching account-wide data per tender\", \"Paginate the tender board and stop it making a model call per tender\".",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a board request, When it is served, Then account-wide data is fetched once per request and shared across every tender in it."
+        },
+        {
+          "id": "AC2",
+          "text": "Given 40 tenders on the board, When the board loads, Then the query count does not grow per tender beyond the per-tender data itself."
+        },
+        {
+          "id": "AC3",
+          "text": "Given more tenders than one page holds, When the board loads, Then the first page is returned with a cursor and the rest load on demand."
+        },
+        {
+          "id": "AC4",
+          "text": "Given the board endpoint, When it is exercised in tests, Then an assertion fails if the per-request query count exceeds the agreed ceiling."
+        },
+        {
+          "id": "AC5",
+          "text": "Given an account with hundreds of tenders, When the board is requested, Then results are paginated and account-wide lookups are performed once per request, not once per tender."
+        },
+        {
+          "id": "AC6",
+          "text": "Given the board is rendered, When decision rationales are needed, Then no model call is made per row; the rationale is generated on opening a tender or served from a cached value."
+        },
+        {
+          "id": "AC7",
+          "text": "Given a tender whose deadline has long passed with no bid activity, When the board is rendered, Then it is archived out of the default view rather than loaded."
+        }
+      ]
+    },
+    {
+      "id": "R-23",
+      "summary": "Make tender analysis wait for the tender pack instead of running on the notice",
+      "type": "Story",
+      "epic": "board-truth",
+      "labels": [
+        "review-2026-09",
+        "board-truth"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nStops spending €1-2 to produce a weak first impression at the exact moment a prospect is judging the product.\n\n**Context**\n\n`/api/tenders/import` calls `fetchPublicTenderDocuments(resourceId)` and then runs full analysis regardless of whether any document came back. eTenders documents are login-gated, so for many notices the expensive analysis reads notice text only and returns thin eligibility gates and no real questions, with `documentWarnings` nobody reads. Full analysis over a 700k-char cap is the most expensive single call in the system.\n\n**Notes**\n\nRaised by the growth and monetisation analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given an import where no source document could be retrieved, When the import completes, Then full analysis does not run, the tender is marked as awaiting its pack, and the response says which documents could not be fetched and why."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an import where documents were retrieved, When the import completes, Then full analysis runs exactly as it does today."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a tender awaiting its pack, When a user uploads one or more source documents, Then full analysis runs automatically and the awaiting-pack state clears."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a tender awaiting its pack, When the user opens it, Then they see notice-level detail (buyer, deadline, value, CPV) and a named next step, not an eligibility verdict derived from the notice alone."
+        }
+      ]
+    },
+    {
+      "id": "R-24",
+      "summary": "Make the Tender Readiness Score the first screen after signup",
+      "type": "Story",
+      "epic": "board-truth",
+      "labels": [
+        "review-2026-09",
+        "board-truth"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nGives every new account a value moment in minutes with no tender pack, no crawl and no AI spend.\n\n**Context**\n\n`server/src/vault.ts` already measures nine document kinds Irish tenders routinely demand via `GET /api/vault/completeness`, returning complete/expired/unverified/missing per kind. It is the one piece of value that needs only the customer's own paperwork, and it is currently buried rather than being the onboarding spine.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given I have just created a workspace, When I land in the app, Then I see a readiness score out of the standard kinds with each missing, expired and unverified item named."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a missing kind, When I upload a matching document, Then the score updates and the kind moves to complete only once it is verified and in date."
+        },
+        {
+          "id": "AC3",
+          "text": "Given an expiring certificate, When its expiry is within 60 days, Then it is shown as expiring with the date, distinct from expired and from missing."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a zero score, When I view the screen, Then it states what a buyer will ask for rather than showing an empty state."
+        }
+      ]
+    },
+    {
+      "id": "R-25",
+      "summary": "Publish read-only shareable links for a qualification report",
+      "type": "Story",
+      "epic": "board-truth",
+      "labels": [
+        "review-2026-09",
+        "board-truth"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nCreates the first artefact that travels, turning every internal bid/no-bid conversation into distribution.\n\n**Context**\n\nThere are 90 API routes and none serves a public read-only view; the only outputs that leave the product are files carrying no link back. The qualification report — decision, sourced gates with quoted evidence, fit score — is the artefact that demonstrates the refusal to a stranger.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a qualified tender, When I create a share link, Then an unguessable read-only URL renders the decision, gates, quotes and source labels with no sign-in."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a share link, When it is opened, Then no evidence-vault content, CV text, pricing or team data is reachable from it."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a share link, When I revoke it, Then the URL returns not-found immediately and the revocation is written to the audit log."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a share link, When it is opened, Then the page carries Open Graph metadata so it previews correctly when pasted into email or chat."
+        }
+      ]
+    },
+    {
+      "id": "R-26",
+      "summary": "Parse submission deadlines as a date and time in Irish local time",
+      "type": "Story",
+      "epic": "dates",
+      "labels": [
+        "review-2026-09",
+        "dates",
+        "multi-reviewer"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nA tender closing at 12:00 gives a bidder half the working day the product currently promises, and an unparsed date gives no warning at all.\n\n**Context**\n\n`parseDeadline` (`pressure.ts:96-110`) accepts only `YYYY-MM-DD` (discarding any time component) and `DD/MM/YYYY`, returning `null` for \"10 October 2026\" or an ISO timestamp with offset. `workingDaysUntil` counts the closing day as a full working day. eTenders states its time-limit as a date and time; TED's `deadline-receipt-request` is an ISO timestamp.\n\n**Notes**\n\nRaised independently by the eTenders domain expert and the business analyst, whose proposals are merged here.\n\nThe merged proposals were: \"Parse submission deadlines as a date and time in Irish local time\", \"Store deadlines, expiries and due dates as timestamps with a timezone\".",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a deadline of \"12/10/2026 12:00\", When pressure is computed at 09:00 on 12/10/2026, Then the remaining time is reported as hours, not as one working day, And the band is High."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a deadline of \"10 October 2026\", When pressure is computed, Then the date is parsed and a band is returned, not the `[INPUT NEEDED: submission deadline]` note."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a deadline with a time and no timezone from an eTenders notice, When it is parsed, Then it is interpreted as Europe/Dublin local time, And the stored value records that assumption."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a deadline string from which no date can be read, When pressure is computed, Then no band is claimed and the note still reads `[INPUT NEEDED: submission deadline]`."
+        },
+        {
+          "id": "AC5",
+          "text": "Given a deadline that has passed, When the tender is displayed, Then it is marked closed and the pack endpoints refuse with \"the deadline has passed\"."
+        },
+        {
+          "id": "AC6",
+          "text": "Given a notice whose deadline is parseable, When it is ingested, Then a timestamptz is stored alongside the portal's original wording, which is still shown unchanged."
+        },
+        {
+          "id": "AC7",
+          "text": "Given a deadline that cannot be parsed, When it is ingested, Then the timestamp is null and the tender is flagged as having an unreadable deadline rather than being given a guessed one."
+        },
+        {
+          "id": "AC8",
+          "text": "Given parsed deadlines exist, When retention, deadline pressure or an expiry check runs, Then it compares timestamps in SQL."
+        },
+        {
+          "id": "AC9",
+          "text": "Given an Irish noon deadline, When remaining time is shown, Then it is computed in Europe/Dublin local time."
+        }
+      ]
+    },
+    {
+      "id": "R-27",
+      "summary": "Build a deadline register covering every date the notice and pack impose",
+      "type": "Story",
+      "epic": "dates",
+      "labels": [
+        "review-2026-09",
+        "dates",
+        "multi-reviewer"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nA bid manager needs one place showing every date that can end the bid, not just the closing date.\n\n**Context**\n\n`clarificationDeadline` exists in `ai-schemas.ts:134` and `types.ts:125` and is referenced nowhere else; `etenders.ts:168` harvests \"End of clarification period\", \"Tenders Opening Date\", \"Deadline for dispatching invitations\" and \"Validity of Tender in days or months\" into `metadata` and nothing reads them. Once the clarification window closes, a REVIEW gate can no longer be resolved — and `pack.ts:174-177` will then block the pack on it permanently.\n\n**Notes**\n\nRaised independently by the eTenders domain expert and the product manager, whose proposals are merged here.\n\nThe merged proposals were: \"Build a deadline register covering every date the notice and pack impose\", \"Track the clarification deadline as its own date, separate from submission\".",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given an analysis with a `clarificationDeadline` and a notice with \"End of clarification period\", When the tender is opened, Then both dates appear in a deadline register with the source each came from, And the earlier of the two is used for the countdown."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a clarification deadline three working days away and at least one gate at REVIEW, When the tender is opened, Then a warning names each unresolved gate and states that it cannot be clarified after that date."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a clarification deadline that has passed with gates still at REVIEW, When the tender is opened, Then those gates are marked \"no longer clarifiable\" and the recommendation is re-banded to REVIEW with that as a stated fact."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a pack stating a mandatory site visit date, When the analysis is saved, Then that date appears in the register as a mandatory attendance date with its quoted source."
+        },
+        {
+          "id": "AC5",
+          "text": "Given a notice stating \"Validity of Tender in days or months\", When the register is built, Then the tender validity period is shown, so the bidder knows how long the price must stand."
+        },
+        {
+          "id": "AC6",
+          "text": "Given a notice stating an end of clarification period, When the tender screen renders, Then that date is shown alongside the submission deadline with its own days-remaining."
+        },
+        {
+          "id": "AC7",
+          "text": "Given the clarification window closes inside the warning window, When the daily run completes, Then the user is warned that it is closing and how many clarifications are still open."
+        },
+        {
+          "id": "AC8",
+          "text": "Given the clarification window has closed, When the clarifications panel renders, Then asking a new clarification is disabled with the reason stated."
+        }
+      ]
+    },
+    {
+      "id": "R-28",
+      "summary": "Record insurance as named covers with separate limits, and gate each cover on its own",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nToday an accurately recorded insurance profile blocks every pack, and an inaccurate one can pass a gate it fails.\n\n**Context**\n\n`companies.insurance` is a single free-text column. `compareThreshold` calls `allAmounts` on it (`eligibility.ts:66-78`), so \"EL €13m, PL €6.5m, PI €2m\" yields `relevant.length > 1` and a permanent \"Conflicting evidence\" REVIEW, which is a hard blocker via `pack.ts:174-177`. With one figure recorded, a professional-indemnity requirement is compared against whatever number is present. Irish tenders state the three covers separately, and PI is usually stated per claim and in the aggregate.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a company profile with employers' liability €13m, public liability €6.5m and professional indemnity €2m per claim, When a gate requires professional indemnity of €5m, Then the gate is FAIL against the €2m PI figure only, And no conflict is reported."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the same profile, When a gate requires employers' liability of €13m, Then the gate is PASS, And the evidence line names employers' liability specifically."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a gate whose quote names an insurance type the profile has no figure for, When the gate is decided, Then it is REVIEW naming the missing cover, never FAIL."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a profile where only a single unlabelled insurance figure is recorded, When any insurance gate is decided, Then it is REVIEW asking which cover the figure is, And the migration leaves existing free-text profiles in exactly that state."
+        },
+        {
+          "id": "AC5",
+          "text": "Given a PI requirement stated in the aggregate and a profile holding a per-claim limit only, When the gate is decided, Then it is REVIEW naming the basis mismatch."
+        }
+      ]
+    },
+    {
+      "id": "R-29",
+      "summary": "Record turnover per financial year and separately for the contract's domain",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nEU selection criteria ask for three years of turnover and often turnover in the contract's field; one text field answers neither.\n\n**Context**\n\n`companies.turnover` is one free-text column, and `allAmounts` reads three years of figures as \"conflicting evidence\" (`eligibility.ts:118-125`), forcing REVIEW. ESPD Part IV B asks for general yearly turnover for the last three financial years and, where required, specific annual turnover in the business area covered by the contract. `isYear()` already exists in `eligibility.ts` precisely because year numbers and money share the same field.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given turnover recorded as three labelled financial years, When a gate requires average annual turnover of €2m, Then the average of the three years is compared and no conflict is reported, And the evidence line shows the three figures and the average."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a gate whose quote requires turnover \"in the field of the contract\", When a domain turnover figure is recorded, Then that figure is compared rather than the general turnover."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a gate requiring domain turnover and no domain figure recorded, When the gate is decided, Then it is REVIEW naming what to record, never FAIL."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a company with fewer than three completed financial years, When a three-year turnover gate is decided, Then it is REVIEW citing the shorter trading history, And the action names the Reg 58 route of other evidence of economic standing."
+        }
+      ]
+    },
+    {
+      "id": "R-30",
+      "summary": "Separate exclusion grounds, selection criteria and award criteria in the analysis",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nThe three have different remedies, and merging them into \"fatal gates\" hides the one that can actually be fixed.\n\n**Context**\n\n`fatalGates` (`ai-schemas.ts:20-29`) mixes Reg 57 exclusion grounds, Reg 58 selection criteria and pure formalities into one list, and `evaluationCriteria` holds award criteria. But an exclusion ground can be cured by self-cleaning, a selection criterion can be met by relying on a third party's capacity under Reg 63, and an award criterion cannot be fixed at all. `decide()` in `decision.ts` therefore treats a curable gap and a hard bar identically.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a pack stating exclusion grounds, minimum selection standards and award criteria, When the analysis is saved, Then each gate carries a category of EXCLUSION, SELECTION or FORMALITY with its quoted source."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a failing SELECTION gate for a capability the bidder lacks, When the decision is computed, Then the reason names third-party capacity or a consortium as the route, And the decision may be PARTNER."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a failing EXCLUSION gate, When the decision is computed, Then the reason names self-cleaning as the only route and never suggests a partner, because an exclusion attaches to the operator."
+        },
+        {
+          "id": "AC4",
+          "text": "Given an existing analysis produced before this story, When it is read, Then every gate reads as FORMALITY rather than being guessed into a category."
+        }
+      ]
+    },
+    {
+      "id": "R-31",
+      "summary": "Distinguish proof required at tender stage from proof required only at award",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nThe product currently refuses to build a compliant bid because a certificate the buyer will not ask for until award is not in the vault.\n\n**Context**\n\n`submissionBlockers` (`pack.ts:161-163`) hard-blocks the final pack for any `mandatory` required certificate lacking verified vault evidence. Under Reg 59 the ESPD is a self-declaration at tender stage, and Reg 60 means of proof are normally requested from the preferred tenderer only — tax clearance being the standard example. The extraction prompt already distinguishes \"condition of participation\", so the missing concept is *when* the proof is due.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a certificate the pack requires only from the successful tenderer, When the analysis is saved, Then it carries a stage of AWARD, And it does not block the final pack."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an AWARD-stage certificate missing from the vault, When the final pack is built, Then it appears in the runbook and in an award-stage readiness list, with its quoted source, rather than as a blocker."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a certificate the pack requires to be submitted with the tender, When it is missing or unverified, Then the final pack is still blocked as it is today."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a pack that is silent on when a certificate is due, When the analysis is saved, Then the stage is TENDER and the confidence is LOW, because assuming award stage would weaken a blocker on a guess."
+        }
+      ]
+    },
+    {
+      "id": "R-32",
+      "summary": "Enforce the tender's AI-use policy instead of only reporting it",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nDrafting into a tender that prohibits AI content is a misrepresentation that can exclude the company from this and later competitions.\n\n**Context**\n\n`aiUsePolicy` is extracted (`ai-schemas.ts:101-104`) and surfaced (`serializers.ts:244`), but `noAiMode` is an unrelated manual toggle (`index.ts:953-988`). Nothing links the two: a `prohibited` policy does not enable no-AI mode, does not refuse the drafting endpoints, and does not block the pack. `disclosure-required` produces no buyer-facing declaration — the provenance summary is an internal file in the ZIP.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given an analysis whose `aiUsePolicy.state` is `prohibited`, When the analysis is saved, Then no-AI mode is enabled for that tender automatically, And the audit log records that the policy caused it."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a tender whose policy is `prohibited`, When a user calls any drafting or refine endpoint, Then it is refused with the policy's quoted source in the message."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a tender whose policy is `prohibited` and an answer already classed `ai-generated` in the provenance ledger, When the final pack is requested, Then it is blocked naming each such answer."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a tender whose policy is `disclosure-required`, When the final pack is built, Then it contains a buyer-facing AI-use declaration listing each section's provenance class, And the pack is blocked until a named person has affirmed that declaration."
+        },
+        {
+          "id": "AC5",
+          "text": "Given a policy of `not-stated`, When drafting is requested, Then it proceeds, And the user is shown that the pack is silent and that silence is not permission."
+        }
+      ]
+    },
+    {
+      "id": "R-33",
+      "summary": "Model the pricing schedule, the price formula and the price criterion's marks",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nPrice is a third of a typical MEAT award and the product shows a quality-only score as if it were the whole thing.\n\n**Context**\n\nThere is no price field anywhere — not in `types.ts`, not in any migration. `scoreEvaluation` (`evaluation.ts:55-58`) drops any criterion it cannot weight and then reports the remainder as a \"percentage of the total award\", so a bidder reads a quality-only total as their overall standing. Irish packs use materially different price formulas (lowest-price-full-marks, `lowest/yours × weight`, banded), and Reg 69 lets a buyer reject an abnormally low tender without a written justification.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a pack stating a price criterion and its scoring formula, When the analysis is saved, Then the formula is recorded with its quoted source, or marked `[INPUT NEEDED: price formula]` when the pack states none."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a recorded tender price and a stated formula, When the mock evaluation runs, Then the price criterion is scored arithmetically in code, not by the model, And it contributes its stated weight to the total."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a price criterion the pack states and no price recorded, When the mock evaluation is shown, Then the total is labelled as covering only the scored criteria and names the weight that is unscored."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a tender price more than 20% below the buyer's stated estimate, When the pack is assembled, Then a Reg 69 abnormally-low warning is raised with a prompt for the cost justification the buyer may demand."
+        },
+        {
+          "id": "AC5",
+          "text": "Given a pricing schedule uploaded as a submission file, When the final pack is built, Then the runbook carries a step to reconcile the schedule total against the recorded tender price."
+        }
+      ]
+    },
+    {
+      "id": "R-34",
+      "summary": "Complete the ESPD to Parts II–VI and export an ESPD response file",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nThe ESPD is the one document every Irish tender demands, and 14 plain statements are neither the form nor a substitute for it.\n\n**Context**\n\n`declarations.ts` holds 9 Part III and 5 Part IV statements. Absent: Part II A/B identity and SME status, Part II C reliance on other entities, Part II D subcontractors, joint participation, self-cleaning where an exclusion ground is answered Yes (Art 57(6)), Part III D national grounds, Part IV B per-year and domain turnover and the PI amount, Part IV C references with values and dates, technicians, supply-chain and environmental management, average annual manpower, Part V, and the Part VI signature. eTenders expects an `espd-response.xml` built against the buyer's `espd-request.xml`; nothing produces one.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a Part III exclusion ground answered Yes, When affirmation is attempted, Then it is blocked until remedial measures are described in their own field, because `notes` alone does not evidence self-cleaning."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a completed declaration set, When the user exports the ESPD, Then a valid `espd-response.xml` is produced that the EU ESPD service accepts."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a buyer's `espd-request.xml` uploaded against a tender, When the ESPD is exported, Then only the parts and criteria that request selects are answered, And any criterion with no stored answer is listed as outstanding rather than left blank."
+        },
+        {
+          "id": "AC4",
+          "text": "Given an affirmed set older than `AFFIRMATION_VALID_MONTHS`, When the ESPD is exported, Then the export is refused pending re-affirmation, as `needsReaffirmation` already requires."
+        },
+        {
+          "id": "AC5",
+          "text": "Given a Part VI concluding statement, When the ESPD is exported, Then it names the person authorised to bind the company and the date they affirmed."
+        }
+      ]
+    },
+    {
+      "id": "R-35",
+      "summary": "Model subcontractors and reliance on third-party capacity as declarable entities",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nA bid that relies on another entity's capacity without declaring it and evidencing the commitment fails selection outright.\n\n**Context**\n\nThe product has `partnerNeeded` and `partnerGaps` (`ai-schemas.ts:131-132`) — a recommendation, not a modelled entity. Under Reg 63, relying on another entity's economic or technical capacity requires that entity's own ESPD, proof of the resources it commits, and joint liability where financial standing is relied on. Buyers also frequently cap the proportion of the contract that may be subcontracted. Nothing in the schema or the migrations holds a second economic operator.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a bid relying on another entity's technical capacity, When the entity is added, Then it has its own declaration set and its own vault evidence, And the pack includes its ESPD."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a bid relying on another entity's economic standing, When the pack is built, Then it is blocked until a joint-liability undertaking from that entity is uploaded."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a selection gate satisfied only by a third party's capacity, When the gate is displayed, Then it names the entity the PASS rests on, And it reverts to REVIEW if that entity is removed."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a pack stating a maximum subcontracted proportion, When declared subcontracting exceeds it, Then the pack is blocked with the stated limit quoted."
+        }
+      ]
+    },
+    {
+      "id": "R-36",
+      "summary": "Model consortium and joint bids as one bid by several economic operators",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nSMEs win above-threshold work by bidding jointly, and a joint bid the tool cannot express is a bid written outside the tool.\n\n**Context**\n\n`companies.account_id` is UNIQUE (`001_init.sql:10`) and `declarations` is keyed on `(account_id, declaration_id)` (`014_declarations.sql`) — one company, one declaration set. A joint bid needs each member's ESPD, a nominated lead with authority to bind the group, aggregated turnover and references, and often a commitment to form a legal entity on award. `docs/TENANCY.md:63` claims the consortium case is already modelled; it is not.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender being bid jointly, When members are added to the bid, Then each member has its own declaration set, vault and CVs, And each appears as a separate tenderer in the response document."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a joint bid, When a turnover gate is decided, Then the members' turnover is aggregated and the evidence line shows each member's contribution."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a joint bid, When the pack is built, Then it is blocked until one member is nominated as lead with an uploaded authority to bind the group."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a pack requiring a commitment to form a legal entity on award, When the pack is built, Then that commitment is a required checklist item."
+        }
+      ]
+    },
+    {
+      "id": "R-37",
+      "summary": "Surface the eTenders notice fields already harvested but never modelled",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nFields that decide whether a bid is even permissible are sitting in metadata, unread by anything.\n\n**Context**\n\n`FIELD_LABELS` (`etenders.ts:168`) captures \"Evaluation Mechanism\", \"Above or Below threshold\", \"Contract awarded in Lots\", \"Award per Item\", \"Multiple tenders will be accepted\", \"Validity of Tender in days or months\", \"Tenders Opening Date\", \"Framework agreement Timeframe\" and \"Allow suppliers to make an online Expression Of Interest\" into `metadata`, and nothing reads them. \"Multiple tenders will be accepted\" is the variant-bid switch; \"Above or Below threshold\" decides whether the Remedies Regulations and the standstill apply at all. Separately, `runbook.ts:63` falls back to `metadata[\"Submission method\"]`, a label that is not in `FIELD_LABELS` and can never be present.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given an imported eTenders notice, When the tender is opened, Then Evaluation Mechanism, threshold position, lots, variant bids permitted, tender validity and opening date are shown as notice facts with the label each came from."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a notice stating the procurement is above threshold, When the post-award stage is reached, Then the standstill and challenge deadlines are computed, And below-threshold notices say the statutory standstill does not apply."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a notice permitting multiple tenders, When the analysis is shown, Then variant bids are flagged as permitted with the notice field quoted."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a notice whose Evaluation Mechanism conflicts with the award criteria extracted from the pack, When the analysis is shown, Then the conflict is reported rather than one silently winning."
+        },
+        {
+          "id": "AC5",
+          "text": "Given an eTenders import, When the runbook is built, Then the submission channel is derived from a field the notice actually carries, And `metadata[\"Submission method\"]` is no longer consulted."
+        }
+      ]
+    },
+    {
+      "id": "R-38",
+      "summary": "Add a post-submission stage covering receipt, standstill, debrief and challenge",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nThe 14-day standstill and the 30-day limitation period are the only windows in procurement that cannot be extended, and the product ends at submission.\n\n**Context**\n\nTender status runs `IMPORTED → ANALYSED → SUBMITTED` (`db.ts:649,680`; `index.ts:258`) and stops. The runbook's last step says \"record the submission in Tenderly\" (`runbook.ts:101`) with nothing to record it into. There is no place for the portal receipt, for a buyer's clarification request during evaluation, for the award notification, for the debrief request, or for the SI 130/2010 limitation period of 30 calendar days from knowledge.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a submitted bid, When the user records the portal receipt, Then the receipt reference and timestamp are stored and appear in the audit log."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an award notification date recorded on an above-threshold procurement, When the tender is opened, Then the standstill end date and the challenge limitation deadline are shown as calendar-day countdowns, not working-day ones."
+        },
+        {
+          "id": "AC3",
+          "text": "Given an unsuccessful notification, When the user requests a debrief, Then a debrief request is drafted citing the criteria and asking for the characteristics and relative advantages of the winning tender."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a buyer clarification request received during evaluation, When it is logged, Then it is distinguishable from a pre-submission clarification and carries its own response deadline."
+        },
+        {
+          "id": "AC5",
+          "text": "Given a standstill ending in fewer than three calendar days with a debrief unanswered, When the tender is opened, Then a warning states that the limitation period runs from knowledge, not from the debrief."
+        }
+      ]
+    },
+    {
+      "id": "R-39",
+      "summary": "Capture each bid's outcome, the buyer's marks and the winner, and feed them back",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nWithout its own results the tool cannot tell a bidder which of its answers actually scores.\n\n**Context**\n\n`bid_decisions` (`009_bid_decisions.sql`) records BID/NO_BID only. `award_history` (`003_award_history.sql`) is the OGP dataset about other suppliers' awards. So `scoring.ts:165` — \"You have won work from this authority before\" — rests on nothing the product recorded, and `mockEvaluations` can never be checked against a real result.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a submitted bid with a recorded outcome of won or lost, When the outcome is saved, Then the buyer's per-criterion marks and the winning tenderer are recorded where the debrief gave them."
+        },
+        {
+          "id": "AC2",
+          "text": "Given at least one bid with recorded marks, When a mock evaluation is shown for a later tender, Then it states how its past estimates compared with the marks actually awarded."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a recorded win for an authority, When a new tender from that authority is scored, Then the \"won from this authority before\" signal cites the recorded bid rather than profile text."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a recorded loss, When the tender is opened, Then the criteria that scored below the winner are shown against the answers that produced them."
+        }
+      ]
+    },
+    {
+      "id": "R-40",
+      "summary": "Model signature, signing authority and e-signature requirements per document",
+      "type": "Story",
+      "epic": "etenders-model",
+      "labels": [
+        "review-2026-09",
+        "etenders-model"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nAn unsigned or wrongly signed form of tender is rejected without anyone reading the response.\n\n**Context**\n\nThe runbook has one generic step — \"Sign every declaration the pack requires, by the person authorised to bind the company\" (`runbook.ts:98`) — and `submissionChecklistItemSchema` has a `SIGNATURE` kind with nothing behind it. Irish packs vary between a wet signature scanned to PDF, an advanced or qualified electronic signature, and company-seal execution, and they name who may sign. Nothing records who in the company may bind it.\n\n**Notes**\n\nRaised by the eTenders domain expert.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a pack stating that the form of tender must bear a qualified electronic signature, When the analysis is saved, Then that requirement is recorded against that document with its quoted source."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a document requiring signature, When the final pack is built, Then it is blocked until a signed file is uploaded against that document and a named signatory is recorded."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a company profile naming who may bind the company, When a signature is recorded by someone not on that list, Then the pack is blocked naming the authority mismatch."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a pack silent on signature method, When the runbook is built, Then the step reads `[INPUT NEEDED: signature method]` rather than assuming a scanned wet signature."
+        }
+      ]
+    },
+    {
+      "id": "R-41",
+      "summary": "Boot the built server artifact in CI and fail if it does not answer /health",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible to ship a build that compiles but cannot start.\n\n**Context**\n\n`pr.yml` runs `npm run build --prefix server` and never starts the output, which is how production spent weeks dying on `dist/data/cpv-2008.csv`. `copy-data.mjs` now self-checks that one file, but nothing verifies the artifact boots. The startup path also runs migrations, the CPV seed and a backfill before `app.listen`.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a clean checkout, When CI runs `npm run build --prefix server` and then `node dist/src/index.js` with an in-memory store on an ephemeral port, Then `GET /health` returns 200 within 15 seconds."
+        },
+        {
+          "id": "AC2",
+          "text": "Given `server/dist/data/cpv-2008.csv` is deleted after the build, When the same step runs, Then it fails and names the missing file."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the artifact boots, When the step inspects stdout, Then the line `Tenderly API listening on port` is present."
+        }
+      ]
+    },
+    {
+      "id": "R-42",
+      "summary": "Publish the deployed commit SHA on /health and assert it after every deploy",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof",
+        "multi-reviewer"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for a deploy that never happened to look identical to one that did.\n\n**Context**\n\nRender auto-deploy was off for ~30 merges and the URL kept serving an ancient build; `main.yml`'s only gate is `/health` returning 200, which an old build passes perfectly. Nothing in `server/src/index.ts` or the web bundle carries a build identifier — `grep` for `RENDER_GIT_COMMIT` finds nothing.\n\n**Notes**\n\nRaised independently by the acceptance test manager and the SaaS marketing analyst, whose proposals are merged here.\n\nThe merged proposals were: \"Publish the deployed commit SHA on /health and assert it after every deploy\", \"Make deployment visible: enable builds, tag releases, and expose the running version\".",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the API is built with `RENDER_GIT_COMMIT` set, When a client calls `GET /health`, Then the response includes `commit` equal to that value."
+        },
+        {
+          "id": "AC2",
+          "text": "Given `main.yml` has pushed a deploy, When the post-deploy step polls `/health`, Then it fails the workflow unless `commit` equals `github.sha` within the timeout."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the deployed commit is stale, When the workflow fails, Then the error names both the expected and the serving SHA."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a merge to the default branch, When the site builds, Then the deployed bundle matches that commit and the build was not skipped."
+        },
+        {
+          "id": "AC5",
+          "text": "Given the deployed app, When I open it, Then the running version or commit is visible in the interface or a known endpoint."
+        },
+        {
+          "id": "AC6",
+          "text": "Given a release, When it is cut, Then it is tagged and the production workflow runs with its approval gate."
+        },
+        {
+          "id": "AC7",
+          "text": "Given builds are disabled, When someone checks deployment state, Then the disabled state is reported rather than resembling an up-to-date site."
+        }
+      ]
+    },
+    {
+      "id": "R-43",
+      "summary": "Fail the web build when VITE_API_URL is absent instead of serving demo data",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof",
+        "multi-reviewer"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for the live site to serve canned demo data to real visitors.\n\n**Context**\n\n`vite.netlify.config.ts` defines `process.env.VITE_API_URL` as `?? \"\"`, and `TenderlyApp.tsx:88` turns a blank value into `isDemo = true`. A production build with the variable unset succeeds, deploys, and shows every visitor fabricated tenders — which is what happened. Local and demo builds must stay possible, so the guard is on production builds only.\n\n**Notes**\n\nRaised independently by the acceptance test manager and the acceptance test manager, whose proposals are merged here.\n\nThe merged proposals were: \"Fail the web build when VITE_API_URL is absent instead of serving demo data\", \"Assert the built bundle points at a real API host before the artifact is published\".",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given `TENDERLY_REQUIRE_API_URL=1` and `VITE_API_URL` unset, When `npm run build:netlify` runs, Then the build exits non-zero naming the missing variable."
+        },
+        {
+          "id": "AC2",
+          "text": "Given `VITE_API_URL=https://api.example.test`, When the build completes, Then a CI step finds that exact string in `dist-netlify/assets/*.js`."
+        },
+        {
+          "id": "AC3",
+          "text": "Given `VITE_API_URL` is unset and the flag is not set, When the build runs, Then it still succeeds and produces the demo workspace."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a built `dist-netlify`, When the guard scans the emitted JS for the API base literal, Then it fails if the value is an empty string."
+        },
+        {
+          "id": "AC5",
+          "text": "Given the value is present, When the guard parses it, Then it fails if it is not `https://` or if it ends in a trailing slash."
+        },
+        {
+          "id": "AC6",
+          "text": "Given the guard fails, When CI reports, Then the message names the file and the offending value."
+        }
+      ]
+    },
+    {
+      "id": "R-44",
+      "summary": "Assert every eTenders discovery env var matches between the API and the cron service",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for deploy configuration to silently override a crawl limit fixed in code.\n\n**Context**\n\nTLY-170 removed the four-page cap from `jobs.ts`, but `render.yaml`'s `tenderly-discovery` cron still sets `ETENDERS_MAX_PAGES: \"3\"` where the API sets `40`, and omits `TENDERLY_ENRICHMENT_CAP` entirely so the cron enriches 60 notices where the API is configured for 200. The cron is the service that actually crawls, so its values are the ones that matter. The fix lives in YAML that no test reads.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given `render.yaml`, When the guard compares the API and discovery-cron services, Then it fails if `ETENDERS_MAX_PAGES`, `ETENDERS_SINCE_DAYS`, `TENDERLY_ENRICHMENT_CAP` or `TENDERLY_DISCOVERY_MIN_SCORE` differ or are absent from either."
+        },
+        {
+          "id": "AC2",
+          "text": "Given `ETENDERS_MAX_PAGES` is 3 and `ETENDERS_SINCE_DAYS` is 3, When the guard checks pages against the documented ~25 notices per day at 10 rows per page, Then it fails because the page budget cannot cover the date window."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the values agree and the budget is sufficient, When the guard runs, Then it passes and prints the shared values."
+        }
+      ]
+    },
+    {
+      "id": "R-45",
+      "summary": "Assert eTenders paging from the recorded fixture, including the Next button href",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for a paging regression to read page 1 of 2,170 while tests stay green.\n\n**Context**\n\n`search-results.html` contains the real control — `<button id=\"nextNav\" title=\"Next\" href=\"?d-3680175-p=2&searchType=cftFTS&latest=true\">` with its label in an `<i>` icon — and I confirmed `parseSearchHtml` resolves it to an absolute page-2 URL. No test in `etenders-contract.test.ts` or `etenders.test.ts` mentions `nextUrl`. The evidence that proves the fix is in the repo, unasserted, so detection rests on two attributes the portal can rename freely.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the recorded `search-results.html`, When `parseSearchHtml` runs, Then `nextUrl` is the absolute URL ending `d-3680175-p=2&searchType=cftFTS&latest=true`."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the fixture with `id=\"nextNav\"` removed but `title=\"Next\"` kept, When the parser runs, Then `nextUrl` is still resolved."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the Next button is marked `disabled`, When the parser runs, Then `nextUrl` is empty so the crawl terminates rather than looping."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a stubbed fetcher serving page 1 then page 2 then a disabled page 3, When `discoverETenders` runs, Then it visits three pages and returns the union of their notices deduped by `externalId`."
+        }
+      ]
+    },
+    {
+      "id": "R-46",
+      "summary": "Fail the nightly discovery run when it stores notifications but ingests no tender",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for the job that fills the board to report success having filled nothing.\n\n**Context**\n\nThe original incident was notification rows written and no tender created. `jobs.ts` now returns `matchesStored` and `tendersIngested` separately, but `job.ts` sets a non-zero exit only when `alarms.length > 0`, and `assessRun` alarms on source yield, not on ingest outcome. A run that reads 200 notices and ingests zero exits 0 and logs `outcome: \"ok\"`.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a run where `matchesStored > 0` and `tendersIngested == 0`, When the job finishes, Then it logs `outcome: \"degraded\"` and exits non-zero."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a run against a profile whose CPV family matches a fixture notice, When the job completes, Then `tendersIngested` is at least 1 and the tender is readable from `listTenders`."
+        },
+        {
+          "id": "AC3",
+          "text": "Given every notice is genuinely closed or out of profile, When the job finishes, Then it exits 0 with a reason recorded per notice, so a legitimately empty night is distinguishable from a broken one."
+        }
+      ]
+    },
+    {
+      "id": "R-47",
+      "summary": "Test CPV family matching end to end against the deployed threshold value",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for a correct scorer and a correct threshold to compose into an empty board.\n\n**Context**\n\nAn ancestor match scored 22 against a threshold of 45 and every real matching tender was dropped — two units, each correct, wrong together. `ingest.ts` now makes a family match sufficient, but no test reads the deployed `TENDERLY_DISCOVERY_MIN_SCORE` from `render.yaml`, and `enrichWithCpv`'s cap means a notice past the limit arrives with `cpv: null` and falls back to the score path that caused the original failure.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the recorded notice-detail page tagged `71320000` and a profile registered for `71000000`, When the ingest decision runs with the threshold from `render.yaml`, Then the verdict ingests and the reason names both codes."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the same pair, When the scorer runs alone, Then the test records its total and does not require it to exceed the threshold."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a notice whose enrichment failed so its CPV is null, When the decision runs, Then the test asserts the documented fallback behaviour explicitly rather than leaving it implied."
+        }
+      ]
+    },
+    {
+      "id": "R-48",
+      "summary": "Smoke the deployed API for database, CPV and ingestion freshness, not just a 200",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for a degraded production API to present as healthy.\n\n**Context**\n\n`index.ts` now catches a CPV load failure and logs \"the API is serving\" — so the outage that used to crash loudly is now silent, and `/health` has no CPV field. `/health` also returns `ok: true` when `database` is `\"memory\"`, meaning a missing `DATABASE_URL` yields a green API that loses every bid on restart. The ingestion runs are already exposed; nothing checks their age.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the deployed API, When the smoke suite calls `/health`, Then it fails unless `database` is `\"configured\"`."
+        },
+        {
+          "id": "AC2",
+          "text": "Given `dist/data/cpv-2008.csv` is absent, When `/health` is called, Then it reports `cpv: \"degraded\"` and the smoke suite fails."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the newest eTenders ingestion run is older than 26 hours or parsed zero notices, When the smoke suite runs, Then it fails naming the source and the run's timestamp."
+        }
+      ]
+    },
+    {
+      "id": "R-49",
+      "summary": "Verify a browser preflight from the real web origin against the deployed API",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for CORS configuration to block every call from a connected front end.\n\n**Context**\n\nCORS once allowed only the staging subdomain, so a correctly connected browser had every call blocked. `render.yaml` now sets `CORS_ORIGINS` to the single production origin, while `main.yml` deploys staging web by advancing the `staging` branch to a Netlify branch-deploy host — and `index.ts:156` matches origins by exact string. Every server-side test passes because CORS is enforced by the browser, not the server.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the deployed API and the web origin under test, When the suite sends an `OPTIONS` preflight for `POST /api/auth/login` with that `Origin`, Then the response allows it."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an origin not in the allow-list, When the same preflight is sent, Then it is refused, proving the check is real."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a real browser on the deployed site, When the sign-in form is submitted, Then a request to the configured API host completes without a CORS error in the console."
+        }
+      ]
+    },
+    {
+      "id": "R-50",
+      "summary": "Point the production smoke suite at the production web app instead of localhost",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for a production release to be \"smoke tested\" against nothing.\n\n**Context**\n\n`prod.yml` sets `STAGING_URL: PRODUCTION_URL` for the smoke step, but `playwright.config.ts` resolves `baseURL` from `STAGING_WEB_URL ?? PLAYWRIGHT_BASE_URL ?? \"http://localhost:5173\"`. `prod.yml` sets neither and no `PRODUCTION_WEB_URL` secret exists, so `--grep @smoke` drives a browser at a local port where nothing listens. The production web app has never been exercised by CI.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given `prod.yml` runs the smoke suite, When Playwright resolves `baseURL`, Then it equals the production web URL and the run fails fast if that value is unset."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the config is wrong or the URL is missing, When the workflow runs, Then it fails before launching the browser rather than reporting a misleading result."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a passing smoke run, When the report is written, Then it records the base URL that was actually driven."
+        }
+      ]
+    },
+    {
+      "id": "R-51",
+      "summary": "Make every CI step that guards a deploy fail loudly when its secret is missing",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for a merge to report success while deploying nothing.\n\n**Context**\n\n`main.yml`'s Render deploy, its staging seed and its Jira webhook mirror, and both deploy steps in `prod.yml`, are all guarded by `if: env.X != ''` where `X` is defined only in that same step's `env:` block — so the condition is evaluated before the value exists and the step never runs. This is the ~30-merges-never-deployed incident expressed as YAML. The seed never running also means the journeys' `toHaveCount(2)` runs against unseeded state.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the workflows, When a guard checks every step's `if:` expression, Then it fails for any step referencing an env var not defined at workflow or job level."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a required deploy secret is unset, When the workflow runs, Then the job fails with a message naming the secret instead of skipping the step."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the staging seed step, When `main.yml` runs on a push to main, Then the seed executes and the run log records the rows it wrote."
+        }
+      ]
+    },
+    {
+      "id": "R-52",
+      "summary": "Add the missing test:web and test:integration scripts so CI stops skipping them silently",
+      "type": "Story",
+      "epic": "proof",
+      "labels": [
+        "review-2026-09",
+        "proof"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for a CI step that runs nothing to report a pass.\n\n**Context**\n\n`pr.yml` calls `npm run test:web --if-present` and `npm run test:integration --prefix server --if-present`; neither script exists in either `package.json`, so both steps no-op and the job goes green. The workflow provisions a Postgres 16 service, sets `DATABASE_URL` and applies every migration for an integration suite that was never written, and `rehearse-restore.mjs` then rehearses a restore of an empty database.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the repository, When a guard lists every `--if-present` invocation in the workflows, Then it fails for any script name absent from the corresponding `package.json`."
+        },
+        {
+          "id": "AC2",
+          "text": "Given `npm run test:integration --prefix server`, When it runs against the CI Postgres service, Then it exercises the real HTTP app over the migrated database and fails if `DATABASE_URL` is unset."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the restore rehearsal, When it runs after the integration suite, Then it fails if the database it dumped contained no rows."
+        }
+      ]
+    },
+    {
+      "id": "R-53",
+      "summary": "Wrap the app shell in the error boundary so no screen can white-page the product",
+      "type": "Story",
+      "epic": "resilience",
+      "labels": [
+        "review-2026-09",
+        "resilience"
+      ],
+      "priority": "Highest",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for one malformed record on one screen to take down the whole app.\n\n**Context**\n\n`ScreenErrorBoundary` is a correct fix mounted in exactly one place — `section === \"My bids\"`, lines 2122–2175. `Discover`, `Watchlist`, `Portfolio`, `Evidence`, `Company`, `Settings` and `Team` render outside it, as does the app shell. Line 521 renders `pressure.band.toLowerCase()` where `band?` is optional inside an optional `pressure?` — the same two-level shape as the `confidence` crash.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given any section throws during render, When the app renders, Then the boundary's fallback appears and the navigation rail stays usable."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a tender whose `pressure` object omits `band`, When the Discover screen renders, Then no unhandled exception occurs and the page is not blank."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the boundary catches an error, When the user clicks the reset action, Then they return to a working screen without reloading the page."
+        }
+      ]
+    },
+    {
+      "id": "R-54",
+      "summary": "Render every screen against a minimal-shape payload with all optional fields absent",
+      "type": "Story",
+      "epic": "resilience",
+      "labels": [
+        "review-2026-09",
+        "resilience"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for a field optional in the schema and assumed present in the UI to reach a user.\n\n**Context**\n\n`packages/shared/src/index.ts` marks roughly sixty fields on `Tender` alone as optional — `pressure?`, `noticeSummary?`, `cpv?`, `awardCriteria?`, `scoreBreakdown?`, `recommendation?` — and `docs/ARCHITECTURE.md` records that these wire types are hand-duplicated from the server. `TypeScript` accepts a guarded read and an unguarded one equally once a value is narrowed, and `pr.yml`'s `npm run test:web --if-present` is a no-op because no `test:web` script exists, so the web app has zero unit tests.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender object carrying only its required fields, When each screen is rendered in a test renderer, Then no screen throws and none renders empty."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the same payload with each optional field added back one at a time, When the screens render, Then every variation renders without error."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a new optional field is added to a shared type, When the suite runs, Then the minimal-shape fixture is regenerated from the schema so the new field is covered automatically."
+        }
+      ]
+    },
+    {
+      "id": "R-55",
+      "summary": "Assert the workspace renders when one endpoint fails and when one hangs",
+      "type": "Story",
+      "epic": "resilience",
+      "labels": [
+        "review-2026-09",
+        "resilience"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes it impossible for one slow or failing endpoint to blank the entire dashboard.\n\n**Context**\n\nEight endpoints loaded in a single `Promise.all`, so nothing rendered until the slowest returned and one failure blanked everything. TLY-178 replaced it with a per-call `settle` helper that loads bids first, which is the right shape — but the `Promise.all` wrapper remains, `settle` swallows every non-session error to `console.error`, and no test drives the failure path. Nothing proves the bids list appears before the other seven resolve.\n\n**Notes**\n\nRaised by the acceptance test manager.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the notifications endpoint returns 500, When the user signs in, Then the bids list renders and the failure is surfaced in the UI rather than only in the console."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the sectors endpoint hangs for 30 seconds, When the user signs in, Then the bids list is visible within 5 seconds."
+        },
+        {
+          "id": "AC3",
+          "text": "Given any endpoint returns 401, When the user signs in, Then they are signed out once with a single session-expired message."
+        }
+      ]
+    },
+    {
+      "id": "R-56",
+      "summary": "Replace the demo workspace with synthetic data that names no real buyer",
+      "type": "Story",
+      "epic": "resilience",
+      "labels": [
+        "review-2026-09",
+        "resilience"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nRemoves the single worst credibility risk on the only public surface — invented verdicts on named public bodies.\n\n**Context**\n\n`components/TenderlyApp.tsx:95-214` ships real authorities (BioPharmaChem Skillnet, HSE, Limerick City and County Council) with real eTenders resource ids and fabricated GO/PARTNER/NO_GO verdicts, including a `fail · \"Not evidenced\"` gate. `demoPeople` and `initialCompany` carry the founder's own name, CV and company with empty fields and a placeholder insurance string. A product whose pitch is \"we do not invent claims\" cannot ship invented assessments of real buyers.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the public build, When I open any demo tender, Then every authority, tender title and person is clearly fictional and no real contracting authority is named."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the public build, When I inspect the shipped JS bundle, Then it contains no real person's name, no real company registration and no placeholder string rendered as data."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a demo tender, When I view its deadline, Then the deadline is computed relative to today and is never in the past."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a demo tender, When I click the source link, Then it resolves to that notice or is absent, never to a generic search page."
+        }
+      ]
+    },
+    {
+      "id": "R-57",
+      "summary": "Record the euro cost of every model call in usage_events",
+      "type": "Story",
+      "epic": "cost",
+      "labels": [
+        "review-2026-09",
+        "cost"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nNothing can be priced, capped or margin-checked until the meter records money, not just tokens.\n\n**Context**\n\n`recordUsage` in `server/src/db.ts:836` writes input_tokens and output_tokens only — there is no cost column and no price table anywhere in the repo. Cached and uncached input bill at very different rates and the model is configurable via `ANTHROPIC_MODEL`, so cost cannot be derived after the fact. Every spend cap, plan limit and margin report in this backlog depends on this landing first.\n\n**Notes**\n\nRaised by the growth and monetisation analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a completed model call, When `callModel` meters it, Then `usage_events` stores `cost_cents` plus `cache_read_input_tokens` and `cache_creation_input_tokens`, computed from a versioned price table keyed on model and token class."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the price of a model changes, When the price table is updated with a new effective date, Then historic rows keep the cost calculated at the price that applied when the call was made."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a call on a model absent from the price table, When it is metered, Then the row is written with `cost_cents` null and a warning is logged, and the request still succeeds."
+        },
+        {
+          "id": "AC4",
+          "text": "Given an owner requests `GET /api/usage`, When the response is built, Then it includes month-to-date spend in euros broken down by kind and by tender."
+        }
+      ]
+    },
+    {
+      "id": "R-58",
+      "summary": "Stop a runaway AI bill with a per-account monthly spend ceiling",
+      "type": "Story",
+      "epic": "cost",
+      "labels": [
+        "review-2026-09",
+        "cost"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nCaps the one variable cost that can exceed a customer's entire subscription in an afternoon.\n\n**Context**\n\n`limits.ts` permits 400 drafts and 60 analyses per account per hour — well over €150/hour of model spend inside policy — and it is a rate limiter, not a budget. `monthlyUsage(accountId)` already aggregates spend per calendar month per account but nothing enforces against it. A prompt-injected 700k-char pack or a stuck retry loop currently has no financial ceiling at all.\n\n**Notes**\n\nRaised by the growth and monetisation analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given an account whose month-to-date spend is below its plan ceiling, When a model call is attempted, Then it proceeds and the ceiling check adds no user-visible latency."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an account at or above its ceiling, When any model call is attempted, Then `callModel` refuses before calling the API with a message naming the ceiling, the spend to date and the reset date."
+        },
+        {
+          "id": "AC3",
+          "text": "Given an account crosses 50% or 80% of its ceiling, When an owner loads the app, Then a banner visible only to owners states the percentage used and offers to raise the plan."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a batch drafting run is in flight, When the ceiling is reached mid-run, Then the run stops cleanly with a stated reason, already-saved answers are retained, and no partial answer is written."
+        }
+      ]
+    },
+    {
+      "id": "R-59",
+      "summary": "Cache the stable prefix of every drafting call",
+      "type": "Story",
+      "epic": "cost",
+      "labels": [
+        "review-2026-09",
+        "cost"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nCuts cost per bid from roughly €12 to €4, which is what makes generous plan limits affordable.\n\n**Context**\n\n`grep -rn \"cache_control\" server/src/` returns nothing. Each draft call re-sends the system prompt, the full analysis blob, the company profile, the content of every verified evidence item and all people records at full rate — twelve times over a twelve-question tender. Volatile content (the question, prior answers) must move after the last breakpoint for the prefix to hit.\n\n**Notes**\n\nRaised by the growth and monetisation analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a drafting call, When the request is built, Then the system prompt, analysis blob, company profile, evidence content and people records form a stable prefix carrying `cache_control`, and the question plus prior answers follow it."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a second drafting call on the same tender within the cache TTL, When it completes, Then `usage.cache_read_input_tokens` is greater than zero and is recorded on the usage event."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a batch run over twelve questions, When it finishes, Then total metered cost is at least 50% below the same run measured before this change."
+        },
+        {
+          "id": "AC4",
+          "text": "Given the evidence vault or company profile changes mid-tender, When the next draft runs, Then it uses the updated content and correctly re-creates the cache rather than citing stale evidence."
+        }
+      ]
+    },
+    {
+      "id": "R-60",
+      "summary": "Meter drafting as bid credits and check the balance before a batch run",
+      "type": "Story",
+      "epic": "cost",
+      "labels": [
+        "review-2026-09",
+        "cost"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nPuts the meter where the cost and the value both are, while keeping qualification free so NO-GO stays cheap.\n\n**Context**\n\nAnalysis costs roughly €1-2 and a NO-GO saves the customer three days, so charging for it would suppress the behaviour the product is best at. Drafting is where the tokens are: twelve calls per tender via `batch-draft.ts`, which runs outside the HTTP request. A credit must therefore be checked once in the route before the loop starts, not per call, or a run you meant to refuse spends half its money first.\n\n**Notes**\n\nRaised by the growth and monetisation analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender that has never been drafted, When any of `/draft-all`, `/draft` or `/draft-stream` is first called on it, Then exactly one bid credit is consumed and recorded against that tender with the actor and timestamp."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a tender that has already consumed a credit, When any further drafting, refining, critique, red-team, mock-evaluation or pack action runs on it, Then no additional credit is consumed."
+        },
+        {
+          "id": "AC3",
+          "text": "Given an account with zero credits remaining, When drafting is requested, Then the request is refused with 402 before any model call, the message states the reset date and the price of an extra credit, and analysis and discovery remain fully available."
+        },
+        {
+          "id": "AC4",
+          "text": "Given an owner buys a credit block, When payment succeeds, Then the balance increases immediately and the previously blocked drafting run can be started without re-import or re-analysis."
+        }
+      ]
+    },
+    {
+      "id": "R-61",
+      "summary": "Right-size model and effort for every AI call site",
+      "type": "Story",
+      "epic": "cost",
+      "labels": [
+        "review-2026-09",
+        "cost"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nCuts COGS on non-judgement calls by up to 80%, widening margin without touching output quality where it matters.\n\n**Context**\n\n`ai.ts:15` defaults every call to `claude-fable-5` at $10/$50 per MTok, and all but four call sites pass `effort: \"high\"`. Structured extraction — CV parsing at line 436, notice summarisation, rationale — does not need premium reasoning depth, while eligibility gates and drafting plainly do. Because `kind` is only analysis/draft/critique, cost per feature is currently unmeasurable, so this work must follow the euro ledger.\n\n**Notes**\n\nRaised by the growth and monetisation analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the usage meter records cost per call, When a per-call-site cost report is produced, Then each of the call sites in `ai.ts` is listed with its monthly cost and call volume."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a call site is classified as extraction rather than judgement, When it runs, Then it uses a cheaper model or lower effort, configurable per site rather than one global setting."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a model or effort change on a call site, When it is evaluated against saved fixtures, Then output quality is measured before and after and the change is reverted if quality drops."
+        },
+        {
+          "id": "AC4",
+          "text": "Given the changes ship, When `usage_events` kinds are reviewed, Then each distinct capability is recorded under its own kind rather than every non-analysis, non-draft call landing in `critique`."
+        }
+      ]
+    },
+    {
+      "id": "R-62",
+      "summary": "Offer approved answers from previous bids when drafting a similar question",
+      "type": "Story",
+      "epic": "reuse",
+      "labels": [
+        "review-2026-09",
+        "reuse",
+        "multi-reviewer"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nGokul stops paying to rewrite the QA-approach answer he already approved twice.\n\n**Context**\n\nDrafting is strictly per-tender — no cross-tender answer retrieval exists in `drafting.ts` or `retrieval.ts`. Irish public tenders reuse the same scored questions constantly. He has not asked for this because he has not yet felt it, and he will feel it on about his third bid. It is the largest unclaimed time saving in the product.\n\n**Notes**\n\nRaised independently by the product manager and the SaaS acquisitions analyst, whose proposals are merged here.\n\nThe merged proposals were: \"Offer approved answers from previous bids when drafting a similar question\", \"Build an organisation-wide answer library and retrieve it into every draft\".",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a scored question and previously approved answers on other bids, When the user opens that question, Then the closest prior answers are offered with their tender, date and score context."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the user adopts a prior answer, When it is inserted, Then its provenance records that it was reused and from which bid."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a prior answer cites evidence that has since expired, When it is offered, Then the expiry is stated before it can be adopted."
+        },
+        {
+          "id": "AC4",
+          "text": "Given no sufficiently similar prior answer exists, When the question opens, Then nothing is suggested rather than a weak match being offered."
+        },
+        {
+          "id": "AC5",
+          "text": "Given an answer reaches `ready` status, when it is saved, then it is indexed into an organisation-scoped answer library with its question text, evaluation criterion, cited evidence and provenance class."
+        },
+        {
+          "id": "AC6",
+          "text": "Given a new tender has a scored question, when drafting runs, then the three closest prior ready answers are retrieved and offered as reusable material, each shown with its tender, date and outcome where known."
+        },
+        {
+          "id": "AC7",
+          "text": "Given a prior answer is reused, when the new draft is produced, then its provenance records the reuse and the citation chain from the original answer's evidence is carried forward."
+        },
+        {
+          "id": "AC8",
+          "text": "Given a reused answer cited evidence that has since expired, when the draft is produced, then the expiry is surfaced as a blocker rather than silently reasserting a stale certificate."
+        }
+      ]
+    },
+    {
+      "id": "R-63",
+      "summary": "Pool extracted tender requirement structures across tenants keyed on canonical notice",
+      "type": "Story",
+      "epic": "reuse",
+      "labels": [
+        "review-2026-09",
+        "reuse"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nCreates the product's first network effect — every new customer makes analysis instant for all existing ones.\n\n**Context**\n\nAnalysis is per-tender and per-tenant today; two customers bidding the same notice each upload the same pack and each pay for the same model call. `008_canonical_key.sql` and `dedupe.ts` already identify one opportunity across eTenders and TED, so the join key exists. The extracted requirement structure is Tenderly's own work product, distinct from the buyer's document bytes.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given tenant A has analysed notice X, when tenant B ingests the same canonical notice, then B receives the gates, evaluation criteria, weightings, scored questions and checklist without uploading a pack or triggering a model call."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a pooled structure is used, when B's workspace renders it, then it is labelled as derived from a shared requirement record with its extraction date, and B can force a fresh analysis of its own pack."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a pooled structure exists, when B views it, then no document bytes, answers, evidence, company profile or identity belonging to A are reachable, proven by a test in the style of `tenant-isolation.test.ts`."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a customer opts out of pooling in settings, when they analyse a pack, then their extraction is not contributed to the pool and they still consume from it."
+        }
+      ]
+    },
+    {
+      "id": "R-64",
+      "summary": "Ship a real sample tender pack every new account can analyse in one click",
+      "type": "Story",
+      "epic": "reuse",
+      "labels": [
+        "review-2026-09",
+        "reuse",
+        "multi-reviewer"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nDelivers the aha inside 15 minutes of signup with no eTenders login and no upload, for about €1.50 per trial.\n\n**Context**\n\nA new prospect without an eTenders account and without a pack in hand currently sees an empty board and never reaches a GO/NO-GO verdict. The aha is the eligibility gate that refuses a tender with a quoted reason before three days are wasted — that needs a real pack with real gates, weightings and scored questions. One anonymised pack, shipped as a fixture, reaches it on click.\n\n**Notes**\n\nRaised independently by the growth and monetisation analyst and the SaaS marketing analyst, whose proposals are merged here.\n\nThe merged proposals were: \"Ship a real sample tender pack every new account can analyse in one click\", \"Ship a one-click sample tender so a new workspace produces value with no pack\".",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a newly registered account, When they open the discovery board, Then a clearly labelled sample tender is offered with a one-click analyse action."
+        },
+        {
+          "id": "AC2",
+          "text": "Given they analyse the sample, When it completes, Then they see eligibility gates with quoted evidence, evaluation criteria with weightings, scored questions and a GO/REVIEW/NO-GO verdict."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the sample is analysed, When the account's usage is metered, Then the cost is recorded against the trial ceiling like any other analysis."
+        },
+        {
+          "id": "AC4",
+          "text": "Given the sample exists in an account, When real tenders are imported, Then the sample is visually distinct from them and can be dismissed permanently."
+        },
+        {
+          "id": "AC5",
+          "text": "Given an empty new workspace, When I choose \"Try a sample tender\", Then a sample notice and pack are imported into my own workspace and full analysis runs."
+        },
+        {
+          "id": "AC6",
+          "text": "Given the sample analysis, When I read it, Then it shows at least one gate held at Review and at least one `[INPUT NEEDED: …]` placeholder, so the refusal is visible on the first run."
+        },
+        {
+          "id": "AC7",
+          "text": "Given the sample tender, When I request the final pack, Then it is refused with the blocker list, and the draft pack downloads."
+        },
+        {
+          "id": "AC8",
+          "text": "Given a sample tender exists in my workspace, When I view it, Then it is labelled as a sample and can be removed in one action."
+        }
+      ]
+    },
+    {
+      "id": "R-65",
+      "summary": "Show the answer-reuse rate on every bid so the library's compounding value is visible",
+      "type": "Story",
+      "epic": "reuse",
+      "labels": [
+        "review-2026-09",
+        "reuse"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMakes the switching cost felt month over month, which is the core retention mechanic.\n\n**Context**\n\nEvery accepted answer, verified evidence item and parsed CV makes the next bid cheaper — bid one comes back mostly `[INPUT NEEDED]`, bid six mostly citable. That asset compounds invisibly today, so a customer under cost pressure sees a subscription rather than something they would be deleting. Provenance and citations are already recorded per answer, so the inputs exist.\n\n**Notes**\n\nRaised by the growth and monetisation analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender with drafted answers, When the user opens it, Then they see how many answers drew on prior bids or vault evidence, how many need new input, and the reuse percentage."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an account with more than one completed bid, When an owner opens the portfolio, Then the reuse rate is shown as a trend across bids in order."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a bid's first draft, When reuse is calculated, Then it counts only verified, in-date evidence and previously accepted answers, never unverified or expired items."
+        },
+        {
+          "id": "AC4",
+          "text": "Given an account's first ever bid, When it is drafted, Then the reuse panel states plainly that this is the first bid and that later bids will reuse its answers."
+        }
+      ]
+    },
+    {
+      "id": "R-66",
+      "summary": "Add mandatory MFA and SAML single sign-on for larger buyers",
+      "type": "Story",
+      "epic": "sellable",
+      "labels": [
+        "review-2026-09",
+        "sellable"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nLifts the addressable customer size past the smallest SMEs by clearing the security questionnaire that blocks every larger deal.\n\n**Context**\n\n`server/src/auth.ts` exports only `signToken`, `requireAuth`, `accountId`, `userId` and `actorEmail`; a 12-hour JWT cannot be revoked, and a forgotten password is unrecoverable. `TENANCY.md` notes that `attachMembership` re-reads the membership row per request, so access removal works — but the session itself does not. Any bidder large enough to have an IT policy fails this at first contact.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.\n\nPassword reset and session revocation were split out of this proposal into their own story, because they are needed before the first paying customer and this is not.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given an owner enables mandatory MFA for the organisation, when any member signs in, then a second factor is required and a member without one is guided to enrol before reaching any tender data."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an organisation configures SAML SSO, when a member signs in through the identity provider, then their membership and role are resolved without a Tenderly password and de-provisioning at the IdP removes access on their next request."
+        }
+      ]
+    },
+    {
+      "id": "R-67",
+      "summary": "Split index.ts and db.ts into feature modules and retire the in-memory mirror",
+      "type": "Story",
+      "epic": "sellable",
+      "labels": [
+        "review-2026-09",
+        "sellable"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nRemoves the largest drag on delivery speed and the clearest technical-debt finding in diligence.\n\n**Context**\n\n`server/src/index.ts` is 2,336 lines and 119KB carrying 91 routes with handler logic inline; `server/src/db.ts` is 2,329 lines and 108KB holding every query plus a complete `memory.*` mirror of all 32 tables so the app can run without a database. That mirror doubles the cost of every schema change permanently, in exchange for a demo convenience that a seeded ephemeral Postgres delivers better.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the route modules are extracted, when the API boots, then every one of the 91 existing routes resolves at its current path with its current auth, role and rate-limit behaviour, proven by the existing suite passing unchanged."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the data layer is split by domain, when a new column is added, then it is implemented once against Postgres with no parallel in-memory branch to maintain."
+        },
+        {
+          "id": "AC3",
+          "text": "Given local development previously relied on the in-memory store, when a developer runs the documented command, then an ephemeral Postgres is started and seeded, and the developer experience is no worse."
+        },
+        {
+          "id": "AC4",
+          "text": "Given `no DATABASE_URL` in a production environment, when the API boots, then it refuses to start rather than silently serving a store that loses everything on restart."
+        }
+      ]
+    },
+    {
+      "id": "R-68",
+      "summary": "Rewrite ARCHITECTURE.md and GAPS.md against the code and gate them in CI",
+      "type": "Story",
+      "epic": "sellable",
+      "labels": [
+        "review-2026-09",
+        "sellable"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nProtects every unverifiable claim made in diligence by making the verifiable ones true.\n\n**Context**\n\nBoth documents are dated 2026-08-19 and describe a 974-line frontend, an OpenAI `gpt-5.6` dependency, absent tenancy, absent provenance, absent GDPR machinery and three test files. The code now runs Anthropic `claude-fable-5` via a forced tool call with Zod validation, full organisation and membership tenancy, a provenance ledger, GDPR export and erasure, and 59 test files. The honesty of these documents is a genuine asset and it is currently rotting.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the architecture document, when it is read against the repository, then the module table, the route count, the table count, the model provider and the test inventory all match what is actually there."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the gap analysis, when a gap has been closed, then it is marked closed with the migration or module that closed it, and gaps still open — billing, email, outcomes, object storage, auth lifecycle — are restated with today's date."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a pull request changes the migration count or adds a route, when CI runs, then it fails unless the counts stated in the architecture document are updated in the same change."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a reader new to the repository, when they follow the documents, then nothing they are told contradicts the code they then open."
+        }
+      ]
+    },
+    {
+      "id": "R-69",
+      "summary": "Add password reset and session revocation",
+      "type": "Story",
+      "epic": "sellable",
+      "labels": [
+        "review-2026-09",
+        "sellable"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nRemoves a support failure that would land on a solo founder and a box every IT reviewer ticks.\n\n**Context**\n\nThe only auth routes are `/api/auth/login` and `/api/auth/register`, and the sign-in form in `components/TenderlyApp.tsx:3878` has no reset link. `server/src/set-password.ts` exists for invitation acceptance, so the token and hashing machinery is already present.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.\n\nSession revocation is included here rather than with MFA and SSO: a 12-hour JWT currently lives out its life with no way to revoke it, so a reset that leaves old sessions valid is not a reset.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given I have forgotten my password, When I request a reset with my email, Then the same confirmation is shown whether or not the account exists."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a valid reset link, When I set a new password of at least ten characters, Then I can sign in with it and the old password no longer works."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a reset link, When it is older than its expiry or has already been used, Then it is refused and no password is changed."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a reset completes, When I view the audit log, Then the reset is recorded with its time and the account it affected."
+        },
+        {
+          "id": "AC5",
+          "text": "Given a user signs out, When they next present the old token, Then it is refused, and the revocation is recorded in the audit log."
+        },
+        {
+          "id": "AC6",
+          "text": "Given a password reset completes, When it is applied, Then every existing session for that user is invalidated."
+        }
+      ]
+    },
+    {
+      "id": "R-70",
+      "summary": "Build a crawlable marketing and docs surface outside the single-page app",
+      "type": "Story",
+      "epic": "sellable",
+      "labels": [
+        "review-2026-09",
+        "sellable"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nCreates the only inbound channel a solo operator can afford, which today does not exist at all.\n\n**Context**\n\n`web-static/index.html` is one page with one meta description, no Open Graph tags, no canonical and no sitemap; `public/` holds only `favicon.svg`; and `netlify.toml` redirects `/*` to the app shell, so there are no crawlable URLs. The app cannot be the website.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the site is deployed, When a crawler requests a marketing or docs URL, Then it receives server-rendered HTML with a unique title, description, canonical and Open Graph tags."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the site is deployed, When I request `/robots.txt` and `/sitemap.xml`, Then both exist and the sitemap lists every marketing and docs page."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a marketing or docs URL, When it is requested, Then it is not swallowed by the SPA catch-all redirect."
+        },
+        {
+          "id": "AC4",
+          "text": "Given the docs surface, When I read it, Then it documents the evidence rules, the pack lock and the no-AI mode in the words the product itself uses."
+        }
+      ]
+    },
+    {
+      "id": "R-71",
+      "summary": "Publish security, privacy, DPA and sub-processor pages as real URLs",
+      "type": "Story",
+      "epic": "sellable",
+      "labels": [
+        "review-2026-09",
+        "sellable"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nTurns already-good compliance work into a sales asset a prospect's IT contact can be sent.\n\n**Context**\n\n`docs/DATA_PROCESSING.md` is a genuinely strong buyer-facing document — named sub-processors with locations and honest \"not yet in use\" markers, retention periods with their env overrides, self-service export and deletion — but it lives only in the repo, and the SPA catch-all means `/privacy` serves the app shell. No DPA exists in any form, and no transfer position covers the US AI sub-processor.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given I am not signed in, When I open the security, privacy, sub-processor and DPA URLs, Then each returns its own page, not the application shell."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the sub-processor page, When I read it, Then every entry names what it processes, where, and whether it is in use, matching what the deployed system actually calls."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a prospect asks for a DPA, When they open the DPA URL, Then a signable agreement is available covering the US transfer for AI processing."
+        },
+        {
+          "id": "AC4",
+          "text": "Given the security page, When I read it, Then it states plainly what does not exist yet — no MFA, no SSO, no external certification — rather than omitting it."
+        }
+      ]
+    },
+    {
+      "id": "R-72",
+      "summary": "Reconcile the AI sub-processor disclosure across README, ARCHITECTURE and DATA_PROCESSING",
+      "type": "Story",
+      "epic": "sellable",
+      "labels": [
+        "review-2026-09",
+        "sellable"
+      ],
+      "priority": "High",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nRemoves an inaccuracy in a disclosure document, found by exactly the reviewer most worth impressing.\n\n**Context**\n\n`README.md:24,31` and `docs/ARCHITECTURE.md:103` say OpenAI with `gpt-5.6`; `SETUP_CHECKLIST.md:61` says `ANTHROPIC_API_KEY` and `claude-fable-5`; `docs/DATA_PROCESSING.md` publishes Anthropic, United States, in use, and states customer data is never used for training. A buyer reading the public repo and the sub-processor page finds a contradiction about who processes their confidential bid material.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the deployed API, When I check which model vendor it calls, Then one vendor is established as the truth with evidence from the code and the deploy config."
+        },
+        {
+          "id": "AC2",
+          "text": "Given that truth, When I read the README, ARCHITECTURE and DATA_PROCESSING, Then all three name the same vendor and model, and the diagrams match."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a vendor is named as in use, When I read its entry, Then the stated location and training position match that vendor's actual commercial terms."
+        },
+        {
+          "id": "AC4",
+          "text": "Given the docs are corrected, When a reviewer compares any two of them, Then no statement about data processing conflicts."
+        }
+      ]
+    },
+    {
+      "id": "R-73",
+      "summary": "Settle on one domain, own it, and align CORS with the links the product sends",
+      "type": "Story",
+      "epic": "sellable",
+      "labels": [
+        "review-2026-09",
+        "sellable"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nStops invitation links pointing at an origin the API distrusts, and stops the trust pitch being undercut by a *.netlify.app URL.\n\n**Context**\n\n`render.yaml:24` and `server/src/index.ts:149` allow-list `tenderly.netlify.app`; `server/src/invitations.ts:77` defaults invitation links to `gettenderly.netlify.app`; `README.md:89,100` and `DEPLOYMENT_CHECKLIST.md` say `tenderly.netlify.app`. Three documents and two code paths disagree about the product's own address.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a custom domain is configured, When I open the product, Then it serves from that domain over HTTPS and the old host redirects to it."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an invitation is created, When I inspect the link, Then its origin is on the API's CORS allow-list and the invitation flow completes from that origin."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the repo, When I grep for the product URL, Then every occurrence in code, deploy config and docs names the same host."
+        },
+        {
+          "id": "AC4",
+          "text": "Given the domain changes, When I check the deploy config, Then the allowed origins come from configuration rather than a hardcoded default."
+        }
+      ]
+    },
+    {
+      "id": "R-74",
+      "summary": "Publish the prompt versions and the tests that pin the evidence rules",
+      "type": "Story",
+      "epic": "sellable",
+      "labels": [
+        "review-2026-09",
+        "sellable"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nConverts the differentiator from a claim into something a sceptic can verify, which no competitor can copy cheaply.\n\n**Context**\n\nEvery prompt carries a version constant (`ANALYSIS_PROMPT_VERSION = \"analysis-2026-08-24.2\"` and seven more), the version is stored on each analysis and provenance record, and the file comments state that tests assert the REVIEW-not-FAIL and `[INPUT NEEDED]` clauses so that deleting one fails the build. None of this is visible to a buyer.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the docs surface, When I open the evidence-rules page, Then it shows the current prompt version strings and the exact rule clauses they contain."
+        },
+        {
+          "id": "AC2",
+          "text": "Given that page, When I follow the link to the tests, Then I reach the assertions that fail if a rule clause is removed."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a prompt version changes, When the docs are built, Then the published version string matches the code or the build fails."
+        },
+        {
+          "id": "AC4",
+          "text": "Given an analysis in the product, When I inspect it, Then the prompt version that produced it is shown to the user, not only stored."
+        }
+      ]
+    },
+    {
+      "id": "R-75",
+      "summary": "Retrieve login-gated tender packs through the customer's own eTenders session",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nUnlocks the only hard part of the product for every notice, converting a thin notice summary into full analysis without manual work.\n\n**Context**\n\nTLY-168 measured 28 of 28 documents across 10 live notices as portal-gated, so `notice-summary.ts` honestly reports `packUnread` and four unassessed areas. `etenders.ts` can only fetch public documents and flags HTML content-type as \"requires portal access\". Every competitor faces the same wall; solving it is category ownership, not a chore.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a customer has installed the browser helper and is signed in to eTenders, when the 05:00 job puts a matched notice on the board, then the helper fetches that notice's documents using the customer's own session and uploads them to the tender as `source` documents."
+        },
+        {
+          "id": "AC2",
+          "text": "Given documents arrive via the helper, when extraction completes, then full analysis runs automatically and `packUnread` becomes false with no human action."
+        },
+        {
+          "id": "AC3",
+          "text": "Given the helper cannot authenticate, when it reports back, then the tender keeps its notice-level summary and the customer is told which notices need a manual pack upload, never that analysis is complete."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a document is retrieved, when it is stored, then its provenance records that it came from the customer's own authenticated session and not from a Tenderly crawl."
+        }
+      ]
+    },
+    {
+      "id": "R-76",
+      "summary": "Add UK Find a Tender and Contracts Finder as ingestion sources",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nMultiplies addressable market roughly thirtyfold for a few weeks of work, because Ireland alone caps out around €1–2m ARR.\n\n**Context**\n\n`DATA_SOURCES.md` assessed three Irish-focused sources and `sources/ted.ts` already proves the pattern for a keyed-free versioned API. CPV is the shared identifier and `cpv.ts` already resolves the hierarchy, so matching, scoring and ingestion need no new logic. Irish public procurement is ~€18–20bn a year against UK's several hundred billion.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a company profile carries CPV codes, when the discovery job runs, then UK Find a Tender and Contracts Finder are queried alongside eTenders and TED and their notices are scored by the same `scoreNotice` path."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the same opportunity appears on a UK source and on TED, when discovery returns, then `dedupe.ts` merges them into one row with both sources listed, as it already does for eTenders and TED."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a UK source is unavailable, when the job runs, then `Promise.allSettled` keeps the other sources' results and the failure is recorded as an ingestion run with an alarm."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a UK notice is ingested, when it is displayed, then its jurisdiction and its source are stated, and any licence attribution the source requires travels with the row as `award_history` already does."
+        }
+      ]
+    },
+    {
+      "id": "R-77",
+      "summary": "Match bidders into consortia using the gate each partner would close",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nAdds a two-sided network effect and per-match expansion revenue on top of subscription, and is the hardest item for a competitor to copy.\n\n**Context**\n\n`Decision = \"PARTNER\"` is declared in `packages/shared/src/index.ts:13` and nothing implements partnering. `eligibility.ts` already produces `DeterministicGate` with `required` and `held` as numbers, so the system knows precisely which gate fails and by how much. An SME failing a €6.5m turnover test alone clears it in a consortium, and today Tenderly tells it to walk away.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender's eligibility rolls up to REVIEW or FAIL on a capacity or turnover gate, when the recommendation is computed, then the shortfall is stated as a number and a partnering option is offered rather than only a NO-GO."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a customer opts into the partner network, when another customer on the same canonical notice has a profile that closes the failing gate, then each is offered an introduction naming only the gate closed and no other commercial detail."
+        },
+        {
+          "id": "AC3",
+          "text": "Given both parties accept, when the introduction is made, then a consortium record links the two accounts for that tender and the eligibility roll-up is recomputed against the combined capacity with each figure attributed to its member."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a customer has not opted in, when matching runs, then their profile is never offered to anyone and their tenders never surface a partner."
+        }
+      ]
+    },
+    {
+      "id": "R-78",
+      "summary": "Emit a signed AI-use declaration into the submission pack",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nConverts the provenance ledger from an internal feature into a regulatory differentiator buyers actively prefer.\n\n**Context**\n\n`answer_provenance` records ai-generated, ai-assisted or human per answer with evidence citations; `no-ai-mode`, `AiUsePolicy` acknowledgement and `attestation.ts` all exist. None of it leaves the building — `pack.ts` puts the evidence register in `_Tenderly_Internal/`. Buyers increasingly ask bidders to disclose AI use, and Tenderly is the only tool that can answer truthfully at sentence level.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a final pack is built, when the ZIP is assembled, then it contains a buyer-facing AI-use declaration stating, per scored question, whether the text was human-written, AI-assisted or AI-generated with human review."
+        },
+        {
+          "id": "AC2",
+          "text": "Given the declaration is generated, when it is signed by the attesting person, then it carries their name, role, timestamp and a digest over the answers it describes, so a later edit invalidates it."
+        },
+        {
+          "id": "AC3",
+          "text": "Given no-AI mode was on for the tender, when the declaration is produced, then it states that no model was used for any drafted content and the ledger corroborates it."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a buyer receives the declaration, when they check any claim in it, then every statement is traceable to an `answer_provenance` row and none is generated prose."
+        }
+      ]
+    },
+    {
+      "id": "R-79",
+      "summary": "Publish price-to-win and incumbent intelligence from award history",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nRaises willingness to pay by answering the question a director actually asks, using data no competitor has assembled.\n\n**Context**\n\n`awardIntelligence(authority, cpv)` already computes award count, median, min, max and top three suppliers with a CPV-division fallback, and `companyWonBefore` and `knownBuyersFor` already feed scoring. The output is a panel; it does not yet tell anyone what to bid. `award_history` also holds `no_of_bids_received` and `no_of_smes_bids_received`, which are unexploited.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a tender names a buyer and a CPV with at least five awards in history, when the customer opens qualification, then they see the median award value, the ratio of awarded to estimated value, the typical bidder count and the SME share of bidders, each with its sample size."
+        },
+        {
+          "id": "AC2",
+          "text": "Given an incumbent has won three or more of that buyer's awards under that CPV, when intelligence renders, then the incumbent is named with its win count and the customer is told it faces an entrenched supplier."
+        },
+        {
+          "id": "AC3",
+          "text": "Given history is thin or absent, when intelligence renders, then it says so plainly and shows no figure, rather than falling back to a national average presented as local truth."
+        },
+        {
+          "id": "AC4",
+          "text": "Given any figure derived from the OGP dataset is displayed, when the panel renders, then the CC-BY-4.0 attribution stored on the rows is shown with it."
+        }
+      ]
+    },
+    {
+      "id": "R-80",
+      "summary": "Support framework and DPS lifecycles including mini-competitions",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nConverts one-off bid work into multi-year recurring revenue with a naturally high renewal rate.\n\n**Context**\n\n`types.ts` and the analysis schema treat a tender as a single competition with one deadline, and `ai.ts` prompts encode that a framework is not a closed procurement. But there is no object representing a framework a customer has been admitted to, nor the stream of call-offs and mini-competitions that follow. In Irish IT procurement, framework membership is where the multi-year revenue is, and the reuse potential across call-offs is enormous.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a customer is admitted to a framework or DPS, when they record it, then a framework record holds the awarding body, lots, CPV scope, term and renewal date."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a framework exists, when a mini-competition or call-off under it is discovered or imported, then it is linked to the framework and pre-populated with the eligibility already established at framework stage."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a call-off is drafted, when retrieval runs, then answers from prior call-offs on the same framework are preferred over unrelated tenders."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a framework term is within 90 days of expiry, when the reminder job runs, then the owner is notified that re-qualification is due."
+        }
+      ]
+    },
+    {
+      "id": "R-81",
+      "summary": "Launch a buyer-side bid assurance portal for contracting authorities",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nOpens a second revenue side on the same data and dataset, which is how an Irish SME tool reaches a €25m valuation.\n\n**Context**\n\nEverything needed to serve the buy side already exists on the sell side: `answer_provenance` per sentence, `attestation.ts`, `AiUsePolicy`, `award_history`, and the eligibility engine that maps a stated requirement to evidence. Contracting authorities have the mirror-image problem — knowing which bids were AI-drafted and whether claimed evidence is real — and no tool answers it. This also makes Tenderly the system of record for both ends of one transaction.\n\n**Notes**\n\nRaised by the SaaS acquisitions analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a buyer organisation is onboarded, when a bidder submits with a Tenderly AI-use declaration, then the buyer can verify the declaration's digest against the ledger that produced it and see which sections were model-written."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a buyer uploads their own draft tender documents, when they request a review, then they are told which of their stated gates are unevidenceable by a typical SME and which criteria carry weightings that do not sum, citing their own text."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a buyer account, when it reads anything, then it can reach only bids submitted to it and never a bidder's vault, profile, unsubmitted drafts or other competitions, proven by isolation tests."
+        },
+        {
+          "id": "AC4",
+          "text": "Given no bidder has consented to buyer-side verification, when a buyer looks up a bid, then nothing is disclosed and the buyer is told consent is required."
+        }
+      ]
+    },
+    {
+      "id": "R-82",
+      "summary": "Publish award-history pages for every buyer and CPV code",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nCompounding, near-zero-marginal-cost acquisition built from data already being crawled.\n\n**Context**\n\nOGP award history is already ingested and used in discovery scoring via `knownBuyersFor`. That same data answers the exact queries an SME director types in the week before he decides to bid — who won HSE IT contracts last year, what the awards in his CPV are worth. Publishing it costs nothing beyond rendering and creates the only acquisition asset that appreciates.\n\n**Notes**\n\nRaised by the growth and monetisation analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given an ingested award record, When the public pages are generated, Then a buyer page and a CPV page exist listing awards with winner, value and date, and both are indexable with no login."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a visitor on a public page, When they reach the end, Then they are offered current open tenders in that CPV behind a signup."
+        },
+        {
+          "id": "AC3",
+          "text": "Given new award data is ingested, When the generation job runs, Then affected pages are regenerated within 24 hours."
+        },
+        {
+          "id": "AC4",
+          "text": "Given award data contains personal data, When pages are generated, Then only organisation-level information is published, never named individuals."
+        }
+      ]
+    },
+    {
+      "id": "R-83",
+      "summary": "Publish an Irish Public Procurement SME Index from award_history",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nTurns already-loaded licensed data into original citable research — the cheapest authority a solo operator can build.\n\n**Context**\n\n`docs/DATA_SOURCES.md` confirms the OGP dataset covers every published Irish competition from 2013, quarterly, CC-BY-4.0, with awarded value, suppliers, bids received and SME bids received; `server/src/db.ts` already computes median/min/max award value and top suppliers per authority and CPV. Nobody publishes an SME's real odds — average bidders per competition and SME share of awards — and the licence permits it with attribution already stored per row.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given the award data is loaded, When the index is generated, Then it reports SME share of awards and median award value by contracting authority and by CPV division, with the number of competitions behind each figure."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a figure derived from the dataset, When it is displayed or published, Then the CC-BY-4.0 attribution travels with it."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a cell with too few competitions to be meaningful, When the index is rendered, Then it is suppressed rather than published as a percentage."
+        },
+        {
+          "id": "AC4",
+          "text": "Given the index pages, When a crawler requests them, Then each has its own crawlable URL, title and description."
+        }
+      ]
+    },
+    {
+      "id": "R-84",
+      "summary": "Introduce a tender-source adapter so a second portal is configuration, not a rewrite",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nThe prerequisite for every market beyond Ireland; without it UK and EU expansion is a fork.\n\n**Context**\n\n`server/src/etenders.ts:4-5` hardcodes `ETENDERS_HOSTS` as the whole procurement allow-list, `START_URL` is a fixed eTenders search URL, error strings name eTenders, and `extractStructuredFields` scans 33 literal eTenders labels while `parseSearchHtml` reads fixed table positions. `docs/DATA_SOURCES.md` rates this stability Low with no drift alarm.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a source adapter interface, When a new portal is registered, Then it supplies its own host allow-list, search entry point and field map without changes to shared import code."
+        },
+        {
+          "id": "AC2",
+          "text": "Given any adapter, When it fetches, Then HTTPS-only, redirect re-validation, the request timeout and the size caps are enforced per adapter with no path that bypasses them."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a URL from an unregistered host, When a user tries to import it, Then it is refused with a message naming the portals that are supported."
+        },
+        {
+          "id": "AC4",
+          "text": "Given an adapter's field map drifts, When ingestion health runs, Then an alarm fires naming the source and the fields that came back empty."
+        }
+      ]
+    },
+    {
+      "id": "R-85",
+      "summary": "Carry contract value as amount plus currency code instead of a euro-formatted string",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Medium",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nA GBP tender rendering as euro would destroy credibility on the first UK demo.\n\n**Context**\n\n`server/src/eligibility.ts:80`, `components/TenderlyApp.tsx:723` and `:2283` all format with `Intl.NumberFormat(\"en-IE\", { currency: \"EUR\" })`; `server/src/pack.ts:110-111` sets `pptx.lang = \"en-IE\"`; the discovery filter is labelled \"Contract value range (EUR)\"; and demo value is the literal string `\"€49,000\"`. Currency is assumed rather than carried.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a notice from any source, When its value is ingested, Then the amount and its ISO currency code are stored separately and no formatted string is persisted as the value."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a stored value, When it is displayed, Then it renders in its own currency, never converted or relabelled."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a value-range filter, When I set it, Then the filter states which currency it applies to and compares only like currencies."
+        },
+        {
+          "id": "AC4",
+          "text": "Given a notice that states no value, When it is displayed, Then it says so rather than showing zero."
+        }
+      ]
+    },
+    {
+      "id": "R-86",
+      "summary": "Add a UK Standard Selection Questionnaire set alongside the ESPD declarations",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nThe declaration set is the gate on UK usability; without it the product cannot complete a UK bid.\n\n**Context**\n\n`server/src/declarations.ts` implements ESPD Part III (grounds for exclusion) and Part IV (selection criteria), which is the EU-wide instrument and ports across member states essentially unchanged. The UK does not use ESPD — it uses a Standard Selection Questionnaire and centrally held supplier information — so it needs a parallel set, reusing the same affirm-once-and-reuse machinery.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a workspace set to the UK, When I open declarations, Then I see the UK selection questions and not the ESPD parts."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a workspace set to Ireland or another EU market, When I open declarations, Then I see the ESPD parts unchanged."
+        },
+        {
+          "id": "AC3",
+          "text": "Given an answer that requires explanation, When I affirm without supplying detail, Then it is refused and names what is missing."
+        },
+        {
+          "id": "AC4",
+          "text": "Given declarations affirmed in one jurisdiction, When I switch jurisdiction, Then the original affirmations are preserved and not silently reused for the other set."
+        }
+      ]
+    },
+    {
+      "id": "R-87",
+      "summary": "Wire TED into discovery, handling language-keyed fields and CPV arrays",
+      "type": "Story",
+      "epic": "beyond-one",
+      "labels": [
+        "review-2026-09",
+        "beyond-one"
+      ],
+      "priority": "Low",
+      "points": 3,
+      "dependsOn": [],
+      "description": "**Why this matters**\n\nProves the source abstraction against a stable credential-free API and opens above-threshold EU coverage.\n\n**Context**\n\n`docs/DATA_SOURCES.md` verified `POST https://api.ted.europa.eu/v3/notices/search` needs no key for published notices and returns CPV in the listing, which eTenders does not. It also names the trap: `notice-title` and `buyer-name` are language-keyed objects like `{\"eng\": [\"…\"]}` and `classification-cpv` is an array, so an ingest assuming strings silently stores `[object Object]`.\n\n**Notes**\n\nRaised by the SaaS marketing analyst.",
+      "acceptanceCriteria": [
+        {
+          "id": "AC1",
+          "text": "Given a TED notice, When it is ingested, Then title and buyer are read from the language-keyed object and no field stores `[object Object]`."
+        },
+        {
+          "id": "AC2",
+          "text": "Given a TED notice with several CPV codes, When it is ingested, Then every code is normalised against the committed CPV list and matched with its ancestors."
+        },
+        {
+          "id": "AC3",
+          "text": "Given a notice available in several languages, When it is displayed, Then one language is chosen deterministically and the notice states which."
+        },
+        {
+          "id": "AC4",
+          "text": "Given both eTenders and TED publish the same competition, When discovery runs, Then it appears once, deduplicated on the shared reference."
+        }
+      ]
+    }
+  ]
+}

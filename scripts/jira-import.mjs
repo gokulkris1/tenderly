@@ -10,7 +10,9 @@
  *    into the auto-created Test ticket as its manual test script. Never vary the wording.
  *  - Idempotent: --dry-run, and a JQL check for an existing open issue with an identical
  *    summary before creating anything.
- *  - Writes backlog/created-issues.csv (key, type, summary, epic).
+ *  - Writes a report CSV beside the backlog it imported: backlog/backlog.json keeps
+ *    its historic name backlog/created-issues.csv, and any other input writes
+ *    backlog/created-<name>.csv, so importing one pass cannot erase another's record.
  *
  * Never creates Test or Bug issues — Jira automation owns those.
  *
@@ -20,6 +22,7 @@
  *   node scripts/jira-import.mjs --preflight        # check credentials, project, fields
  *   node scripts/jira-import.mjs                    # create for real
  *   node scripts/jira-import.mjs --only E1-01,E8-01 # subset
+ *   node scripts/jira-import.mjs --file backlog/x.json # import a different backlog file
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -44,7 +47,17 @@ const EMAIL = process.env.JIRA_EMAIL;
 const TOKEN = process.env.JIRA_API_TOKEN;
 const BASE = `https://${SITE}/rest/api/3`;
 
-const backlog = JSON.parse(readFileSync("backlog/backlog.json", "utf8"));
+// The backlog is no longer a single file. backlog/backlog.json is the original
+// pre-MVP plan; later passes add their own file so an import can never re-create
+// stories a previous pass has already closed.
+const FILE = val("--file") ?? "backlog/backlog.json";
+const backlog = JSON.parse(readFileSync(FILE, "utf8"));
+
+// Each backlog file reports into its own CSV. The original file keeps the name the
+// build prompt specified; anything else is named after its input, so re-importing
+// one pass never overwrites the record of another.
+const base = FILE.replace(/^.*\//, "").replace(/\.json$/, "");
+const reportPath = base === "backlog" ? "backlog/created-issues.csv" : `backlog/created-${base}.csv`;
 
 // ---------------------------------------------------------------- markdown -> ADF
 // Supports what the backlog actually uses: paragraphs, **bold**, `code`, "- " bullets,
@@ -145,15 +158,21 @@ async function preflight() {
   const acField = fields.find((f) => f.name?.toLowerCase() === "acceptance criteria");
   const pointsField = fields.find((f) => ["story points", "story point estimate"].includes(f.name?.toLowerCase()));
   const epicLink = fields.find((f) => f.name === "Epic Link");
+  // A team-managed (next-gen) project parents stories with `parent`. An "Epic Link"
+  // custom field may still exist site-wide because a classic project elsewhere on
+  // the site defines it — but it is not on this project's screens, so setting it
+  // fails every create with "cannot be set". Trust the project, not the field list.
+  const simplified = project.simplified === true || project.style === "next-gen";
   return {
     user: me.emailAddress ?? me.displayName,
     project: `${project.key} — ${project.name}`,
     style: project.style ?? "unknown",
+    simplified,
     issueTypes: types,
     missingTypes: ["Epic", "Story"].filter((t) => !types.includes(t)),
     acceptanceField: acField ? `${acField.name} (${acField.id})` : null,
     pointsField: pointsField ? `${pointsField.name} (${pointsField.id})` : null,
-    epicLinkField: epicLink?.id ?? null,
+    epicLinkField: simplified ? null : (epicLink?.id ?? null),
   };
 }
 
@@ -193,6 +212,13 @@ async function createIssue(item, opts) {
   } catch (e) {
     // Team-managed projects often omit priority / points from the create screen. Retry without them.
     const bad = Object.keys(e.body?.errors ?? {});
+    // An epic-link rejection means we guessed the project style wrong. Switch the
+    // whole run to `parent` rather than failing every remaining story the same way.
+    if (opts.ctx?.epicLinkField && bad.includes(opts.ctx.epicLinkField)) {
+      console.warn(`    ! ${item.id ?? item.slug}: ${opts.ctx.epicLinkField} rejected — switching to the parent field for the rest of the run`);
+      opts.ctx.epicLinkField = null;
+      return jiraRetry("/issue", { method: "POST", body: JSON.stringify(payloadFor(item, opts)) });
+    }
     if (bad.length && bad.every((f) => ["priority", opts.ctx?.pointsFieldId, opts.ctx?.acFieldId].includes(f))) {
       console.warn(`    ! ${item.id ?? item.slug}: dropping unsupported fields (${bad.join(", ")}) and retrying`);
       const p = payloadFor(item, opts);
@@ -213,6 +239,7 @@ async function main() {
   const epics = backlog.epics.filter((e) => !ONLY || epicSlugs.has(e.slug));
 
   console.log(`Site ${SITE}   Project ${PROJECT}   Mode ${DRY ? "DRY RUN" : PREFLIGHT ? "PREFLIGHT" : "CREATE"}`);
+  console.log(`Backlog ${FILE}`);
   console.log(`Epics ${epics.length}   Stories ${EPICS_ONLY ? 0 : stories.length}   (Test and Bug issues are never created here)\n`);
 
   const ctx = { supportsPriority: true };
@@ -229,7 +256,7 @@ async function main() {
     console.log(`  user            ${pf.user}`);
     console.log(`  project         ${pf.project}  (${pf.style})`);
     console.log(`  issue types     ${pf.issueTypes.join(", ")}`);
-    console.log(`  epic link       ${pf.epicLinkField ? pf.epicLinkField + " (classic)" : "parent field (team-managed)"}`);
+    console.log(`  epic link       ${pf.epicLinkField ? pf.epicLinkField + " (classic)" : `parent field (team-managed${pf.simplified ? "" : ", no Epic Link field found"})`}`);
     console.log(`  AC custom field ${pf.acceptanceField ?? "none — heading in description is the contract"}`);
     console.log(`  points field    ${pf.pointsField ?? "none"}`);
     if (pf.missingTypes.length) { console.error(`\n  MISSING issue types: ${pf.missingTypes.join(", ")} — create them before importing.`); process.exit(3); }
@@ -314,7 +341,7 @@ async function main() {
   if (!DRY) {
     mkdirSync("backlog", { recursive: true });
     const rows = [["key", "type", "summary", "epic"], ...[...report.created, ...report.skipped].map((r) => [r.key, r.type, r.summary, r.epic])];
-    writeFileSync("backlog/created-issues.csv", rows.map((r) => r.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(",")).join("\n") + "\n");
+    writeFileSync(reportPath, rows.map((r) => r.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(",")).join("\n") + "\n");
   }
 
   console.log(`\nCreated ${report.created.length}   Skipped (already present) ${report.skipped.length}   Failed ${report.failed.length}`);
@@ -323,7 +350,7 @@ async function main() {
     for (const f of report.failed) console.error(`  ${f.id}: ${f.error}`);
     process.exit(1);
   }
-  if (!DRY) console.log("Wrote backlog/created-issues.csv");
+  if (!DRY) console.log(`Wrote ${reportPath}`);
 }
 
 main().catch((e) => { console.error(e.message); process.exit(1); });
