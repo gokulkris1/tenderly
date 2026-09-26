@@ -41,7 +41,12 @@ export function loadOperatorEnv(file = SECRETS_FILE) {
     if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) {
       value = value.slice(1, -1);
     }
-    process.env[key] = value;
+    // Trailing whitespace in a credentials file is invisible and fatal: an
+    // email with a space on the end authenticates as nobody, and the 401 that
+    // comes back says nothing about why. Unquoted values were always trimmed by
+    // the shell; quoting them preserved the space and broke Jira auth twice
+    // before anyone thought to look at the character count.
+    process.env[key] = value.trim();
     loaded += 1;
   }
   return { loaded, file, found: true };
