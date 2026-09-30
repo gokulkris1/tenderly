@@ -4,6 +4,7 @@ import {
   getCompany, latestAffirmation, listActivePeople, listAnswers, listDeclarationAnswers, listEvidence,
   recordAnswerVersion, recordProvenance, saveAnswer,
 } from "./db.js";
+import { marker, markersIn } from "./markers.js";
 import { DRAFTING_PROMPT_VERSION, REFINE_PROMPT_VERSION } from "./prompts/index.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, TenderAnalysis, TenderRecord } from "./types.js";
 
@@ -59,11 +60,10 @@ export async function draftContext(account: string, tenderId: string): Promise<D
  */
 export function ensureInputMarkers(answer: string, missingInputs: string[]) {
   if (missingInputs.length === 0) return answer;
-  const already = new Set(
-    [...answer.matchAll(/\[INPUT NEEDED:\s*([^\]]+)\]/gi)].map((match) => match[1].trim().toLowerCase()));
+  const already = new Set(markersIn(answer).map((subject) => subject.toLowerCase()));
   const absent = missingInputs.filter((input) => !already.has(input.trim().toLowerCase()));
   if (absent.length === 0) return answer;
-  const markers = absent.map((input) => `[INPUT NEEDED: ${input}]`).join("\n");
+  const markers = absent.map(marker).join("\n");
   const prose = answer.trimEnd();
   return prose ? `${prose}\n\n${markers}` : markers;
 }
@@ -111,10 +111,9 @@ export async function streamAndSaveAnswer(args: {
   return persistDraft({ tender: args.tender, question: args.question, draft, actor: args.actor });
 }
 
-/** The [INPUT NEEDED: …] subjects named in a piece of prose. */
-export function markersIn(text: string) {
-  return [...text.matchAll(/\[INPUT NEEDED:\s*([^\]]+)\]/gi)].map((match) => match[1].trim());
-}
+// Re-exported because callers and tests already import it from here, and the
+// format itself now lives in markers.ts so the pack builder can share it.
+export { markersIn };
 
 /**
  * Carries every gap in the old answer into the new one.
@@ -126,8 +125,8 @@ export function markersIn(text: string) {
  * ten million" from working.
  */
 export function preserveMarkers(previous: string, revised: string) {
-  const kept = new Set(markersIn(revised).map((marker) => marker.toLowerCase()));
-  const lost = markersIn(previous).filter((marker) => !kept.has(marker.toLowerCase()));
+  const kept = new Set(markersIn(revised).map((subject) => subject.toLowerCase()));
+  const lost = markersIn(previous).filter((subject) => !kept.has(subject.toLowerCase()));
   return lost.length === 0 ? revised : ensureInputMarkers(revised, lost);
 }
 
