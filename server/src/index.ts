@@ -696,8 +696,27 @@ app.put("/api/tenders/:id/answers/:questionId", async (req: AuthenticatedRequest
     if (!tender?.analysis) return res.status(404).json({ error: "Tender analysis not found" });
     const questionId = routeParam(req.params.questionId);
     if (!tender.analysis.questions.some((question) => question.id === questionId)) return res.status(404).json({ error: "Scored question not found" });
-    const input = z.object({ response: z.string().max(120_000), status: z.enum(["draft", "ready", "needs-input"]).default("draft") }).parse(req.body);
-    const answer = await saveAnswer(tender.id, questionId, input.response, input.status);
+    // `evidence` is optional and means "replace the citations with exactly
+    // these". Omitting it keeps whatever the answer already cited (TLY-249):
+    // editing wording is not a statement about evidence, and this route used to
+    // treat it as one, wiping the citations of every answer a human touched.
+    const input = z.object({
+      response: z.string().max(120_000),
+      status: z.enum(["draft", "ready", "needs-input"]).default("draft"),
+      evidence: z.array(z.string().max(64)).max(50).optional(),
+    }).parse(req.body);
+
+    // A citation must point at something real. serializeTender drops an id that
+    // no longer resolves, by design — which is exactly why a bad id written here
+    // would never show up as an error, only as an answer that quietly cites less
+    // than it claims.
+    if (input.evidence?.length) {
+      const known = new Set((await listEvidence(account)).map((item) => item.id));
+      const unknown = input.evidence.filter((id) => !known.has(id));
+      if (unknown.length) return res.status(400).json({ error: `Not in this account's evidence library: ${unknown.join(", ")}` });
+    }
+
+    const answer = await saveAnswer(tender.id, questionId, input.response, input.status, input.evidence);
     if (input.status === "ready") {
       const title = tender.analysis.questions.find((question) => question.id === questionId)?.title ?? questionId;
       await audit(req, { action: AUDIT_ACTIONS.answerMarkedReady, subjectType: "answer", subjectId: answer.id, subjectLabel: title });
