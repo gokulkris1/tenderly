@@ -35,8 +35,20 @@ function titleBlock(title: string, subtitle: string) {
   ];
 }
 
+/**
+ * The response document the buyer reads.
+ *
+ * Scoped to the lots being bid. It used to iterate every question in the
+ * analysis while the blocker check, the gates and the screen all filtered by
+ * `selectedLots` — so a bidder on lot 2 of four downloaded a final pack whose
+ * response document carried lots 1, 3 and 4's questions, each answered
+ * "[RESPONSE REQUIRED]", and nothing blocked it because those questions were
+ * out of scope for the blocker pass (TLY-239).
+ */
 async function makeResponseDoc(tender: TenderRecord, analysis: TenderAnalysis, answers: BidAnswer[], company: CompanyProfile) {
   const answerMap = new Map(answers.map((answer) => [answer.questionId, answer]));
+  const selection = selectedLots(tender);
+  const questions = analysis.questions.filter((question) => inScope(question.lotId, selection));
   const children = [
     ...titleBlock("Tender Response", `${tender.title} · ${tender.authority}`),
     paragraph("Tenderer", { heading: HeadingLevel.HEADING_1 }),
@@ -44,7 +56,7 @@ async function makeResponseDoc(tender: TenderRecord, analysis: TenderAnalysis, a
     paragraph("Executive summary", { heading: HeadingLevel.HEADING_1 }),
     paragraph(analysis.executiveSummary),
   ];
-  for (const [index, question] of analysis.questions.entries()) {
+  for (const [index, question] of questions.entries()) {
     children.push(paragraph(`${index + 1}. ${question.title}`, { heading: HeadingLevel.HEADING_1 }));
     if (question.prompt) children.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: question.prompt, italics: true, color: MUTED, font: "Aptos", size: 18 })] }));
     const answer = answerMap.get(question.id);
@@ -79,9 +91,35 @@ async function makeEvidenceRegister(tender: TenderRecord, evidence: EvidenceReco
   return Packer.toBuffer(new Document({ sections: [{ properties: {}, children }] }));
 }
 
+/**
+ * The people a bid names, in the order their roles appear in the analysis.
+ *
+ * `metadata.roleAssignments` maps a required role to the person chosen for it,
+ * so its values are the whole of what the bid proposes. Anyone else on the
+ * account is a colleague who has nothing to do with this tender.
+ */
+export function citedPeople(tender: TenderRecord, people: PersonRecord[]) {
+  const assignments = (tender.metadata.roleAssignments ?? {}) as Record<string, string>;
+  const byId = new Map(people.map((person) => [person.id, person]));
+  const seen = new Set<string>();
+  const cited: PersonRecord[] = [];
+  for (const personId of Object.values(assignments)) {
+    if (!personId || seen.has(personId)) continue;
+    const person = byId.get(personId);
+    if (!person) continue;
+    seen.add(personId);
+    cited.push(person);
+  }
+  return cited;
+}
+
 async function makeCv(person: PersonRecord) {
   const children = [
     ...titleBlock(person.name, person.title || "Proposed personnel"),
+    // Said plainly rather than left for the buyer to discover. An archived
+    // person can still be the right answer to a role, but the bid should not
+    // imply they are currently on staff.
+    ...(person.archivedAt ? [paragraph(`No longer an active member of staff (archived ${person.archivedAt.slice(0, 10)}).`)] : []),
     paragraph("Skills", { heading: HeadingLevel.HEADING_1 }),
     paragraph(person.skills.join(" · ") || "See CV profile"),
     paragraph("Experience", { heading: HeadingLevel.HEADING_1 }),
@@ -221,7 +259,16 @@ export async function createSubmissionPack(args: { tender: TenderRecord; analysi
   const zip = new JSZip();
   const prefix = args.draft ? "DRAFT_" : "";
   zip.file(`${prefix}01_Tender_Response.docx`, await makeResponseDoc(args.tender, args.analysis, args.answers, args.company));
-  for (const [index, person] of args.people.entries()) zip.file(`${prefix}${String(index + 2).padStart(2, "0")}_CV_${safeFilename(person.name)}.docx`, await makeCv(person));
+  // Only the people this bid actually names. The route hands over every person
+  // on the account, archived included, and this loop used to write a CV for
+  // each — shipping former employees' CVs to buyers who never asked for them
+  // (TLY-239). That is a correctness failure and a personal-data disclosure.
+  // An assigned person who has since been archived is still included: their CV
+  // is part of what the bid proposes, and dropping it would leave a named role
+  // with no CV behind it.
+  for (const [index, person] of citedPeople(args.tender, args.people).entries()) {
+    zip.file(`${prefix}${String(index + 2).padStart(2, "0")}_CV_${safeFilename(person.name)}.docx`, await makeCv(person));
+  }
   for (const document of args.documents.filter((item) => item.role === "submission" && item.bytes)) zip.file(safeFilename(document.filename), document.bytes!);
 
   // The last mile travels with every pack, draft or final: whoever opens the

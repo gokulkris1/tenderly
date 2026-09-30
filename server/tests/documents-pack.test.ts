@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import ExcelJS from "exceljs";
 import { extractDocumentText } from "../src/documents.js";
-import { createSubmissionPack, createSynopsisDeck, submissionBlockers } from "../src/pack.js";
+import { citedPeople, createSubmissionPack, createSynopsisDeck, submissionBlockers } from "../src/pack.js";
 import { certificateStatus } from "../src/serializers.js";
-import type { CompanyProfile, EvidenceRecord, RequiredCertificate, TenderAnalysis, TenderRecord } from "../src/types.js";
+import type { CompanyProfile, EvidenceRecord, PersonRecord, RequiredCertificate, TenderAnalysis, TenderRecord } from "../src/types.js";
 
 const evidence = { sourceDocument: "RFT.docx", quote: "The competition is open to suitably qualified tenderers.", confidence: "HIGH" as const };
 const analysis: TenderAnalysis = {
@@ -145,4 +145,92 @@ test("TLY-236: an answered optional question is checked too", () => {
 
   // An unanswered optional question is not a blocker.
   assert.equal(submissionBlockers(tender, optional, [], []).some((b) => b.includes("Social value")), false);
+});
+
+test("TLY-239: the pack carries only the CVs this bid names", async () => {
+  const person = (id: string, name: string, over: Partial<PersonRecord> = {}): PersonRecord =>
+    ({ id, accountId: "a1", name, title: "Consultant", cvText: `${name} experience`, skills: ["delivery"], ...over });
+
+  const roster = [
+    person("p1", "Assigned One"), person("p2", "Assigned Two"), person("p3", "Assigned Three"),
+    person("p4", "Uninvolved Colleague"),
+    person("p5", "Former Employee", { archivedAt: "2025-02-01T00:00:00.000Z" }),
+  ];
+
+  // Three roles filled. p4 has nothing to do with this tender, and p5 left.
+  const assigned = { ...tender, metadata: { roleAssignments: { "project-manager": "p1", "lead-engineer": "p2", "qa-lead": "p3" } } } as TenderRecord;
+  const cited = citedPeople(assigned, roster);
+  assert.deepEqual(cited.map((p) => p.name), ["Assigned One", "Assigned Two", "Assigned Three"],
+    "an uninvolved colleague's CV must never reach a buyer");
+
+  // An assigned person who has since been archived is still part of the bid.
+  const withFormer = { ...tender, metadata: { roleAssignments: { "project-manager": "p1", "qa-lead": "p5" } } } as TenderRecord;
+  assert.deepEqual(citedPeople(withFormer, roster).map((p) => p.name), ["Assigned One", "Former Employee"]);
+
+  // No assignments means no CVs, not every CV.
+  assert.deepEqual(citedPeople({ ...tender, metadata: {} } as TenderRecord, roster), []);
+
+  // The same person on two roles appears once.
+  const doubled = { ...tender, metadata: { roleAssignments: { a: "p1", b: "p1" } } } as TenderRecord;
+  assert.equal(citedPeople(doubled, roster).length, 1);
+
+  // And an assignment naming somebody no longer on the account is skipped
+  // rather than throwing while the pack is being built.
+  const stale = { ...tender, metadata: { roleAssignments: { a: "gone" } } } as TenderRecord;
+  assert.deepEqual(citedPeople(stale, roster), []);
+
+  // The pack itself, not just the helper: the whole roster goes in, and only
+  // the named CVs must come out.
+  const pack = await createSubmissionPack({
+    tender: withFormer, analysis, answers: [], documents: [], company,
+    people: roster, evidence: [], draft: true,
+  });
+  assert.ok(pack.buffer);
+  const zip = await (await import("jszip")).default.loadAsync(pack.buffer!);
+  const cvs = Object.keys(zip.files).filter((name) => name.includes("_CV_"));
+  assert.equal(cvs.length, 2, `expected two CVs, got ${JSON.stringify(cvs)}`);
+  assert.ok(cvs.some((n) => n.includes("Assigned One")), JSON.stringify(cvs));
+  assert.ok(cvs.some((n) => n.includes("Former Employee")), JSON.stringify(cvs));
+  assert.equal(cvs.some((n) => n.includes("Uninvolved")), false,
+    "an uninvolved colleague's CV reached the buyer");
+  assert.equal(cvs.some((n) => n.includes("Assigned Two")), false);
+});
+
+test("TLY-239: the response document covers only the lots being bid", async () => {
+  const fourLots: TenderAnalysis = {
+    ...analysis,
+    lots: [{ id: "Lot 1", title: "One" }, { id: "Lot 2", title: "Two" }, { id: "Lot 3", title: "Three" }],
+    questions: [
+      { ...analysis.questions[0], id: "q-all", title: "Whole tender question", lotId: "" },
+      { ...analysis.questions[0], id: "q-1", title: "Lot one question", lotId: "Lot 1" },
+      { ...analysis.questions[0], id: "q-2", title: "Lot two question", lotId: "Lot 2" },
+      { ...analysis.questions[0], id: "q-3", title: "Lot three question", lotId: "Lot 3" },
+    ],
+  } as TenderAnalysis;
+
+  const onLotTwo = { ...tender, metadata: { selectedLots: ["Lot 2"] } } as TenderRecord;
+  const answers = [
+    { id: "x", tenderId: "t1", questionId: "q-all", response: "Whole tender answer.", status: "ready", evidence: [] },
+    { id: "y", tenderId: "t1", questionId: "q-2", response: "Lot two answer.", status: "ready", evidence: [] },
+  ];
+
+  const pack = await createSubmissionPack({
+    tender: onLotTwo, analysis: fourLots, answers, documents: [], company,
+    people: [], evidence: [], draft: true,
+  });
+  assert.ok(pack.buffer);
+
+  // The pack is a ZIP whose response document is a .docx — itself a ZIP — so the
+  // question text lives in the inner archive's word/document.xml.
+  const JSZipLib = (await import("jszip")).default;
+  const zip = await JSZipLib.loadAsync(pack.buffer!);
+  const responseName = Object.keys(zip.files).find((n) => n.includes("Tender_Response"))!;
+  const docx = await JSZipLib.loadAsync(await zip.file(responseName)!.async("nodebuffer"));
+  const xml = await docx.file("word/document.xml")!.async("string");
+
+  assert.match(xml, /Whole tender question/);
+  assert.match(xml, /Lot two question/);
+  assert.doesNotMatch(xml, /Lot one question/, "another lot's question must not reach the buyer");
+  assert.doesNotMatch(xml, /Lot three question/);
+  assert.doesNotMatch(xml, /RESPONSE REQUIRED/, "no unanswered out-of-scope question should remain");
 });
