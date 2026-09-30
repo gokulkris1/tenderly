@@ -1,9 +1,15 @@
 services:
+  # --include=dev is load-bearing. NODE_ENV is set to production below, and npm
+  # skips devDependencies when it is — but typescript and @types/node are
+  # devDependencies, so a plain `npm ci` here builds nothing and the deploy dies
+  # on "Cannot find type definition file for 'node'". The live API service only
+  # ever worked because it was created by hand without NODE_ENV set; applying
+  # this blueprint as written would have broken it.
   - type: web
     name: tenderly-api
     runtime: node
     rootDir: server
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /health
     autoDeployTrigger: commit
@@ -55,7 +61,7 @@ services:
     plan: starter
     rootDir: server
     schedule: "0 4 * * *"
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run job:discover
     envVars:
       - key: NODE_VERSION
@@ -93,7 +99,7 @@ services:
     plan: starter
     rootDir: server
     schedule: "45 3 * * *"
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run job:deletions
     envVars:
       - key: NODE_VERSION
