@@ -1658,8 +1658,14 @@ app.get("/api/tenders/:id/pack", packLimiter, async (req: AuthenticatedRequest, 
     if (!tender) return res.status(404).json({ error: "Tender not found" });
     if (!tender.analysis) return res.status(409).json({ error: "Analyse the tender before building a pack" });
     const draft = String(req.query.draft).toLowerCase() === "true";
-    // The pack lists whoever this bid actually cites, archived or not: the CV
-    // that went to the buyer is part of what was submitted.
+    // Every person on the account is passed in, archived included, and the pack
+    // builder picks out the ones this bid actually names via its role
+    // assignments. Archived people are deliberately still available to it: a CV
+    // that went to a buyer is part of what was submitted, and a named role with
+    // no CV behind it is worse than one whose CV says the person has left.
+    //
+    // This comment used to claim the pack listed only whoever the bid cites. It
+    // did not — it wrote a CV for all of them (TLY-239).
     const [answers, documents, company, people, evidence] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id), getCompany(account), listPeople(account), listEvidence(account)]);
     const unfillable = await unfillableRoles(account, tender);
     const result = await createSubmissionPack({ tender, analysis: tender.analysis, answers, documents, company, people, evidence, provenance: await tenderProvenance(tender.id), unfillableRoles: unfillable, draft });
