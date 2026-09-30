@@ -756,18 +756,43 @@ export async function listDocuments(tenderId: string) {
   return result.rows.map((row) => ({ id: row.id, tenderId: row.tender_id, filename: row.filename, mimeType: row.mime_type, role: row.role, sourceUrl: row.source_url ?? undefined, bytes: row.bytes ?? undefined, extractedText: row.extracted_text, extractionStatus: row.extraction_status } as StoredDocument));
 }
 
-export async function saveAnswer(tenderId: string, questionId: string, response: string, status: string, evidence: string[] = []) {
+/**
+ * Writes an answer, preserving its citations unless new ones are supplied.
+ *
+ * `evidence` used to default to `[]`, which meant every caller that did not
+ * think about citations silently erased them. The ordinary human-edit path did
+ * exactly that (TLY-249): tidying the wording of an AI draft destroyed the list
+ * of vault items the claim rested on, and the append-only provenance entry
+ * written immediately afterwards recorded `evidenceIds: []` as fact — asserting
+ * for good that the answer cited nothing.
+ *
+ * So `undefined` now means "leave the citations alone" and only an explicit
+ * array replaces them. An omission cannot destroy evidence, which is the
+ * behaviour a data layer owes its callers when the cost of forgetting is a
+ * permanent false record.
+ */
+export async function saveAnswer(tenderId: string, questionId: string, response: string, status: string, evidence?: string[]) {
   if (!pool) {
     const key = `${tenderId}:${questionId}`;
     const existing = memory.answers.get(key);
-    const answer: BidAnswer = { id: existing?.id ?? randomUUID(), tenderId, questionId, response, status, evidence };
+    const answer: BidAnswer = {
+      id: existing?.id ?? randomUUID(), tenderId, questionId, response, status,
+      evidence: evidence ?? existing?.evidence ?? [],
+    };
     memory.answers.set(key, answer);
     return answer;
   }
   const result = await pool.query(
     `INSERT INTO bid_answers(id,tender_id,question_id,response,status,evidence_json) VALUES($1,$2,$3,$4,$5,$6)
-     ON CONFLICT(tender_id,question_id) DO UPDATE SET response=EXCLUDED.response,status=EXCLUDED.status,evidence_json=EXCLUDED.evidence_json,updated_at=now() RETURNING *`,
-    [randomUUID(), tenderId, questionId, response, status, JSON.stringify(evidence)],
+     ON CONFLICT(tender_id,question_id) DO UPDATE SET
+       response=EXCLUDED.response,
+       status=EXCLUDED.status,
+       -- $7 is null when the caller supplied no citations, which keeps the row's own.
+       evidence_json=COALESCE($7::jsonb, bid_answers.evidence_json),
+       updated_at=now()
+     RETURNING *`,
+    [randomUUID(), tenderId, questionId, response, status, JSON.stringify(evidence ?? []),
+     evidence ? JSON.stringify(evidence) : null],
   );
   const row = result.rows[0];
   return { id: row.id, tenderId: row.tender_id, questionId: row.question_id, response: row.response, status: row.status, evidence: row.evidence_json ?? [] } as BidAnswer;
