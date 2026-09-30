@@ -1609,13 +1609,12 @@ app.get("/api/tenders/:id/red-team", async (req: AuthenticatedRequest, res) => {
     if (!tender) return res.status(404).json({ error: "Tender not found" });
     if (!tender.analysis) return res.status(409).json({ error: "Analyse the tender first" });
     const [answers, documents] = await Promise.all([listAnswers(tender.id), listDocuments(tender.id)]);
-    const issues = submissionBlockers(tender, tender.analysis, answers, documents, await listEvidence(account), await unfillableRoles(account, tender)).map((message) => ({ severity: "BLOCKER", message }));
-    for (const question of tender.analysis.questions) {
-      const answer = answers.find((item) => item.questionId === question.id);
-      const words = answer?.response.trim() ? answer.response.trim().split(/\s+/).length : 0;
-      if (question.maxWords > 0 && words > question.maxWords) issues.push({ severity: "BLOCKER", message: `${question.title}: ${words} words exceeds the ${question.maxWords}-word limit` });
-      if (answer?.response.includes("[INPUT NEEDED:")) issues.push({ severity: "BLOCKER", message: `${question.title}: unresolved INPUT NEEDED placeholder` });
-    }
+    // Delegates entirely to submissionBlockers (TLY-236). The word-limit and
+    // [INPUT NEEDED] checks used to be written out here and nowhere else, so
+    // this endpoint said a bid was not ready while the pack endpoint handed
+    // over the ZIP. One list, one verdict, or they drift apart again.
+    const issues = submissionBlockers(tender, tender.analysis, answers, documents, await listEvidence(account), await unfillableRoles(account, tender))
+      .map((message) => ({ severity: "BLOCKER", message }));
     res.json({ ready: !issues.length, issues });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });

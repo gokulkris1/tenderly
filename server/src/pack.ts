@@ -5,6 +5,7 @@ import { certificateStatus, inScope, selectedLots } from "./serializers.js";
 import { rollUpEligibility } from "./eligibility.js";
 import { attestationValid, provenanceSummaryFile, type Attestation } from "./attestation.js";
 import { buildRunbook, runbookText } from "./runbook.js";
+import { markersIn } from "./markers.js";
 import type { BidAnswer, CompanyProfile, EvidenceRecord, PersonRecord, ProvenanceEntry, StoredDocument, TenderAnalysis, TenderRecord } from "./types.js";
 
 const INK = "17332B";
@@ -183,6 +184,25 @@ export function submissionBlockers(
   analysis.questions.filter((question) => question.required && inScope(question.lotId, selection)).forEach((question) => {
     const answer = answerMap.get(question.id);
     if (!answer?.response.trim() || answer.status !== "ready") blockers.push(`Required response not ready: ${question.title}`);
+  });
+  // TLY-236. These two checks existed only in the advisory red-team endpoint, so
+  // the FINAL pack could be built — and sent to a buyer — carrying an unresolved
+  // [INPUT NEEDED: …] placeholder, or an answer over a word limit the buyer
+  // treats as a hard rule and marks to zero. The whole product exists to say
+  // "we do not know this" out loud instead of inventing it; shipping that
+  // sentence into the buyer's inbox is the one way that promise turns against
+  // the bidder. Every optional question is checked too, not just the required
+  // ones: an answered optional question is in the response document either way.
+  analysis.questions.filter((question) => inScope(question.lotId, selection)).forEach((question) => {
+    const response = answerMap.get(question.id)?.response.trim();
+    if (!response) return;
+    const gaps = markersIn(response);
+    if (gaps.length) blockers.push(`${question.title}: unresolved [INPUT NEEDED] — ${gaps.join("; ")}`);
+    // Counted the same way the red-team endpoint counted, so the two agree.
+    const words = response.split(/\s+/).length;
+    if (question.maxWords > 0 && words > question.maxWords) {
+      blockers.push(`${question.title}: ${words} words exceeds the ${question.maxWords}-word limit`);
+    }
   });
   const overrides = (tender.metadata.checklistOverrides ?? {}) as Record<string, string>;
   analysis.submissionChecklist.filter((item) => item.required && item.status !== "READY" && overrides[item.id] !== "READY").forEach((item) => blockers.push(`Submission item needs action: ${item.label}`));

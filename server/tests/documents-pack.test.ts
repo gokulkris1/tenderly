@@ -73,3 +73,76 @@ test("an expired certificate blocks the final pack and the blocker names the exp
   assert.equal(satisfied.satisfied, true);
   assert.equal(satisfied.expiredBy, undefined);
 });
+
+test("TLY-236: the final pack is blocked by an unresolved [INPUT NEEDED] placeholder", async () => {
+  // Everything else about this bid is in order: the answer is marked ready by a
+  // human, and it is the only required question. The placeholder is the one
+  // thing wrong with it, and it used to be checked only by the advisory
+  // red-team endpoint — so the final ZIP was handed over with the words
+  // "[INPUT NEEDED: 2025 audited turnover]" inside the buyer's own document.
+  const withGap = {
+    id: "a", tenderId: "t1", questionId: "q1", status: "ready", evidence: [],
+    response: "We will deliver to the stated schedule. [INPUT NEEDED: 2025 audited turnover]",
+  };
+  const attested = { ...tender, metadata: { attestation: undefined } } as TenderRecord;
+
+  const blockers = submissionBlockers(attested, analysis, [withGap], []);
+  const gap = blockers.find((b) => b.includes("[INPUT NEEDED]"));
+  assert.ok(gap, `expected an INPUT NEEDED blocker, got: ${JSON.stringify(blockers)}`);
+  assert.match(gap, /Methodology/);
+  assert.match(gap, /2025 audited turnover/, "the blocker must name the missing fact, not just that one exists");
+
+  // And the pack itself must refuse, not merely report.
+  const pack = await createSubmissionPack({
+    tender: attested, analysis, answers: [withGap], documents: [], company,
+    people: [], evidence: [], draft: false,
+  });
+  assert.equal(pack.buffer, null, "a pack carrying a placeholder must not be produced");
+  assert.ok(pack.blockers.some((b) => b.includes("[INPUT NEEDED]")));
+
+  // The draft pack is still available: that is how the bidder sees what is left.
+  const draft = await createSubmissionPack({
+    tender: attested, analysis, answers: [withGap], documents: [], company,
+    people: [], evidence: [], draft: true,
+  });
+  assert.ok(draft.buffer, "the draft pack must still be downloadable");
+});
+
+test("TLY-236: the final pack is blocked by an answer over the buyer's word limit", () => {
+  // maxWords is 700 on q1. Buyers commonly stop reading at the limit or mark
+  // the answer to zero, so over-limit is a formality failure, not a style note.
+  const tooLong = {
+    id: "a", tenderId: "t1", questionId: "q1", status: "ready", evidence: [],
+    response: Array.from({ length: 701 }, (_, i) => `word${i}`).join(" "),
+  };
+  const blockers = submissionBlockers(tender, analysis, [tooLong], []);
+  const over = blockers.find((b) => b.includes("exceeds"));
+  assert.ok(over, `expected a word-limit blocker, got: ${JSON.stringify(blockers)}`);
+  assert.match(over, /701 words exceeds the 700-word limit/);
+
+  // Exactly at the limit is allowed — the limit is inclusive.
+  const atLimit = { ...tooLong, response: Array.from({ length: 700 }, (_, i) => `word${i}`).join(" ") };
+  assert.equal(submissionBlockers(tender, analysis, [atLimit], []).some((b) => b.includes("exceeds")), false);
+
+  // A question with no stated limit is never blocked for length.
+  const unlimited = { ...analysis, questions: [{ ...analysis.questions[0], maxWords: 0 }] };
+  assert.equal(submissionBlockers(tender, unlimited, [tooLong], []).some((b) => b.includes("exceeds")), false);
+});
+
+test("TLY-236: an answered optional question is checked too", () => {
+  // The response document carries optional answers as well, so a placeholder in
+  // one reaches the buyer exactly the same way.
+  const optional = {
+    ...analysis,
+    questions: [{ ...analysis.questions[0], id: "q2", title: "Social value", required: false, maxWords: 0 }],
+  };
+  const answer = {
+    id: "b", tenderId: "t1", questionId: "q2", status: "ready", evidence: [],
+    response: "Our approach. [INPUT NEEDED: community partner name]",
+  };
+  const blockers = submissionBlockers(tender, optional, [answer], []);
+  assert.ok(blockers.some((b) => b.includes("Social value") && b.includes("[INPUT NEEDED]")));
+
+  // An unanswered optional question is not a blocker.
+  assert.equal(submissionBlockers(tender, optional, [], []).some((b) => b.includes("Social value")), false);
+});
