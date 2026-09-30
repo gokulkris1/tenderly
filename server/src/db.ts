@@ -603,6 +603,62 @@ export async function listAllCompanies() {
   return result.rows.map((row) => ({ accountId: row.account_id as string, company: { ...row.profile_json, name: row.name, registration: row.registration, turnover: row.turnover, employees: row.employees, services: row.services, cpv: row.cpv, certifications: row.certifications, insurance: row.insurance } as CompanyProfile }));
 }
 
+/** Metadata keys that belong to the person working the bid, never to the notice. */
+const USER_OWNED_METADATA = [
+  "attestation", "selectedLots", "checklistOverrides", "noAiMode", "aiPolicyAcknowledgement",
+  "roleAssignments", "runbookTicks", "questionsNeedingReview", "amendments", "decisionNeedsReconfirmation",
+] as const;
+
+/**
+ * Merges incoming notice metadata over what is already stored.
+ *
+ * `metadata=EXCLUDED.metadata` replaced the whole jsonb, so re-importing a
+ * notice — the obvious thing to do when a buyer publishes an addendum — silently
+ * cleared the attestation, the lot selection, every checklist override and the
+ * no-AI flag on a tender that prohibits AI content, and then re-analysed and
+ * re-drafted against it (TLY-247). Every one of those is a decision a human
+ * made; a refetch of the buyer's page is not new information about any of them.
+ *
+ * Shallow is the right depth: each of those keys is top-level.
+ */
+function mergeTenderMetadata(
+  existing: { metadata?: Record<string, unknown> } | undefined,
+  incoming: { metadata: Record<string, unknown> },
+) {
+  const merged: Record<string, unknown> = { ...(existing?.metadata ?? {}), ...incoming.metadata };
+  // A refetched buyer page can never speak for a decision a person made, so a
+  // stored user-owned key wins outright even if the incoming metadata carries
+  // the same name. updateTenderMetadata is the only route that may change these.
+  for (const key of USER_OWNED_METADATA) {
+    if (existing?.metadata && key in existing.metadata) merged[key] = existing.metadata[key];
+  }
+  return merged;
+}
+
+/**
+ * Notes a changed deadline so a recorded bid decision can be re-confirmed.
+ *
+ * A deadline that moves is the single most consequential thing an addendum can
+ * do, and a decision to bid was taken against the old one. Recorded rather than
+ * acted on: this layer does not know who decided what, only that the ground
+ * moved.
+ */
+function noteDeadlineAmendment(
+  existing: { deadline?: string; metadata?: Record<string, unknown> } | undefined,
+  incoming: { deadline: string },
+  metadata: Record<string, unknown>,
+) {
+  const before = (existing?.deadline ?? "").trim();
+  const after = (incoming.deadline ?? "").trim();
+  if (!existing || !before || !after || before === after) return metadata;
+  const amendments = Array.isArray(metadata.amendments) ? metadata.amendments : [];
+  return {
+    ...metadata,
+    amendments: [...amendments, { at: new Date().toISOString(), field: "deadline", from: before, to: after }],
+    decisionNeedsReconfirmation: true,
+  };
+}
+
 export async function upsertTender(accountId: string, tender: Omit<TenderRecord, "id" | "accountId" | "analysis"> & { id?: string; analysis?: TenderAnalysis | null }) {
   const identity = canonicalKey(tender as unknown as PublicTender & { metadata?: Record<string, unknown> });
 
@@ -615,6 +671,10 @@ export async function upsertTender(accountId: string, tender: Omit<TenderRecord,
       id: twin?.id ?? tender.id ?? randomUUID(),
       accountId,
       analysis: tender.analysis ?? twin?.analysis ?? null,
+      // Spreading `tender` would replace the metadata object outright, taking
+      // the attestation and the lot selection with it (TLY-247). Merge instead,
+      // exactly as the twin branch below already does.
+      metadata: noteDeadlineAmendment(twin ?? sameSource, tender, mergeTenderMetadata(twin ?? sameSource, tender)),
       cpvNormalised: rawCpvOf(tender.metadata) ?? twin?.cpvNormalised,
       canonicalKey: identity.key,
       // A twin keeps its own source and body: the record already worked on wins.
@@ -643,13 +703,24 @@ export async function upsertTender(accountId: string, tender: Omit<TenderRecord,
     return mapTenderRow(updated.rows[0]);
   }
 
-  const id = tender.id ?? randomUUID();
+  // Read the row this upsert may land on, so its user-owned metadata can be
+  // carried forward rather than overwritten (TLY-247). One extra SELECT on a
+  // path that runs once per imported notice, in exchange for not destroying
+  // the bid record every time a buyer publishes an addendum.
+  const priorRow = await pool.query(
+    `SELECT * FROM tenders WHERE account_id=$1 AND source=$2 AND external_id IS NOT DISTINCT FROM $3 LIMIT 1`,
+    [accountId, tender.source, tender.externalId || null],
+  );
+  const prior = priorRow.rows[0] ? mapTenderRow(priorRow.rows[0]) : undefined;
+  const metadata = noteDeadlineAmendment(prior, tender, mergeTenderMetadata(prior, tender));
+
+  const id = prior?.id ?? tender.id ?? randomUUID();
   const result = await pool.query(
     `INSERT INTO tenders(id,account_id,source,external_id,source_url,title,authority,description,procedure,deadline,published,estimated_value,status,metadata,analysis,cpv_normalised,canonical_key)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'IMPORTED',$13,$14,$15,$16)
      ON CONFLICT(account_id,source,external_id) DO UPDATE SET source_url=EXCLUDED.source_url,title=EXCLUDED.title,authority=EXCLUDED.authority,description=EXCLUDED.description,procedure=EXCLUDED.procedure,deadline=EXCLUDED.deadline,published=EXCLUDED.published,estimated_value=EXCLUDED.estimated_value,metadata=EXCLUDED.metadata,analysis=COALESCE(EXCLUDED.analysis,tenders.analysis),cpv_normalised=EXCLUDED.cpv_normalised,canonical_key=EXCLUDED.canonical_key,updated_at=now()
      RETURNING *`,
-    [id, accountId, tender.source, tender.externalId || null, tender.sourceUrl, tender.title, tender.authority, tender.description, tender.procedure, tender.deadline, tender.published, tender.estimatedValue, JSON.stringify(tender.metadata), tender.analysis ? JSON.stringify(tender.analysis) : null, rawCpvOf(tender.metadata), identity.key],
+    [id, accountId, tender.source, tender.externalId || null, tender.sourceUrl, tender.title, tender.authority, tender.description, tender.procedure, tender.deadline, tender.published, tender.estimatedValue, JSON.stringify(metadata), tender.analysis ? JSON.stringify(tender.analysis) : null, rawCpvOf(tender.metadata), identity.key],
   );
   return mapTenderRow(result.rows[0]);
 }
