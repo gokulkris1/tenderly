@@ -5,6 +5,7 @@ import pg from "pg";
 import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
 import { allCpvCodes, cpvAncestors, normaliseCpv } from "./cpv.js";
 import { canonicalKey } from "./dedupe.js";
+import { parseDeadline } from "./pressure.js";
 import type { IngestionRun } from "./ingestion-health.js";
 import type { AnswerVersion } from "./versions.js";
 import type { MockEvaluation } from "./evaluation.js";
@@ -1435,7 +1436,10 @@ export async function applyRetention(policy: { id: string; label: string; cutoff
   const dryRun = options.dryRun ?? false;
   const removed: { id: string; label: string; count: number; cutoff: string }[] = [];
   const removedTenders: { id: string; title: string }[] = [];
-  if (!pool) return { removed, removedTenders, dryRun };
+  // Past the cutoff but deliberately kept, each with the reason. Reported so a
+  // person can decide, rather than silently either deleted or ignored.
+  const retained: { id: string; title: string; reason: string }[] = [];
+  if (!pool) return { removed, removedTenders, retained, dryRun };
 
   const client = await pool.connect();
   try {
@@ -1446,17 +1450,69 @@ export async function applyRetention(policy: { id: string; label: string; cutoff
 
       if (entry.id === "closed-tenders") {
         // A tender is closed once its deadline has passed. Documents, answers
-        // and provenance go with it through ON DELETE CASCADE.
-        const doomed = await client.query(
-          `SELECT id, title FROM tenders
-            WHERE updated_at < $1
-              AND status <> 'SUBMITTED'`,
+        // and provenance go with it through ON DELETE CASCADE — which is why
+        // what this query selects matters more than anything else in the job.
+        //
+        // The old guard was `status <> 'SUBMITTED'` alone. Nothing in the
+        // codebase writes 'SUBMITTED', so it never excluded a single row, and
+        // every tender untouched for the retention period was deleted along
+        // with its answers, its answer_versions and its answer_provenance.
+        // Migration 004 makes those three append-only against UPDATE and
+        // deliberately leaves DELETE alone, on the reasoning that the only
+        // deletion is a cascade from an answer somebody removed on purpose.
+        // A bulk job on a timer is not that (TLY-245).
+        const candidates = await client.query(
+          `SELECT t.id, t.title, t.deadline, t.status,
+                  EXISTS (
+                    SELECT 1 FROM bid_answers a
+                     JOIN answer_provenance p ON p.answer_id = a.id
+                    WHERE a.tender_id = t.id
+                  ) AS has_provenance,
+                  EXISTS (SELECT 1 FROM bid_decisions d WHERE d.tender_id = t.id) AS has_decision
+             FROM tenders t
+            WHERE t.updated_at < $1
+              AND t.status <> 'SUBMITTED'`,
           [iso],
         );
-        removedTenders.push(...doomed.rows.map((row) => ({ id: String(row.id), title: String(row.title) })));
-        count = doomed.rowCount ?? 0;
+
+        for (const row of candidates.rows) {
+          const id = String(row.id);
+          const title = String(row.title);
+          // A provenance ledger is the record of how a response was produced,
+          // kept to answer a buyer who asks years later. A decision record is
+          // evidence of a judgement somebody made. Neither is this job's to
+          // destroy on a timer, so the tender is reported for a person to look
+          // at rather than cascaded away.
+          if (row.has_provenance || row.has_decision) {
+            retained.push({
+              id, title,
+              reason: row.has_provenance
+                ? "has an answer provenance ledger"
+                : "has a recorded bid decision",
+            });
+            continue;
+          }
+          // The policy says this is measured from the submission deadline, and
+          // the query measures updated_at — so a still-live framework bid
+          // nobody has opened for two years was deleted, while a long-closed
+          // tender touched yesterday was kept. `deadline` is free text in
+          // several formats, so it cannot be compared in SQL; it is parsed
+          // here, and an unreadable one is never treated as long past.
+          const deadline = parseDeadline(String(row.deadline ?? ""));
+          if (!deadline) {
+            retained.push({ id, title, reason: "deadline could not be read, so it cannot be shown to be past" });
+            continue;
+          }
+          if (deadline.getTime() >= entry.cutoff.getTime()) {
+            retained.push({ id, title, reason: `deadline ${String(row.deadline)} is not older than the cutoff` });
+            continue;
+          }
+          removedTenders.push({ id, title });
+        }
+
+        count = removedTenders.length;
         if (!dryRun && count > 0) {
-          await client.query("DELETE FROM tenders WHERE id = ANY($1::uuid[])", [doomed.rows.map((row) => row.id)]);
+          await client.query("DELETE FROM tenders WHERE id = ANY($1::uuid[])", [removedTenders.map((row) => row.id)]);
         }
       } else {
         const table = {
@@ -1481,7 +1537,7 @@ export async function applyRetention(policy: { id: string; label: string; cutoff
   } finally {
     client.release();
   }
-  return { removed, removedTenders, dryRun };
+  return { removed, removedTenders, retained, dryRun };
 }
 
 const toAnswerVersion = (row: Record<string, unknown>): AnswerVersion => ({

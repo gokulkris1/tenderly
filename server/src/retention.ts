@@ -68,13 +68,23 @@ export type RetentionResult = {
   removed: { id: string; label: string; count: number; cutoff: string }[];
   /** Named so the job's output can be checked against expectations. */
   removedTenders: { id: string; title: string }[];
+  /**
+   * Past the cutoff and deliberately kept, with the reason for each.
+   *
+   * A tender carrying an answer provenance ledger or a recorded bid decision is
+   * not this job's to destroy on a timer, so it is reported for a person to
+   * decide (TLY-245). Reported rather than skipped silently, because an
+   * ever-growing set of retained rows is itself something somebody should see.
+   */
+  retained: { id: string; title: string; reason: string }[];
   dryRun: boolean;
 };
 
 /** A one-line summary for the audit entry and the job's own log. */
 export function summarise(result: RetentionResult) {
   const parts = result.removed.map((entry) => `${entry.id}=${entry.count}`);
-  return `${result.dryRun ? "would remove" : "removed"} ${parts.join(" ")}`;
+  const kept = result.retained.length ? `; retained ${result.retained.length} for review` : "";
+  return `${result.dryRun ? "would remove" : "removed"} ${parts.join(" ")}${kept}`;
 }
 
 /** True when the audit log is the longest-lived class, which it must be. */
@@ -86,3 +96,12 @@ export function auditRetainedLongest(policy = retentionPolicy()) {
 
 /** Shape of the audit metadata this job writes, so the test can assert it. */
 export type RetentionAuditMetadata = Pick<AuditEntry, "metadata">["metadata"];
+
+/**
+ * The organisation a bulk job acts as.
+ *
+ * Seeded by migration 028. A job deletes on behalf of the system rather than
+ * any one customer, and its audit entry still needs an organisation to hang
+ * from — audit_log.account_id references organisations(id) since migration 025.
+ */
+export const SYSTEM_ORGANISATION_ID = "00000000-0000-0000-0000-000000000000";

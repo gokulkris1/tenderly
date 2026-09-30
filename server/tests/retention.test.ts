@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { auditRetainedLongest, cutoffFor, retentionPolicy, summarise } from "../src/retention.js";
+import { auditRetainedLongest, cutoffFor, retentionPolicy, summarise, SYSTEM_ORGANISATION_ID } from "../src/retention.js";
 
 const NOW = new Date(Date.UTC(2026, 7, 24));
 
@@ -57,7 +57,7 @@ test("TLY-98: a nonsensical override falls back rather than deleting everything"
 
 test("TLY-98 AC3: the summary reports every class, including the zeroes", () => {
   const summary = summarise({
-    ranAt: NOW.toISOString(), dryRun: false, removedTenders: [],
+    ranAt: NOW.toISOString(), dryRun: false, removedTenders: [], retained: [],
     removed: [
       { id: "closed-tenders", label: "Closed tenders", count: 3, cutoff: NOW.toISOString() },
       { id: "usage-events", label: "Usage", count: 0, cutoff: NOW.toISOString() },
@@ -68,7 +68,7 @@ test("TLY-98 AC3: the summary reports every class, including the zeroes", () => 
   assert.match(summary, /^removed /);
 
   const dry = summarise({
-    ranAt: NOW.toISOString(), dryRun: true, removedTenders: [],
+    ranAt: NOW.toISOString(), dryRun: true, removedTenders: [], retained: [],
     removed: [{ id: "closed-tenders", label: "Closed tenders", count: 3, cutoff: NOW.toISOString() }],
   });
   assert.match(dry, /^would remove /, "a dry run never claims to have removed anything");
@@ -118,4 +118,60 @@ test("TLY-98: the published retention table matches the code", () => {
     assert.ok(page.includes(variable), `${variable} is not documented`);
     assert.ok(page.includes(`${entry.months} months`), `the ${entry.id} period is not on the page`);
   }
+});
+
+test("TLY-245: the summary reports tenders kept back for review", () => {
+  const summary = summarise({
+    ranAt: NOW.toISOString(), dryRun: false, removedTenders: [],
+    removed: [{ id: "closed-tenders", label: "Closed tenders", count: 0, cutoff: NOW.toISOString() }],
+    retained: [
+      { id: "t1", title: "Framework bid", reason: "has an answer provenance ledger" },
+      { id: "t2", title: "Unreadable deadline", reason: "deadline could not be read, so it cannot be shown to be past" },
+    ],
+  });
+  assert.match(summary, /retained 2 for review/,
+    "a run that keeps rows back is asking a person to decide, and must say so");
+});
+
+test("TLY-245: the retention job fails the run when it cannot record a deletion", () => {
+  const job = readFileSync(path.resolve(process.cwd(), "src/retention-job.ts"), "utf8");
+  // The audit write used to be `.catch()`ed into a log line, so the job could
+  // delete customer data, leave no record that it had, and still exit 0.
+  assert.doesNotMatch(job, /recordAudit\([\s\S]*?\)\.catch\(/,
+    "a failed audit write must not be swallowed");
+  assert.match(job, /process\.exitCode = 1/, "a failed audit write must fail the run");
+  assert.match(job, /SYSTEM_ORGANISATION_ID/,
+    "the reserved organisation is seeded by migration 028 and must be referenced by name");
+  assert.match(job, /tenders: result\.removedTenders/,
+    "the audit entry must name the tenders, not count them — the rows are gone afterwards");
+});
+
+test("TLY-245: migration 028 seeds the organisation the job audits under", () => {
+  const sql = readFileSync(path.resolve(process.cwd(), "migrations/028_system_organisation.sql"), "utf8");
+  assert.match(sql, /INSERT INTO organisations/);
+  assert.match(sql, /00000000-0000-0000-0000-000000000000/);
+  assert.match(sql, /ON CONFLICT \(id\) DO NOTHING/, "the migration must be safe to re-run");
+  assert.equal(SYSTEM_ORGANISATION_ID, "00000000-0000-0000-0000-000000000000");
+});
+
+test("TLY-245: retention never cascades away a provenance ledger or a bid decision", () => {
+  // Asserted against the source, as TLY-98's submitted-tender test above does,
+  // because applyRetention needs a real Postgres to exercise. The behavioural
+  // test belongs in the integration suite that does not exist yet — see
+  // TLY-287 for the missing test:integration script.
+  const db = readFileSync(path.resolve(process.cwd(), "src/db.ts"), "utf8");
+  const fn = db.slice(db.indexOf("export async function applyRetention"), db.indexOf("export async function addEvidence"));
+
+  assert.match(fn, /answer_provenance/,
+    "answers, answer_versions and answer_provenance cascade from tenders, and migration 004 leaves DELETE alone by design");
+  assert.match(fn, /bid_decisions/, "a recorded judgement is evidence somebody made it");
+  assert.match(fn, /has_provenance/);
+  assert.match(fn, /retained\.push/, "a tender kept back must be reported, not silently skipped");
+
+  // The policy states it is measured from the submission deadline, and the
+  // query measured updated_at — so a live framework bid nobody had opened for
+  // two years was deleted while a long-closed tender touched yesterday was kept.
+  assert.match(fn, /parseDeadline/, "the cutoff must be compared against the deadline the policy names");
+  assert.match(fn, /deadline could not be read/,
+    "an unreadable deadline must never be treated as long past");
 });
