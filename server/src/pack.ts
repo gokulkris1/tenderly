@@ -197,7 +197,7 @@ export function submissionBlockers(
   const blockers: string[] = [];
   // A named person must state they have reviewed this exact content before the
   // final pack leaves the system. Editing any answer invalidates that statement.
-  if (!attestationValid(tender.metadata.attestation as Attestation | undefined, answers)) {
+  if (!attestationValid(tender.metadata.attestation as Attestation | undefined, { tender, analysis, answers, documents })) {
     blockers.push("Attestation not recorded");
   }
   // A certificate the tender makes a condition of participation, with nothing

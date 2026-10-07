@@ -2941,7 +2941,7 @@ function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, on
 function AttestationPanel({ state, onAttest, busy }: { state: AttestationState | null; onAttest: () => void; busy: boolean }) {
   const [confirmed, setConfirmed] = useState(false);
   if (!state) return null;
-  const { summary, attestation, invalidated } = state;
+  const { summary, attestation, invalidated, changed, orphanedAnswers } = state;
   const otherBlockers = state.blockers.filter((blocker) => blocker !== "Attestation not recorded");
   const total = summary.counts["ai-generated"] + summary.counts["ai-assisted"] + summary.counts.human;
   return (
@@ -2957,7 +2957,22 @@ function AttestationPanel({ state, onAttest, busy }: { state: AttestationState |
         <p className="attestation-sections">Written by a model: {summary.aiGeneratedSections.join(", ")}</p>
       )}
       {summary.conflict && <p className="attestation-conflict" data-testid="attestation-conflict">{summary.conflict}</p>}
-      {invalidated && <p className="attestation-conflict" data-testid="attestation-invalidated">The content changed after it was attested. Review it again before releasing the final pack.</p>}
+      {invalidated && (
+        <p className="attestation-conflict" data-testid="attestation-invalidated">
+          {/* Named, so the attester knows what to look at before repeating
+              themselves. The server reports which parts moved; an older
+              attestation reports that it predates this check. */}
+          {changed?.length
+            ? `Changed after it was attested: ${changed.join(", ")}. Review before releasing the final pack.`
+            : "The content changed after it was attested. Review it again before releasing the final pack."}
+        </p>
+      )}
+      {orphanedAnswers?.length ? (
+        <p className="attestation-sections" data-testid="attestation-orphans">
+          {orphanedAnswers.length === 1 ? "1 saved answer" : `${orphanedAnswers.length} saved answers`} belong to
+          questions this tender no longer has. They are not part of the response and do not affect the attestation.
+        </p>
+      ) : null}
       {attestation && !invalidated
         ? <p className="attestation-done" data-testid="attestation-done">Attested by {attestation.actor} on {new Date(attestation.at).toLocaleString()}</p>
         : otherBlockers.length > 0
