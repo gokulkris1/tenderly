@@ -360,6 +360,19 @@ export type AttestationState = {
   attestation: Attestation | null;
   /** The attestation no longer matches the content, so the pack is blocked again. */
   invalidated: boolean;
+  /**
+   * Which parts of the submission moved since it was attested, in words.
+   *
+   * "The content changed" tells the attester to repeat themselves; "the
+   * submission documents changed" tells them what to look at first.
+   */
+  changed: string[];
+  /**
+   * Answers whose question the analysis no longer has. Invisible on every
+   * screen, because the screens iterate the analysis's questions — so they are
+   * named here rather than silently affecting the attestation.
+   */
+  orphanedAnswers: string[];
   blockers: string[];
 };
 

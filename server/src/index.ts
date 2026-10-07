@@ -140,7 +140,7 @@ import { analysisHourlyLimiter, analysisLimiter, draftHourlyLimiter, draftLimite
 import { runDiscoveryJob } from "./jobs.js";
 import { log, requestId, requestLogging } from "./logging.js";
 import { createSubmissionPack, createSynopsisDeck, packFilename, submissionBlockers } from "./pack.js";
-import { attestationValid, contentVersion, provenanceSummary, type Attestation } from "./attestation.js";
+import { attestationStatus, contentParts, contentVersion, orphanedAttestableAnswers, provenanceSummary, type Attestation } from "./attestation.js";
 import { inScope, selectedLots, serializePublicTender, serializeTender } from "./serializers.js";
 import type { CompanyProfile, TenderRecord } from "./types.js";
 
@@ -840,13 +840,21 @@ app.get("/api/tenders/:id/attestation", async (req: AuthenticatedRequest, res) =
       listAnswers(tender.id), tenderProvenance(tender.id), listDocuments(tender.id), listEvidence(account),
     ]);
     const attestation = tender.metadata.attestation as Attestation | undefined;
-    const valid = attestationValid(attestation, answers);
+    const content = { tender, analysis: tender.analysis, answers, documents };
+    const status = attestationStatus(attestation, content);
     res.json({
       summary: provenanceSummary(tender.analysis, answers, provenance),
       attestation: attestation ?? null,
       // An attestation that no longer matches the content is reported as
       // invalidated rather than quietly dropped: the user needs to know why.
-      invalidated: Boolean(attestation) && !valid,
+      invalidated: status.recorded && !status.valid,
+      // And what moved, so the attester knows what to look at before repeating
+      // themselves (TLY-242).
+      changed: status.changed,
+      // Answers whose question re-analysis removed. Invisible on every screen,
+      // because the screens iterate analysis.questions — so they are reported
+      // rather than silently folded into the fingerprint.
+      orphanedAnswers: orphanedAttestableAnswers(content).map((answer) => answer.questionId),
       blockers: tender.analysis ? submissionBlockers(tender, tender.analysis, answers, documents, evidence) : ["Run tender analysis first"],
     });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
@@ -869,7 +877,14 @@ app.post("/api/tenders/:id/attestation", async (req: AuthenticatedRequest, res) 
       .filter((blocker) => blocker !== "Attestation not recorded");
     if (remaining.length) return res.status(409).json({ error: "Resolve the remaining blockers before attesting", blockers: remaining });
 
-    const attestation: Attestation = { actor: actorEmail(req), at: new Date().toISOString(), contentVersion: contentVersion(answers) };
+    const content = { tender, analysis: tender.analysis, answers, documents };
+    const attestation: Attestation = {
+      actor: actorEmail(req), at: new Date().toISOString(),
+      contentVersion: contentVersion(content),
+      // Per-part, so a later mismatch can name what moved rather than only that
+      // something did.
+      parts: contentParts(content),
+    };
     await updateTenderMetadata(account, tender.id, { attestation });
     await audit(req, { action: AUDIT_ACTIONS.attestationRecorded, subjectType: "tender", subjectId: tender.id, subjectLabel: tender.title });
     res.json({ attestation });
