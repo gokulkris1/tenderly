@@ -15,6 +15,13 @@ import type { PublicTender } from "./types.js";
  * what a portal returns is a fact about the portal, not about anyone's
  * preferences, and it must be visible even when nobody's profile matches.
  */
+/** A rejection reason as something a person reading a log can act on. */
+export function reasonOf(reason: unknown) {
+  if (reason instanceof Error) return reason.message || reason.name;
+  const text = String(reason ?? "").trim();
+  return text || "no reason given";
+}
+
 export async function runDiscoveryJob() {
   const sources: { source: string; notices: PublicTender[]; seen: number }[] = [];
 
@@ -31,6 +38,18 @@ export async function runDiscoveryJob() {
   ]);
   const etendersItems = etenders.status === "fulfilled" ? etenders.value : [];
   const tedItems = ted.status === "fulfilled" ? ted.value.items : [];
+  // Why a source yielded nothing, not merely that it did.
+  //
+  // These two lines used to discard the rejection reason, so a portal that was
+  // down read exactly like a quiet morning: the run recorded `parsed: 0` and an
+  // alarm saying the count was below the floor, and nothing anywhere said the
+  // fetch had failed or how. That happened in production on 2026-10-05 —
+  // eTenders returned nothing, the run ended in 8.8 seconds where a normal one
+  // takes minutes, and the log held no cause at all.
+  const failures = new Map<string, string>();
+  if (etenders.status === "rejected") failures.set("etenders", reasonOf(etenders.reason));
+  if (ted.status === "rejected") failures.set("ted", reasonOf(ted.reason));
+
   sources.push({ source: "etenders", notices: etendersItems, seen: etendersItems.length });
   sources.push({ source: "ted", notices: tedItems, seen: tedItems.length });
 
@@ -44,13 +63,22 @@ export async function runDiscoveryJob() {
       fieldCoverage: coverage,
       history,
     });
-    alarms.push(...verdict.alarms);
+    // First, and in its own words: a failed fetch is the reason for every other
+    // alarm this source will raise, and it reads as the cause rather than as a
+    // symptom. Persisted with the run, so it survives log retention and shows
+    // up on /health.
+    const failure = failures.get(entry.source);
+    const sourceAlarms = failure
+      ? [`${entry.source}: the source could not be read — ${failure}`, ...verdict.alarms]
+      : verdict.alarms;
+    if (failure) log("error", { job: "discovery", source: entry.source, event: "source-unreadable", message: failure });
+    alarms.push(...sourceAlarms);
     await recordIngestionRun({
       source: entry.source,
       noticesSeen: entry.seen,
       noticesParsed: entry.notices.length,
       fieldCoverage: coverage,
-      alarms: verdict.alarms,
+      alarms: sourceAlarms,
     });
   }
 
