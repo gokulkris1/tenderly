@@ -24,13 +24,12 @@ export async function signIn(page: Page) {
   await page.getByLabel("Email").fill(demo.email);
   await page.getByLabel("Password").fill(demo.password);
   await page.getByRole("button", { name: /sign in/i }).click();
-  // The workspace loads several endpoints plus a live discovery call.
-  await expect(page.getByRole("button", { name: /My bids/ }).first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("button", { name: /Tender board/ }).first()).toBeVisible({ timeout: 60_000 });
 }
 
 /** Opens one of the seeded tenders and lands on the named stage. */
 export async function openSeededTender(page: Page, title: RegExp, stage: string) {
-  await page.getByRole("button", { name: /My bids/ }).first().click();
+  await page.getByRole("button", { name: /Tender board/ }).first().click();
   await page.getByText(title).first().click();
-  await page.getByRole("button", { name: new RegExp(stage) }).first().click();
+  await page.getByRole("button", { name: stage === "Qualify" ? /Qualification & scoring/ : new RegExp(`^${stage}$`) }).first().click();
 }

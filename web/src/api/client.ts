@@ -16,19 +16,24 @@ import type {
   AuditEntry,
   BidDecisionRecord,
   BidTask,
+  BuyerProfile,
+  BuyerSummary,
   Clarification,
   CompanyProfile,
+  CompetitorInsight,
   DeclarationAnswer,
   DeclarationState,
   DiffSegment,
   DiscoveryPreferences,
   EvidenceItem,
+  MarketStats,
   MockEvaluation,
   NotificationItem,
   PackQuestion,
   PersonFact,
   PersonItem,
   Portfolio,
+  PortalConnection,
   Runbook,
   SavedSearch,
   SavedSearchFilter,
@@ -47,13 +52,16 @@ export class ApiError extends Error {
   readonly blockers: string[];
   /** What the user was doing, so the message can name the action that failed. */
   readonly action: string;
+  /** Clarification send without a portal connection answers 503 with the official deep link. */
+  readonly portalUrl?: string;
 
-  constructor(message: string, status: number, action: string, blockers: string[] = []) {
+  constructor(message: string, status: number, action: string, blockers: string[] = [], portalUrl?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.action = action;
     this.blockers = blockers;
+    this.portalUrl = portalUrl;
   }
 
   /** A 401 means the session is gone: the caller should sign the user out. */
@@ -69,7 +77,7 @@ export type ApiClientOptions = {
   getToken: () => string;
 };
 
-export type DraftedAnswer = { answer: string; status: string; missingInputs: string[] };
+export type DraftedAnswer = { answer: string; status: string; missingInputs: string[]; claimsToVerify?: string[] };
 export type DownloadedAsset = { blob: Blob; filename: string };
 
 /** Who can see this organisation's bids, and who has been asked to. */
@@ -96,6 +104,8 @@ export type DraftRun = {
     state: "pending" | "drafting" | "drafted" | "needs-input" | "skipped" | "failed";
     error?: string;
     citations?: { id: string; name: string; hasFile: boolean }[];
+    /** Per-question confirmations due before submission, incl. the pack's AI-use declaration duty. */
+    claimsToVerify?: string[];
   }[];
 };
 
@@ -127,7 +137,8 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       : typeof detail.detail === "string" ? detail.detail
       : `${action} failed (${response.status})`;
     const blockers = Array.isArray(detail.blockers) ? (detail.blockers as string[]) : [];
-    return new ApiError(message, response.status, action, blockers);
+    const portalUrl = typeof detail.portalUrl === "string" ? detail.portalUrl : undefined;
+    return new ApiError(message, response.status, action, blockers, portalUrl);
   }
 
   async function request<T>(path: string, action: string, init: RequestInit = {}): Promise<T> {
@@ -140,6 +151,9 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       },
     });
     if (!response.ok) throw await failure(response, action);
+    // 204 carries no body by definition; parsing one would throw a
+    // SyntaxError over a call that succeeded.
+    if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
   }
 
@@ -304,6 +318,25 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       request<{ portfolio: Portfolio }>(`/api/portfolio?sort=${sort}`, "Load portfolio"),
     listTenders: () => request<{ items: Tender[] }>("/api/tenders", "Load bids"),
     tender: (tenderId: string) => request<{ tender: Tender }>(`/api/tenders/${tenderId}`, "Load bid"),
+    syncTenders: () => request<{ items: Tender[]; warnings: string[]; checked: number }>("/api/tenders/sync", "Sync matching tenders", { method: "POST" }),
+    tenderBoards: () => request<{ items: import("@tenderly/shared").TenderBoardConfig[] }>("/api/tender-boards", "Load tender boards"),
+    createTenderBoard: (name: string, cpvCodes: string[], countries?: string[]) =>
+      request<{ board: import("@tenderly/shared").TenderBoardConfig }>("/api/tender-boards", "Create tender board", { method: "POST", body: JSON.stringify({ name, cpvCodes, ...(countries?.length ? { countries } : {}) }) }),
+    deleteTenderBoard: (id: string) => request<{ ok: boolean }>(`/api/tender-boards/${id}`, "Delete tender board", { method: "DELETE" }),
+    updateWorkflow: (tenderId: string, patch: import("@tenderly/shared").TenderWorkflowPatch) =>
+      request<{ tender: Tender }>(`/api/tenders/${tenderId}/workflow`, "Update tender workflow", { method: "PATCH", body: JSON.stringify(patch) }),
+    refreshTender: (tenderId: string) =>
+      request<{ tender: Tender }>(`/api/tenders/${tenderId}/refresh`, "Refresh CFT details", { method: "POST" }),
+    downloadTenderDocument: async (tenderId: string, documentId: string, filename: string) => {
+      const response = await fetch(`${baseUrl}/api/tenders/${encodeURIComponent(tenderId)}/documents/${encodeURIComponent(documentId)}/file`, { headers: authHeaders() });
+      if (!response.ok) throw await failure(response, "Download tender document");
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
     getCompany: () => request<{ company: CompanyProfile }>("/api/company", "Load company profile"),
     saveCompany: (company: CompanyProfile) =>
       request<{ company: CompanyProfile }>("/api/company", "Save company profile", {
@@ -331,7 +364,7 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
       if (query) params.set("query", query);
       if (searchId) params.set("search", searchId);
       const suffix = params.toString();
-      return request<{ items: Tender[]; activeSearch: { id: string; name: string } | null }>(
+      return request<{ items: Tender[]; activeSearch: { id: string; name: string } | null; warnings: string[] }>(
         `/api/tenders/discover${suffix ? `?${suffix}` : ""}`,
         "Refresh opportunities",
       );
@@ -341,6 +374,63 @@ export function createApiClient({ baseUrl, getToken }: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ url }),
       }),
+    dismissDiscoveredTender: (externalId: string, source: string) =>
+      request<unknown>("/api/tenders/discover/dismiss", "Hide notice", {
+        method: "POST",
+        body: JSON.stringify({ externalId, source }),
+      }),
+    restoreDiscoveredTender: (externalId: string, source: string) =>
+      request<unknown>("/api/tenders/discover/dismiss", "Restore notice", {
+        method: "DELETE",
+        body: JSON.stringify({ externalId, source }),
+      }),
+    /** The tracked board as a CSV file; bytes, so not the JSON helper. */
+    exportTendersCsv: async () => {
+      const response = await fetch(`${baseUrl}/api/tenders/export.csv`, { headers: authHeaders() });
+      if (!response.ok) throw await failure(response, "Export tenders");
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") ?? "";
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? "tenderly-tenders.csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
+
+    // --- buyers and the market -------------------------------------------
+    buyers: () => request<{ items: BuyerSummary[] }>("/api/buyers", "Load buyers"),
+    buyer: (name: string) =>
+      request<BuyerProfile>(`/api/buyers/${encodeURIComponent(name)}`, "Load buyer"),
+    marketStats: () => request<MarketStats>("/api/market/stats", "Load market overview"),
+    marketCompetitors: () =>
+      request<{ items: CompetitorInsight[]; note?: string }>("/api/market/competitors", "Load competitor history"),
+
+    // --- the eTenders portal connection (Beta) ---------------------------
+    portalConnection: () => request<PortalConnection>("/api/portal/connection", "Load portal connection"),
+    connectPortal: (email: string, password: string) =>
+      request<PortalConnection>("/api/portal/connection", "Connect eTenders account", {
+        method: "PUT",
+        body: JSON.stringify({ email, password }),
+      }),
+    disconnectPortal: () =>
+      request<unknown>("/api/portal/connection", "Disconnect eTenders account", { method: "DELETE" }),
+    /**
+     * Sends through the user's own eTenders account. A 503 surfaces
+     * ApiError.message with the portalUrl on the detail — catch and read it.
+     */
+    sendClarification: (tenderId: string, subject: string, question: string) =>
+      request<{ clarification: Clarification; delivered: boolean; warning?: string; portalUrl?: string }>(
+        `/api/tenders/${tenderId}/clarifications/send`, "Send clarification", {
+          method: "POST",
+          body: JSON.stringify({ subject, question }),
+        }),
+    syncClarifications: (tenderId: string) =>
+      request<{ items: Clarification[]; synced: number; warning?: string }>(
+        `/api/tenders/${tenderId}/clarifications/sync`, "Sync clarifications", {
+          method: "POST",
+          body: "{}",
+        }),
 
     // --- analysis and drafting -------------------------------------------
     analyse: (tenderId: string) =>

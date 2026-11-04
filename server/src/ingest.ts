@@ -1,5 +1,5 @@
 import { cpvAncestors, extractCpvCode } from "./cpv.js";
-import { parseDeadline } from "./pressure.js";
+import { deadlineInstant } from "./pressure.js";
 
 /**
  * What the 05:00 run puts on the board.
@@ -25,9 +25,8 @@ import { parseDeadline } from "./pressure.js";
  * company registered for.
  */
 export function cpvFamilyMatch(noticeCpv: string | null, profileCodes: string[]): string | null {
-  const notice = extractCpvCode(noticeCpv ?? "");
-  if (!notice) return null;
-  const ancestry = new Set([notice, ...cpvAncestors(notice).map((entry) => entry.code)]);
+  const notices = [...(noticeCpv ?? "").matchAll(/(?<!\d)\d{8}(?!\d)/g)].map((match) => match[0]);
+  const ancestry = new Set(notices.flatMap((notice) => [notice, ...cpvAncestors(notice).map((entry) => entry.code)]));
   for (const raw of profileCodes) {
     const code = extractCpvCode(raw);
     if (code && ancestry.has(code)) return code;
@@ -62,7 +61,7 @@ export function decideIngest(args: {
   now?: Date;
 }): IngestVerdict {
   const now = args.now ?? new Date();
-  const deadline = parseDeadline(args.deadline);
+  const deadline = deadlineInstant(args.deadline);
 
   if (deadline && deadline.getTime() <= now.getTime()) {
     return { ingest: false, reason: `Closed: the deadline passed on ${args.deadline}` };

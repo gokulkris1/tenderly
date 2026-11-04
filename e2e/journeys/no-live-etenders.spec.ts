@@ -13,7 +13,7 @@ test("journeys complete with etenders.gov.ie unreachable", async ({ page }) => {
     return route.abort("blockedbyclient");
   });
   await signIn(page);
-  await page.getByRole("button", { name: /My bids/ }).first().click();
+  await page.getByRole("button", { name: /Tender board/ }).first().click();
   await expect(page.getByText(SEEDED.blocked).first()).toBeVisible({ timeout: 30_000 });
   expect(blocked, "no journey should need the live portal").toEqual([]);
 });

@@ -18,7 +18,11 @@ import { buildRunbook } from "./runbook.js";
 import { NO_ANSWER, chunkDocument, rankChunks } from "./retrieval.js";
 import { NO_CHANGES, describeChange, diffAnalyses, questionsNeedingReview } from "./analysis-diff.js";
 import { SECTOR_PRESETS, matchNotice, profileCpvCodes, profileKeywords } from "./sectors.js";
-import { searchTed } from "./sources/ted.js";
+import { cpvCountryQuery, searchAllTed, searchTed } from "./sources/ted.js";
+import { tenderWorkflow, workflowPatchSchema } from "./tender-workflow.js";
+import { cpvFamilyMatch } from "./ingest.js";
+import { createTenderBoard, deleteTenderBoard, listTenderBoards, updateTenderWorkflow } from "./db.js";
+import { extractCpvCode, normaliseCpv } from "./cpv.js";
 import { DOCUMENT_CLOSE, DOCUMENT_OPEN, combineSourceText, extractDocumentText, neutraliseEnvelopeMarkers } from "./documents.js";
 import { discoverETenders, fetchPublicTenderDocuments, importETender } from "./etenders.js";
 import { mergeNotices } from "./dedupe.js";
@@ -46,12 +50,17 @@ import {
   addPerson,
   awardIntelligence,
   companyWonBefore,
+  competitorInsights,
+  countAwards,
   createSavedSearch,
   deleteSavedSearch,
   createUser,
+  deletePortalConnection,
+  dismissDiscoveryNotice,
   evidenceFile,
   findUserByEmail,
   getCompany,
+  getPortalConnection,
   getPreferences,
   getSavedSearch,
   getAnswerVersion,
@@ -60,6 +69,7 @@ import {
   initializeDatabase,
   knownBuyersFor,
   listAnswerVersions,
+  listDiscoveryDismissals,
   getAnalysisVersion,
   listAnalysisVersions,
   listAnswers,
@@ -96,9 +106,11 @@ import {
   recordPackQuestion,
   removeFromWatchlist,
   recordProvenance,
+  restoreDiscoveryNotice,
   saveAnswer,
   saveDeclarationAnswers,
   saveDocument,
+  savePortalConnection,
   savePreferences,
   saveTenderAnalysis,
   seedCpvCodes,
@@ -132,16 +144,21 @@ import {
   setMembershipRole,
   requestAccountDeletion,
   updatePersonFact,
+  updatePortalConnectionState,
   upsertBidTask,
   upsertTender,
 } from "./db.js";
 import { AUDIT_ACTIONS, audit } from "./audit.js";
-import { analysisHourlyLimiter, analysisLimiter, draftHourlyLimiter, draftLimiter, importLimiter, packLimiter } from "./limits.js";
+import { analysisHourlyLimiter, analysisLimiter, draftHourlyLimiter, draftLimiter, importLimiter, packLimiter, portalMessageLimiter } from "./limits.js";
+import { accountCountries, visibleNotices } from "./jobs.js";
+import { computeMarketStats, listBuyers } from "./market.js";
+import { decryptPortalPassword, encryptPortalPassword, portalConnectionEnabled, serializePortalConnection } from "./portal.js";
+import { PortalError, listPortalMessages, portalLogin, sendPortalMessage } from "./sources/etenders-account.js";
 import { runDiscoveryJob } from "./jobs.js";
 import { log, requestId, requestLogging } from "./logging.js";
 import { createSubmissionPack, createSynopsisDeck, packFilename, submissionBlockers } from "./pack.js";
 import { attestationStatus, contentParts, contentVersion, orphanedAttestableAnswers, provenanceSummary, type Attestation } from "./attestation.js";
-import { inScope, selectedLots, serializePublicTender, serializeTender } from "./serializers.js";
+import { inScope, selectedLots, serializePublicTender, serializeTender, etendersMessagingUrl } from "./serializers.js";
 import type { CompanyProfile, TenderRecord } from "./types.js";
 
 const app = express();
@@ -166,12 +183,20 @@ const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 30, standardHeader
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
 
 const credentialsSchema = z.object({ email: z.string().email().max(254), password: z.string().min(10).max(128), companyName: z.string().trim().min(2).max(200).optional() });
+const countriesSchema = z.array(
+  z.string().trim().regex(/^[A-Za-z]{3}$/, "A market is a three-letter ISO country code")
+    .transform((code) => code.toUpperCase()),
+).max(50);
+
 const preferencesSchema = z.object({
   sectors: z.array(z.string().max(60)).max(20).default([]),
   keywords: z.array(z.string().max(60)).max(50).default([]),
   cpvCodes: z.array(z.string().regex(/^[0-9]{8}$/, "A CPV code is 8 digits")).max(50).default([]),
   valueMin: z.number().int().min(0).nullable().default(null),
   valueMax: z.number().int().min(0).nullable().default(null),
+  // The markets Discover watches, ISO alpha-3. Absent keeps the stored value:
+  // a client that has not heard of countries must not wipe one it never sent.
+  countries: countriesSchema.optional(),
 });
 
 const companySchema = z.object({
@@ -217,6 +242,7 @@ async function tenderWithAnswers(account: string, tender: TenderRecord) {
     listAnswers(tender.id), listEvidence(account), tenderProvenance(tender.id), getCompany(account),
   ]);
   const serialized = serializeTender(tender, answers, evidence, provenance);
+  serialized.attachments = (await listDocuments(tender.id)).map(({ id, filename, role, sourceUrl }) => ({ id, filename, role, sourceUrl }));
 
   // Historical awards for this buyer and CPV (TLY-48). Intelligence must never
   // break the page: if the query fails, the tender still renders without it.
@@ -490,14 +516,19 @@ app.put("/api/preferences", async (req: AuthenticatedRequest, res) => {
     if (parsed.valueMin !== null && parsed.valueMax !== null && parsed.valueMax <= parsed.valueMin) {
       return res.status(400).json({ error: "Upper value must be greater than lower value" });
     }
-    res.json({ preferences: await savePreferences(accountId(req), parsed) });
+    const account = accountId(req);
+    const previous = await getPreferences(account);
+    const countries = parsed.countries?.length ? parsed.countries : previous.countries;
+    res.json({ preferences: await savePreferences(account, { ...parsed, countries }) });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
 app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
-    const [company, profilePreferences] = await Promise.all([getCompany(account), getPreferences(account)]);
+    const [company, profilePreferences, dismissals] = await Promise.all([
+      getCompany(account), getPreferences(account), listDiscoveryDismissals(account),
+    ]);
     const query = z.string().max(200).catch("").parse(req.query.query);
 
     // A saved search replaces the profile's filter fields for this request only.
@@ -505,16 +536,21 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
     const searchId = z.string().max(64).catch("").parse(req.query.search);
     const saved = searchId ? await getSavedSearch(account, searchId) : null;
     if (searchId && !saved) return res.status(404).json({ error: "Saved search not found" });
+    // Markets stay the workspace's under a saved search: a saved search
+    // narrows a view, it does not redraw the map the workspace watches.
     const preferences = saved
       ? {
           sectors: saved.filter.sectors, keywords: saved.filter.keywords, cpvCodes: saved.filter.cpvCodes,
-          valueMin: saved.filter.valueMin, valueMax: saved.filter.valueMax,
+          valueMin: saved.filter.valueMin, valueMax: saved.filter.valueMax, countries: profilePreferences.countries,
         }
       : profilePreferences;
     const buyerFilter = saved?.filter.buyer?.trim().toLowerCase() ?? "";
     // Two sources, so a portal redesign no longer takes discovery down entirely.
     // TED failing must not cost the user their eTenders results, hence allSettled.
-    const [crawled, ted] = await Promise.allSettled([discoverETenders(query), searchTed({ limit: 40 })]);
+    const boards = await listTenderBoards(account);
+    const countries = accountCountries(profilePreferences, boards);
+    const cpvCodes = [...new Set([...boards.flatMap((board) => board.cpvCodes), ...preferences.cpvCodes])];
+    const [crawled, ted] = await Promise.allSettled([discoverETenders(query, { cpvCodes }), searchAllTed({ query: cpvCountryQuery(cpvCodes, countries) })]);
     const sourceWarnings: string[] = [];
     if (crawled.status === "rejected") sourceWarnings.push("eTenders is unavailable — showing TED results only");
     if (ted.status === "rejected") sourceWarnings.push("TED is unavailable — showing eTenders results only");
@@ -550,7 +586,7 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
       ? items.map((item) => ({ item, reasons: [] as ReturnType<typeof matchNotice> }))
       : items
           .map((item) => ({ item, reasons: matchNotice(`${item.title} ${item.description}`, preferences.sectors, preferences.keywords) }))
-          .filter((entry) => entry.reasons.length > 0);
+          .filter((entry) => entry.reasons.length > 0 || sourceOf.get(entry.item.externalId) === "eTenders" || cpvFamilyMatch(entry.item.description, cpvCodes));
 
     // The buyer filter belongs to saved searches only; the profile has no such
     // field, so an unsaved view is unaffected.
@@ -570,7 +606,16 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
       return true;
     });
 
-    const serialised = withinBand
+    // A dismissed notice stays dismissed however well it scores, and a notice
+    // performed only in unwatched markets is not this workspace's opportunity.
+    const visibleIds = new Set(visibleNotices(merged, {
+      dismissals,
+      sourceOf: (item) => (sourceOf.get(item.externalId) ?? "eTenders").toLowerCase(),
+      countries,
+    }).map((item) => item.externalId));
+    const visible = withinBand.filter(({ item }) => visibleIds.has(item.externalId));
+
+    const serialised = visible
       .map(({ item, reasons }) => ({
         ...serializePublicTender(item, scoreNotice({ tender: item, preferences, company, knownBuyers })),
         matchedBy: reasons,
@@ -578,8 +623,7 @@ app.get("/api/tenders/discover", async (req: AuthenticatedRequest, res) => {
         alternateSources: item.alternateSources.map((entry) => ({ label: entry.label, url: entry.url })),
         mergeReason: item.mergeReason,
       }))
-      .sort((a, b) => b.match - a.match)
-      .slice(0, 50);
+      .sort((a, b) => b.published.localeCompare(a.published));
     res.json({
       items: serialised,
       source: "eTenders public current opportunities and TED",
@@ -601,10 +645,214 @@ app.get("/api/tenders", async (req: AuthenticatedRequest, res) => {
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
+app.get("/api/tender-boards", async (req: AuthenticatedRequest, res) => {
+  try { res.json({ items: await listTenderBoards(accountId(req)) }); }
+  catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.post("/api/tender-boards", async (req: AuthenticatedRequest, res) => {
+  try {
+    const input = z.object({
+      name: z.string().trim().min(1).max(100),
+      cpvCodes: z.array(z.string().regex(/^\d{8}$/).refine((code) => Boolean(normaliseCpv(code)), "Choose a recognised CPV code")).min(1).max(20),
+      // The board's own markets; omitted means it watches the workspace's countries.
+      countries: countriesSchema.optional(),
+    }).strict().parse(req.body);
+    const board = await createTenderBoard(accountId(req), input.name, input.cpvCodes, input.countries);
+    if (!board) return res.status(409).json({ error: "A tender board with that name already exists" });
+    res.status(201).json({ board });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.delete("/api/tender-boards/:id", async (req: AuthenticatedRequest, res) => {
+  try {
+    const id = routeParam(req.params.id);
+    const boards = await listTenderBoards(accountId(req));
+    if (!boards.some((board) => board.id === id)) return res.status(404).json({ error: "Tender board not found" });
+    if (boards.length <= 1) return res.status(409).json({ error: "Keep at least one tender board" });
+    const result = await deleteTenderBoard(accountId(req), id);
+    if (result === "NOT_FOUND") return res.status(404).json({ error: "Tender board not found" });
+    if (result === "LAST_BOARD") return res.status(409).json({ error: "Keep at least one tender board" });
+    res.json({ ok: true });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+// --- buyers and the market picture ---------------------------------------
+
+/** Every buyer behind the workspace's tracked tenders, with award history. */
+app.get("/api/buyers", async (req: AuthenticatedRequest, res) => {
+  try { res.json({ items: await listBuyers(accountId(req)) }); }
+  catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** One buyer: their tenders in this workspace and their award history. */
+app.get("/api/buyers/:name", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const name = routeParam(req.params.name).trim();
+    if (!name) return res.status(404).json({ error: "Buyer not found" });
+    const tenders = (await listTenders(account))
+      .filter((tender) => tender.authority.trim().toLowerCase() === name.toLowerCase());
+    const intelligence = await awardIntelligence(name, "");
+    if (!tenders.length && intelligence.awards === 0) return res.status(404).json({ error: "Buyer not found" });
+    const items = await Promise.all(tenders.map((tender) => tenderWithAnswers(account, tender)));
+    res.json({ name: tenders[0]?.authority.trim() ?? name, tenders: items, intelligence });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** The market the workspace is looking at, counted from what is stored. */
+app.get("/api/market/stats", async (req: AuthenticatedRequest, res) => {
+  try { res.json(await computeMarketStats(accountId(req))); }
+  catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** Who wins the awards in the CPV families this workspace watches. */
+app.get("/api/market/competitors", async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    if ((await countAwards()) === 0) {
+      return res.json({ items: [], note: "Load the OGP award dataset to see competitor history (npm run import:ogp)" });
+    }
+    const [company, preferences, boards] = await Promise.all([getCompany(account), getPreferences(account), listTenderBoards(account)]);
+    const cpvCodes = [...new Set([
+      ...profileCpvCodes(preferences.sectors, preferences.cpvCodes),
+      ...boards.flatMap((board) => board.cpvCodes),
+      ...String(company.cpv ?? "").split(/[^0-9]+/).filter((value) => value.length === 8),
+    ])];
+    res.json({ items: await competitorInsights(cpvCodes) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+// --- discovery dismissals -------------------------------------------------
+
+const dismissSchema = z.object({
+  externalId: z.string().trim().min(1).max(200),
+  source: z.string().trim().max(40)
+    .refine((value) => ["etenders", "ted"].includes(value.toLowerCase()), "Source must be etenders or ted")
+    .transform((value) => value.toLowerCase()),
+});
+
+/** "Not this one" — the notice leaves Discover until it is restored. */
+app.post("/api/tenders/discover/dismiss", async (req: AuthenticatedRequest, res) => {
+  try {
+    const input = dismissSchema.parse(req.body);
+    await dismissDiscoveryNotice(accountId(req), input.externalId, input.source);
+    res.status(204).end();
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.delete("/api/tenders/discover/dismiss", async (req: AuthenticatedRequest, res) => {
+  try {
+    const input = dismissSchema.parse(req.body);
+    await restoreDiscoveryNotice(accountId(req), input.externalId, input.source);
+    res.status(204).end();
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+// --- the tracked board as CSV ----------------------------------------------
+
+/** The workspace's tracked tenders as a spreadsheet-ready file. */
+app.get("/api/tenders/export.csv", async (req: AuthenticatedRequest, res) => {
+  try {
+    const tenders = await listTenders(accountId(req));
+    // Quoted with doubled quotes, so a comma or a quote in a buyer's title can
+    // never split a row or slip a formula-shaped cell past the spreadsheet.
+    const cell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const header = ["id", "title", "authority", "cpv", "value", "deadline", "stage", "outcome", "sourceUrl"].map(cell).join(",");
+    const rows = tenders.map((tender) => {
+      const workflow = tenderWorkflow(tender.metadata.workflow);
+      return [
+        tender.id, tender.title, tender.authority,
+        tender.cpvNormalised ?? extractCpvCode(String(tender.metadata["CPV Codes"] ?? "")) ?? "",
+        tender.estimatedValue, tender.deadline, workflow.stage, workflow.outcome, tender.sourceUrl,
+      ].map(cell).join(",");
+    });
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="tenderly-tenders.csv"');
+    res.send([header, ...rows].join("\n") + "\n");
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+// --- the eTenders portal connection (Beta) ---------------------------------
+
+/**
+ * The connection state. `disabled` means the server has no encryption key and
+ * the feature is off for everyone, which the screen should say rather than
+ * invite credentials it cannot protect.
+ */
+app.get("/api/portal/connection", async (req: AuthenticatedRequest, res) => {
+  try {
+    res.json(serializePortalConnection(await getPortalConnection(accountId(req))));
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Stores the account's own eTenders credentials, encrypted. Saving proves
+ * nothing about whether they work — the status stays "untested" until a real
+ * send or sync attempt answers that.
+ */
+app.put("/api/portal/connection", async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!portalConnectionEnabled()) {
+      return res.status(503).json({ error: "Portal connection is not enabled on this server" });
+    }
+    const input = z.object({
+      email: z.string().trim().email().max(254),
+      password: z.string().min(1, "The portal password is required").max(200),
+    }).parse(req.body);
+    const record = await savePortalConnection(
+      accountId(req), input.email.toLowerCase(), encryptPortalPassword(input.password));
+    await audit(req, {
+      action: AUDIT_ACTIONS.portalConnectionSaved, subjectType: "portal-connection",
+      subjectId: accountId(req), subjectLabel: input.email.toLowerCase(),
+    });
+    res.json(serializePortalConnection(record));
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.delete("/api/portal/connection", async (req: AuthenticatedRequest, res) => {
+  try {
+    const removed = await deletePortalConnection(accountId(req));
+    if (removed) {
+      await audit(req, {
+        action: AUDIT_ACTIONS.portalConnectionDeleted, subjectType: "portal-connection",
+        subjectId: accountId(req),
+      });
+    }
+    res.status(204).end();
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+const syncingAccounts = new Set<string>();
+app.post("/api/tenders/sync", importLimiter, async (req: AuthenticatedRequest, res) => {
+  const account = accountId(req);
+  if (syncingAccounts.has(account)) return res.status(409).json({ error: "Tender sync is already running for your workspace" });
+  syncingAccounts.add(account);
+  try {
+    const result = await runDiscoveryJob(account);
+    const items = await Promise.all((await listTenders(account)).map((tender) => tenderWithAnswers(account, tender)));
+    res.json({ items, warnings: result.alarms, checked: result.opportunitiesChecked });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status === 500 ? 502 : mapped.status).json({ error: mapped.message }); }
+  finally { syncingAccounts.delete(account); }
+});
+
 app.post("/api/tenders/import", importLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const account = accountId(req);
     const { url } = z.object({ url: z.string().url().max(2000) }).parse(req.body);
+    const source = new URL(url);
+    if (source.hostname === "ted.europa.eu" && source.protocol === "https:" && !source.username && !source.password) {
+      const publication = /\/notice\/(?:-\/detail\/)?(\d+-\d{4})(?:\/|$)/.exec(source.pathname)?.[1];
+      if (!publication) return res.status(400).json({ error: "Use a TED published notice link containing its publication number" });
+      const result = await searchTed({ query: `publication-number=${publication}`, limit: 1 });
+      const notice = result.items.find((item) => item.externalId === publication);
+      if (!notice) return res.status(502).json({ error: result.warnings.join("; ") || "TED did not return this published notice. Open its official source and retry." });
+      const tender = await upsertTender(account, {
+        ...notice, source: "ted", status: "IMPORTED",
+        metadata: { "CPV Codes": notice.description, sourceCheckedAt: new Date().toISOString(), ...(notice.markets?.length ? { markets: notice.markets } : {}) },
+      });
+      return res.status(201).json({ tender: await tenderWithAnswers(account, tender), warnings: result.warnings });
+    }
     const imported = await importETender(url);
     let tender = await upsertTender(account, {
       source: "etenders", externalId: imported.externalId, sourceUrl: imported.sourceUrl, title: imported.title, authority: imported.authority,
@@ -625,11 +873,9 @@ app.post("/api/tenders/import", importLimiter, async (req: AuthenticatedRequest,
       warnings.push(`Automatic tender-document download: ${error instanceof Error ? error.message : "not available"}`);
     }
     if (warnings.length) tender = await updateTenderMetadata(account, tender.id, { documentWarnings: warnings });
-    let analysisError = "";
-    try { tender = await analyseSavedTender(account, tender.id, actorEmail(req)); } catch (error) { analysisError = error instanceof Error ? error.message : "Analysis did not complete"; }
     // Importing a watched notice promotes it: it is a bid now, not a maybe.
     if (tender.externalId) await removeFromWatchlist(account, tender.externalId).catch(() => false);
-    res.status(201).json({ tender: await tenderWithAnswers(account, tender), warnings, analysisError });
+    res.status(201).json({ tender: await tenderWithAnswers(account, tender), warnings });
   } catch (error) { const mapped = safeError(error); res.status(mapped.status === 500 ? 502 : mapped.status).json({ error: mapped.message }); }
 });
 
@@ -637,7 +883,41 @@ app.get("/api/tenders/:id", async (req: AuthenticatedRequest, res) => {
   try {
     const tender = await getTender(accountId(req), routeParam(req.params.id));
     if (!tender) return res.status(404).json({ error: "Tender not found" });
-    res.json({ tender: await tenderWithAnswers(accountId(req), tender), documents: (await listDocuments(tender.id)).map(({ bytes, ...document }) => document) });
+    res.json({ tender: await tenderWithAnswers(accountId(req), tender), documents: (await listDocuments(tender.id)).map(({ bytes: _bytes, ...document }) => document) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.patch("/api/tenders/:id/workflow", async (req: AuthenticatedRequest, res) => {
+  try {
+    const patch = workflowPatchSchema.parse(req.body);
+    const tender = await updateTenderWorkflow(accountId(req), routeParam(req.params.id), patch, actorEmail(req));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    res.json({ tender: await tenderWithAnswers(accountId(req), tender) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+app.post("/api/tenders/:id/refresh", importLimiter, async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const prior = await getTender(account, routeParam(req.params.id));
+    if (!prior) return res.status(404).json({ error: "Tender not found" });
+    if (prior.source !== "etenders") return res.status(409).json({ error: "Automatic refresh is available for eTenders CFTs. Open the published source for this notice." });
+    const detail = await importETender(prior.sourceUrl);
+    const tender = await upsertTender(account, {
+      ...prior, ...detail, source: prior.source, status: prior.status,
+      metadata: { ...detail.metadata, sourceText: detail.sourceText, refreshWarnings: [] },
+    });
+    res.json({ tender: await tenderWithAnswers(account, tender) });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status === 500 ? 502 : mapped.status).json({ error: mapped.message }); }
+});
+
+app.get("/api/tenders/:id/documents/:documentId/file", async (req: AuthenticatedRequest, res) => {
+  try {
+    const tender = await getTender(accountId(req), routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const document = (await listDocuments(tender.id)).find((entry) => entry.id === routeParam(req.params.documentId));
+    if (!document?.bytes) return res.status(404).json({ error: "Document file not found" });
+    res.type(document.mimeType).attachment(document.filename).send(document.bytes);
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 
@@ -1506,6 +1786,145 @@ app.put("/api/tenders/:id/clarifications/:clarificationId", async (req: Authenti
     }).catch(() => undefined);
 
     res.json({ clarification: { ...record, status: "Answered" }, reanalyseSuggested: true });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/** The portal messaging link for a tender, or its published source otherwise. */
+function clarificationPortalUrl(tender: TenderRecord) {
+  return etendersMessagingUrl(tender.source, tender.externalId, tender.sourceUrl) ?? tender.sourceUrl;
+}
+
+/**
+ * Sends a clarification through the user's own eTenders account.
+ *
+ * There is no public messaging API. With a connected account this walks the
+ * portal on the user's behalf; without one it answers 503 with the official
+ * deep link, so the user asks on the portal and records the exchange here —
+ * the same workflow, one extra step by hand. A send the portal does not
+ * confirm is recorded with delivered:false and a warning, never as a success.
+ */
+app.post("/api/tenders/:id/clarifications/send", portalMessageLimiter, async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const input = z.object({
+      subject: z.string().trim().min(1, "A subject is required").max(200),
+      question: z.string().trim().min(1, "Question text is required").max(8000),
+    }).parse(req.body);
+    const portalUrl = clarificationPortalUrl(tender);
+
+    const connection = portalConnectionEnabled() ? await getPortalConnection(account) : null;
+    if (!connection) {
+      return res.status(503).json({
+        error: portalConnectionEnabled()
+          ? "Connect your eTenders account to send from Tenderly, or ask on the portal and record it here"
+          : "Portal connection is not enabled on this server",
+        portalUrl,
+      });
+    }
+    if (tender.source !== "etenders" || !tender.externalId) {
+      return res.status(503).json({
+        error: "Portal messaging is available for eTenders notices; ask the buyer through the published source",
+        portalUrl,
+      });
+    }
+
+    let delivered = false;
+    let warning: string | undefined;
+    let portalMessageId: string | null = null;
+    try {
+      const session = await portalLogin({ email: connection.email, password: decryptPortalPassword(connection.passwordEncrypted) });
+      const sent = await sendPortalMessage(session, tender.externalId, { subject: input.subject, body: input.question });
+      delivered = true;
+      portalMessageId = sent.messageId;
+      await updatePortalConnectionState(account, { status: "ok", verifiedAt: new Date().toISOString(), error: null });
+      await audit(req, {
+        action: AUDIT_ACTIONS.portalMessageSent, subjectType: "tender",
+        subjectId: tender.id, subjectLabel: tender.title,
+      });
+    } catch (error) {
+      const message = error instanceof PortalError ? error.message : "The portal could not be reached";
+      await updatePortalConnectionState(account, { status: "failed", error: message });
+      warning = `${message} — the question is recorded here; ask it on the portal to be sure the buyer sees it`;
+    }
+
+    const record = await recordClarification({
+      tenderId: tender.id, question: input.question, subject: input.subject,
+      askedOn: new Date().toISOString().slice(0, 10), askedBy: actorEmail(req),
+      response: "", respondedOn: "",
+      direction: "out", origin: delivered ? "portal" : "manual", portalMessageId,
+    });
+    res.status(delivered ? 201 : 200).json({
+      clarification: { ...record, status: "Open" }, delivered,
+      ...(warning ? { warning } : {}), portalUrl,
+    });
+  } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
+});
+
+/**
+ * Reads the tender's messaging exchange on the portal into this workspace.
+ *
+ * Portal messages become clarification rows with origin "portal"; the portal's
+ * own message id keeps a second sync from recording them twice. Without a
+ * connection nothing is invented: the stored list comes back with synced: 0.
+ */
+app.post("/api/tenders/:id/clarifications/sync", portalMessageLimiter, async (req: AuthenticatedRequest, res) => {
+  try {
+    const account = accountId(req);
+    const tender = await getTender(account, routeParam(req.params.id));
+    if (!tender) return res.status(404).json({ error: "Tender not found" });
+    const existing = await listClarifications(tender.id);
+    const withStatus = (items: typeof existing) => items.map((entry) => ({ ...entry, status: entry.response.trim() ? "Answered" : "Open" }));
+
+    const connection = portalConnectionEnabled() ? await getPortalConnection(account) : null;
+    if (!connection) {
+      return res.json({
+        items: withStatus(existing), synced: 0,
+        warning: portalConnectionEnabled()
+          ? "Connect your eTenders account to sync the portal exchange"
+          : "Portal connection is not enabled on this server",
+      });
+    }
+    if (tender.source !== "etenders" || !tender.externalId) {
+      return res.json({
+        items: withStatus(existing), synced: 0,
+        warning: "Portal sync is available for eTenders notices; this notice's exchange lives on its published source",
+      });
+    }
+
+    try {
+      const session = await portalLogin({ email: connection.email, password: decryptPortalPassword(connection.passwordEncrypted) });
+      const messages = await listPortalMessages(session, tender.externalId);
+      const knownIds = new Set(existing.map((entry) => entry.portalMessageId).filter(Boolean));
+      const knownBodies = new Set(existing
+        .filter((entry) => entry.origin === "portal")
+        .map((entry) => `${entry.direction}|${entry.subject ?? ""}|${entry.direction === "in" ? entry.response : entry.question}`));
+      let synced = 0;
+      for (const message of messages) {
+        if (message.messageId && knownIds.has(message.messageId)) continue;
+        const text = message.body || message.subject;
+        if (!text) continue;
+        if (!message.messageId && knownBodies.has(`${message.direction}|${message.subject}|${text}`)) continue;
+        await recordClarification({
+          tenderId: tender.id,
+          question: message.direction === "in" ? (message.subject || "Message from the buyer") : text,
+          subject: message.subject || null,
+          askedOn: message.sentOn || new Date().toISOString().slice(0, 10),
+          askedBy: message.direction === "in" ? tender.authority || "Contracting authority" : connection.email,
+          response: message.direction === "in" ? text : "",
+          respondedOn: message.direction === "in" ? (message.sentOn || new Date().toISOString().slice(0, 10)) : "",
+          direction: message.direction, origin: "portal", portalMessageId: message.messageId,
+        });
+        synced += 1;
+      }
+      await updatePortalConnectionState(account, { status: "ok", lastSyncAt: new Date().toISOString(), error: null });
+      res.json({ items: withStatus(await listClarifications(tender.id)), synced });
+    } catch (error) {
+      const message = error instanceof PortalError ? error.message : "The portal could not be reached";
+      await updatePortalConnectionState(account, { status: "failed", error: message });
+      res.json({ items: withStatus(await listClarifications(tender.id)), synced: 0, warning: message });
+    }
   } catch (error) { const mapped = safeError(error); res.status(mapped.status).json({ error: mapped.message }); }
 });
 

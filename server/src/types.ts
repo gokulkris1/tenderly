@@ -163,6 +163,8 @@ export type PublicTender = {
   status: string;
   estimatedValue: string;
   sourceUrl: string;
+  /** ISO alpha-3 markets this notice applies to (eTenders ⇒ ["IRL"]; TED ⇒ place-of-performance). */
+  markets?: string[];
 };
 
 export type TenderRecord = PublicTender & {
@@ -311,6 +313,11 @@ export type Clarification = {
   response: string;
   respondedOn: string;
   createdAt: string;
+  /** Portal integration fields; absent for manually recorded entries. */
+  subject?: string | null;
+  direction?: "out" | "in";
+  origin?: "manual" | "portal";
+  portalMessageId?: string | null;
 };
 
 /**
@@ -439,4 +446,6 @@ export type DiscoveryPreferences = {
   cpvCodes: string[];
   valueMin: number | null;
   valueMax: number | null;
+  /** ISO 3166-1 alpha-3 markets to watch (TED place-of-performance). Default ["IRL"]. */
+  countries: string[];
 };

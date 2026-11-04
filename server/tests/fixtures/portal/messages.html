@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<!-- Synthetic fixture: the Messaging exchange for one CfT, with the compose form. -->
+<html>
+  <head><title>eTenders — Messaging — CfT 248591</title></head>
+  <body>
+    <h1>Messaging — CfT 248591</h1>
+    <table id="messages">
+      <tr><th>Date</th><th>From</th><th>Subject</th></tr>
+      <tr>
+        <td>12/10/2026 09:41</td>
+        <td>Dublin City Council (Contracting Authority)</td>
+        <td><a href="/epps/cft/viewMessage.do?resourceId=248591&messageId=77120">Extension of closing date</a></td>
+      </tr>
+      <tr>
+        <td>02/10/2026 14:05</td>
+        <td>Bidder (you)</td>
+        <td><a href="/epps/cft/viewMessage.do?resourceId=248591&messageId=77002">Question about lot structure</a></td>
+      </tr>
+    </table>
+    <form action="/epps/cft/sendMessage.do" method="post">
+      <input type="hidden" name="resourceId" value="248591" />
+      <input type="hidden" name="org.apache.struts.taglib.html.TOKEN" value="def456token" />
+      <label>Subject <input type="text" name="subject" /></label>
+      <label>Message <textarea name="messageText"></textarea></label>
+      <input type="submit" value="Send" />
+    </form>
+  </body>
+</html>

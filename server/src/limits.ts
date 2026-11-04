@@ -81,3 +81,11 @@ export const importLimiter = accountLimiter({ windowMs: hour, limit: 60, action:
 
 /** Pack and deck generation build files; a handful a minute is generous. */
 export const packLimiter = accountLimiter({ windowMs: minute, limit: 20, action: "pack generation" });
+
+/**
+ * Portal messages leave this product and arrive on the buyer's desk through
+ * the user's own eTenders account, so the limit is about real use: asking a
+ * buyer a question is rare and deliberate, and a runaway loop would be sent
+ * under the user's name.
+ */
+export const portalMessageLimiter = accountLimiter({ windowMs: hour, limit: 30, action: "portal message" });

@@ -6,6 +6,8 @@ import { needsMigration, remapLegacyAnalysis } from "./analysis-schema.js";
 import { allCpvCodes, cpvAncestors, normaliseCpv } from "./cpv.js";
 import { canonicalKey } from "./dedupe.js";
 import { parseDeadline } from "./pressure.js";
+import { changeWorkflow, tenderWorkflow } from "./tender-workflow.js";
+import type { TenderBoardConfig, TenderWorkflowPatch } from "@tenderly/shared";
 import type { IngestionRun } from "./ingestion-health.js";
 import type { AnswerVersion } from "./versions.js";
 import type { MockEvaluation } from "./evaluation.js";
@@ -67,6 +69,7 @@ const memory = {
   invitations: [] as InvitationRecord[],
   companies: new Map<string, CompanyProfile>(),
   tenders: new Map<string, TenderRecord>(),
+  tenderBoards: new Map<string, TenderBoardConfig & { accountId: string }>(),
   documents: new Map<string, StoredDocument>(),
   answers: new Map<string, BidAnswer>(),
   preferences: new Map<string, DiscoveryPreferences>(),
@@ -92,6 +95,25 @@ const memory = {
   ingestionRuns: [] as IngestionRun[],
   declarations: new Map<string, DeclarationAnswer[]>(),
   affirmations: new Map<string, Affirmation>(),
+  dismissals: [] as DiscoveryDismissal[],
+  portalConnections: new Map<string, StoredPortalConnection>(),
+};
+
+/** One notice a workspace has dismissed from Discover. */
+export type DiscoveryDismissal = { accountId: string; externalId: string; source: string; createdAt: string };
+
+/**
+ * The stored portal connection. The password column holds the AES-256-GCM
+ * envelope from src/portal.ts and never leaves this module unencrypted.
+ */
+export type StoredPortalConnection = {
+  accountId: string;
+  email: string;
+  passwordEncrypted: string;
+  status: "untested" | "ok" | "failed";
+  verifiedAt: string | null;
+  lastSyncAt: string | null;
+  error: string | null;
 };
 
 /**
@@ -608,6 +630,7 @@ export async function listAllCompanies() {
 const USER_OWNED_METADATA = [
   "attestation", "selectedLots", "checklistOverrides", "noAiMode", "aiPolicyAcknowledgement",
   "roleAssignments", "runbookTicks", "questionsNeedingReview", "amendments", "decisionNeedsReconfirmation",
+  "workflow",
 ] as const;
 
 /**
@@ -636,27 +659,23 @@ function mergeTenderMetadata(
   return merged;
 }
 
-/**
- * Notes a changed deadline so a recorded bid decision can be re-confirmed.
- *
- * A deadline that moves is the single most consequential thing an addendum can
- * do, and a decision to bid was taken against the old one. Recorded rather than
- * acted on: this layer does not know who decided what, only that the ground
- * moved.
- */
-function noteDeadlineAmendment(
-  existing: { deadline?: string; metadata?: Record<string, unknown> } | undefined,
-  incoming: { deadline: string },
+/** Retain core source changes; a moved deadline also needs bid-decision review. */
+function noteSourceAmendments(
+  existing: Partial<Pick<TenderRecord, "deadline" | "title" | "authority" | "description" | "estimatedValue" | "procedure">> & { metadata?: Record<string, unknown> } | undefined,
+  incoming: Pick<TenderRecord, "deadline" | "title" | "authority" | "description" | "estimatedValue" | "procedure">,
   metadata: Record<string, unknown>,
 ) {
-  const before = (existing?.deadline ?? "").trim();
-  const after = (incoming.deadline ?? "").trim();
-  if (!existing || !before || !after || before === after) return metadata;
+  if (!existing) return metadata;
+  const at = new Date().toISOString();
+  const changes = (["deadline", "title", "authority", "description", "estimatedValue", "procedure"] as const)
+    .filter((field) => (existing[field] ?? "").trim() !== (incoming[field] ?? "").trim())
+    .map((field) => ({ at, field, from: existing[field] ?? "", to: incoming[field] ?? "" }));
+  if (!changes.length) return metadata;
   const amendments = Array.isArray(metadata.amendments) ? metadata.amendments : [];
   return {
     ...metadata,
-    amendments: [...amendments, { at: new Date().toISOString(), field: "deadline", from: before, to: after }],
-    decisionNeedsReconfirmation: true,
+    amendments: [...amendments, ...changes],
+    ...(changes.some((change) => change.field === "deadline" && change.from && change.to) ? { decisionNeedsReconfirmation: true } : {}),
   };
 }
 
@@ -672,10 +691,11 @@ export async function upsertTender(accountId: string, tender: Omit<TenderRecord,
       id: twin?.id ?? tender.id ?? randomUUID(),
       accountId,
       analysis: tender.analysis ?? twin?.analysis ?? null,
+      status: twin?.status ?? tender.status,
       // Spreading `tender` would replace the metadata object outright, taking
       // the attestation and the lot selection with it (TLY-247). Merge instead,
       // exactly as the twin branch below already does.
-      metadata: noteDeadlineAmendment(twin ?? sameSource, tender, mergeTenderMetadata(twin ?? sameSource, tender)),
+      metadata: noteSourceAmendments(twin ?? sameSource, tender, mergeTenderMetadata(twin ?? sameSource, tender)),
       cpvNormalised: rawCpvOf(tender.metadata) ?? twin?.cpvNormalised,
       canonicalKey: identity.key,
       // A twin keeps its own source and body: the record already worked on wins.
@@ -698,8 +718,8 @@ export async function upsertTender(accountId: string, tender: Omit<TenderRecord,
       { label: tender.source, url: tender.sourceUrl, externalId: tender.externalId },
     ].filter((entry, index, all) => all.findIndex((other) => other.url === entry.url) === index);
     const updated = await pool.query(
-      `UPDATE tenders SET metadata=$2, cpv_normalised=COALESCE(tenders.cpv_normalised,$3), updated_at=now() WHERE id=$1 RETURNING *`,
-      [existing.id, JSON.stringify({ ...existing.metadata, ...tender.metadata, alternateSources: alternates, mergeReason: identity.reason }), rawCpvOf(tender.metadata)],
+      `UPDATE tenders SET metadata=(metadata||$2::jsonb)||(SELECT COALESCE(jsonb_object_agg(key,value),'{}'::jsonb) FROM jsonb_each(tenders.metadata) WHERE key=ANY($4::text[])), cpv_normalised=COALESCE(tenders.cpv_normalised,$3), updated_at=now() WHERE id=$1 RETURNING *`,
+      [existing.id, JSON.stringify({ ...mergeTenderMetadata(existing, tender), alternateSources: alternates, mergeReason: identity.reason }), rawCpvOf(tender.metadata), USER_OWNED_METADATA],
     );
     return mapTenderRow(updated.rows[0]);
   }
@@ -713,17 +733,110 @@ export async function upsertTender(accountId: string, tender: Omit<TenderRecord,
     [accountId, tender.source, tender.externalId || null],
   );
   const prior = priorRow.rows[0] ? mapTenderRow(priorRow.rows[0]) : undefined;
-  const metadata = noteDeadlineAmendment(prior, tender, mergeTenderMetadata(prior, tender));
+  const metadata = noteSourceAmendments(prior, tender, mergeTenderMetadata(prior, tender));
 
   const id = prior?.id ?? tender.id ?? randomUUID();
   const result = await pool.query(
     `INSERT INTO tenders(id,account_id,source,external_id,source_url,title,authority,description,procedure,deadline,published,estimated_value,status,metadata,analysis,cpv_normalised,canonical_key)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'IMPORTED',$13,$14,$15,$16)
-     ON CONFLICT(account_id,source,external_id) DO UPDATE SET source_url=EXCLUDED.source_url,title=EXCLUDED.title,authority=EXCLUDED.authority,description=EXCLUDED.description,procedure=EXCLUDED.procedure,deadline=EXCLUDED.deadline,published=EXCLUDED.published,estimated_value=EXCLUDED.estimated_value,metadata=EXCLUDED.metadata,analysis=COALESCE(EXCLUDED.analysis,tenders.analysis),cpv_normalised=EXCLUDED.cpv_normalised,canonical_key=EXCLUDED.canonical_key,updated_at=now()
+     ON CONFLICT(account_id,source,external_id) DO UPDATE SET source_url=EXCLUDED.source_url,title=EXCLUDED.title,authority=EXCLUDED.authority,description=EXCLUDED.description,procedure=EXCLUDED.procedure,deadline=EXCLUDED.deadline,published=EXCLUDED.published,estimated_value=EXCLUDED.estimated_value,metadata=(tenders.metadata||EXCLUDED.metadata)||(SELECT COALESCE(jsonb_object_agg(key,value),'{}'::jsonb) FROM jsonb_each(tenders.metadata) WHERE key=ANY($17::text[])),analysis=COALESCE(EXCLUDED.analysis,tenders.analysis),cpv_normalised=EXCLUDED.cpv_normalised,canonical_key=EXCLUDED.canonical_key,updated_at=now()
      RETURNING *`,
-    [id, accountId, tender.source, tender.externalId || null, tender.sourceUrl, tender.title, tender.authority, tender.description, tender.procedure, tender.deadline, tender.published, tender.estimatedValue, JSON.stringify(metadata), tender.analysis ? JSON.stringify(tender.analysis) : null, rawCpvOf(tender.metadata), identity.key],
+    [id, accountId, tender.source, tender.externalId || null, tender.sourceUrl, tender.title, tender.authority, tender.description, tender.procedure, tender.deadline, tender.published, tender.estimatedValue, JSON.stringify(metadata), tender.analysis ? JSON.stringify(tender.analysis) : null, rawCpvOf(tender.metadata), identity.key, USER_OWNED_METADATA.filter((key) => key !== "amendments" && key !== "decisionNeedsReconfirmation")],
   );
   return mapTenderRow(result.rows[0]);
+}
+
+/** A board's own market list, or undefined when it watches the workspace's countries. */
+function boardCountries(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const codes = [...new Set(value.map(String).map((code) => code.trim().toUpperCase()).filter((code) => /^[A-Z]{3}$/.test(code)))];
+  return codes.length ? codes : undefined;
+}
+
+export async function listTenderBoards(accountId: string): Promise<TenderBoardConfig[]> {
+  if (!pool) {
+    let boards = [...memory.tenderBoards.values()].filter((board) => board.accountId === accountId);
+    if (!boards.length) {
+      const board = { id: randomUUID(), accountId, name: "IT services", cpvCodes: ["72000000"] };
+      memory.tenderBoards.set(board.id, board);
+      boards = [board];
+    }
+    return boards.map(({ id, name, cpvCodes, countries }) => ({ id, name, cpvCodes, countries: boardCountries(countries) }));
+  }
+  await pool.query(
+    `INSERT INTO tender_boards(id,account_id,name,cpv_codes)
+     SELECT $1,$2,'IT services','["72000000"]'::jsonb WHERE NOT EXISTS (SELECT 1 FROM tender_boards WHERE account_id=$2)
+     ON CONFLICT(account_id,name) DO NOTHING`,
+    [randomUUID(), accountId],
+  );
+  const result = await pool.query("SELECT id,name,cpv_codes,countries FROM tender_boards WHERE account_id=$1 ORDER BY created_at,id", [accountId]);
+  return result.rows.map((row) => ({ id: row.id, name: row.name, cpvCodes: row.cpv_codes, countries: boardCountries(row.countries) }));
+}
+
+export async function createTenderBoard(accountId: string, name: string, cpvCodes: string[], countries?: string[]): Promise<TenderBoardConfig | null> {
+  await listTenderBoards(accountId);
+  const board: TenderBoardConfig = { id: randomUUID(), name, cpvCodes: [...new Set(cpvCodes)], countries: boardCountries(countries) };
+  if (!pool) {
+    if ([...memory.tenderBoards.values()].some((item) => item.accountId === accountId && item.name === name)) return null;
+    memory.tenderBoards.set(board.id, { ...board, accountId });
+    return board;
+  }
+  const result = await pool.query(
+    "INSERT INTO tender_boards(id,account_id,name,cpv_codes,countries) VALUES($1,$2,$3,$4,$5) ON CONFLICT(account_id,name) DO NOTHING RETURNING id",
+    [board.id, accountId, name, JSON.stringify(board.cpvCodes), board.countries ? JSON.stringify(board.countries) : null],
+  );
+  return result.rows.length ? board : null;
+}
+
+export async function deleteTenderBoard(accountId: string, id: string) {
+  if (!pool) {
+    if (memory.tenderBoards.get(id)?.accountId !== accountId) return "NOT_FOUND";
+    if ([...memory.tenderBoards.values()].filter((board) => board.accountId === accountId).length <= 1) return "LAST_BOARD";
+    memory.tenderBoards.delete(id);
+    return "DELETED";
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT id FROM organisations WHERE id=$1 FOR UPDATE", [accountId]);
+    const boards = await client.query("SELECT id FROM tender_boards WHERE account_id=$1", [accountId]);
+    let result = "NOT_FOUND";
+    if (boards.rows.some((board) => board.id === id)) {
+      result = boards.rows.length <= 1 ? "LAST_BOARD" : "DELETED";
+      if (result === "DELETED") await client.query("DELETE FROM tender_boards WHERE account_id=$1 AND id=$2", [accountId, id]);
+    }
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally { client.release(); }
+}
+
+export async function updateTenderWorkflow(accountId: string, tenderId: string, patch: TenderWorkflowPatch, actor: string) {
+  if (!pool) {
+    const tender = memory.tenders.get(tenderId);
+    if (!tender || tender.accountId !== accountId) return null;
+    tender.metadata.workflow = changeWorkflow(tenderWorkflow(tender.metadata.workflow), patch, actor);
+    return tender;
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const prior = await client.query("SELECT * FROM tenders WHERE id=$1 AND account_id=$2 FOR UPDATE", [tenderId, accountId]);
+    if (!prior.rows[0]) { await client.query("COMMIT"); return null; }
+    const tender = mapTenderRow(prior.rows[0]);
+    const workflow = changeWorkflow(tenderWorkflow(tender.metadata.workflow), patch, actor);
+    const result = await client.query(
+      "UPDATE tenders SET metadata=jsonb_set(metadata,'{workflow}',$3::jsonb),updated_at=now() WHERE id=$1 AND account_id=$2 RETURNING *",
+      [tenderId, accountId, JSON.stringify(workflow)],
+    );
+    await client.query("COMMIT");
+    return mapTenderRow(result.rows[0]);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally { client.release(); }
 }
 
 export async function getTender(accountId: string, tenderId: string): Promise<TenderRecord | null> {
@@ -1212,7 +1325,7 @@ export async function recordIngestionRun(input: Omit<IngestionRun, "id" | "creat
 /** Parsed counts from this source's recent runs, newest first. */
 export async function recentIngestionYields(source: string, limit = 10) {
   if (!pool) {
-    return memory.ingestionRuns.filter((run) => run.source === source)
+    return memory.ingestionRuns.filter((run) => run.source === source).reverse()
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit)
       .map((run) => run.noticesParsed);
   }
@@ -1706,14 +1819,24 @@ const toClarification = (row: Record<string, unknown>): Clarification => ({
   askedOn: String(row.asked_on ?? ""), askedBy: String(row.asked_by ?? ""),
   response: String(row.response ?? ""), respondedOn: String(row.responded_on ?? ""),
   createdAt: new Date(row.created_at as string).toISOString(),
+  subject: row.subject === null || row.subject === undefined ? null : String(row.subject),
+  direction: row.direction === "in" ? "in" : "out",
+  origin: row.origin === "portal" ? "portal" : "manual",
+  portalMessageId: row.portal_message_id === null || row.portal_message_id === undefined ? null : String(row.portal_message_id),
 });
 
 export async function recordClarification(input: Omit<Clarification, "id" | "createdAt">) {
-  const record: Clarification = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+  // The defaults match the table's column defaults, so the two stores answer
+  // the same record for the same input.
+  const record: Clarification = {
+    subject: null, direction: "out", origin: "manual", portalMessageId: null,
+    ...input, id: randomUUID(), createdAt: new Date().toISOString(),
+  };
   if (!pool) { memory.clarifications.push(record); return record; }
   await pool.query(
-    "INSERT INTO clarifications(id,tender_id,question,asked_on,asked_by,response,responded_on) VALUES($1,$2,$3,$4,$5,$6,$7)",
-    [record.id, record.tenderId, record.question, record.askedOn, record.askedBy, record.response, record.respondedOn],
+    "INSERT INTO clarifications(id,tender_id,question,asked_on,asked_by,response,responded_on,subject,direction,origin,portal_message_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+    [record.id, record.tenderId, record.question, record.askedOn, record.askedBy, record.response, record.respondedOn,
+      record.subject ?? null, record.direction ?? "out", record.origin ?? "manual", record.portalMessageId ?? null],
   );
   return record;
 }
@@ -1973,7 +2096,10 @@ export async function deleteAccount(accountId: string, requestedBy: string, requ
     }
     memory.organisations.delete(accountId);
     memory.companies.delete(accountId);
+    for (const [id, board] of memory.tenderBoards) if (board.accountId === accountId) memory.tenderBoards.delete(id);
     memory.preferences.delete(accountId);
+    memory.portalConnections.delete(accountId);
+    memory.dismissals = memory.dismissals.filter((entry) => entry.accountId !== accountId);
     memory.declarations.delete(accountId);
     memory.affirmations.delete(accountId);
     memory.deletionLog.push({ accountId, requestedBy, requestedAt, completedAt: new Date().toISOString() });
@@ -2254,10 +2380,20 @@ export async function migrateAnalysisSchema(): Promise<{ tenders: number; answer
   return counts;
 }
 
-const EMPTY_PREFERENCES: DiscoveryPreferences = { sectors: [], keywords: [], cpvCodes: [], valueMin: null, valueMax: null };
+const EMPTY_PREFERENCES: DiscoveryPreferences = { sectors: [], keywords: [], cpvCodes: [], valueMin: null, valueMax: null, countries: ["IRL"] };
+
+/** Alpha-3 codes, upper-cased and deduplicated; empty input means Ireland, as it always has. */
+function normaliseCountries(value: unknown): string[] {
+  if (!Array.isArray(value)) return ["IRL"];
+  const codes = [...new Set(value.map(String).map((code) => code.trim().toUpperCase()).filter((code) => /^[A-Z]{3}$/.test(code)))];
+  return codes.length ? codes : ["IRL"];
+}
 
 export async function getPreferences(accountId: string): Promise<DiscoveryPreferences> {
-  if (!pool) return memory.preferences.get(accountId) ?? { ...EMPTY_PREFERENCES };
+  if (!pool) {
+    const stored = memory.preferences.get(accountId);
+    return stored ? { ...stored, countries: normaliseCountries(stored.countries) } : { ...EMPTY_PREFERENCES };
+  }
   const result = await pool.query("SELECT * FROM discovery_preferences WHERE account_id=$1", [accountId]);
   const row = result.rows[0];
   if (!row) return { ...EMPTY_PREFERENCES };
@@ -2267,21 +2403,23 @@ export async function getPreferences(accountId: string): Promise<DiscoveryPrefer
     cpvCodes: row.cpv_codes ?? [],
     valueMin: row.value_min === null ? null : Number(row.value_min),
     valueMax: row.value_max === null ? null : Number(row.value_max),
+    countries: normaliseCountries(row.countries),
   };
 }
 
 export async function savePreferences(accountId: string, preferences: DiscoveryPreferences): Promise<DiscoveryPreferences> {
+  const normalised = { ...preferences, countries: normaliseCountries(preferences.countries) };
   if (!pool) {
-    memory.preferences.set(accountId, preferences);
-    return preferences;
+    memory.preferences.set(accountId, normalised);
+    return normalised;
   }
   await pool.query(
-    `INSERT INTO discovery_preferences(account_id,sectors,keywords,cpv_codes,value_min,value_max,updated_at)
-     VALUES($1,$2,$3,$4,$5,$6,now())
-     ON CONFLICT (account_id) DO UPDATE SET sectors=$2, keywords=$3, cpv_codes=$4, value_min=$5, value_max=$6, updated_at=now()`,
-    [accountId, JSON.stringify(preferences.sectors), JSON.stringify(preferences.keywords), JSON.stringify(preferences.cpvCodes), preferences.valueMin, preferences.valueMax],
+    `INSERT INTO discovery_preferences(account_id,sectors,keywords,cpv_codes,value_min,value_max,countries,updated_at)
+     VALUES($1,$2,$3,$4,$5,$6,$7,now())
+     ON CONFLICT (account_id) DO UPDATE SET sectors=$2, keywords=$3, cpv_codes=$4, value_min=$5, value_max=$6, countries=$7, updated_at=now()`,
+    [accountId, JSON.stringify(normalised.sectors), JSON.stringify(normalised.keywords), JSON.stringify(normalised.cpvCodes), normalised.valueMin, normalised.valueMax, JSON.stringify(normalised.countries)],
   );
-  return preferences;
+  return normalised;
 }
 
 /**
@@ -2478,4 +2616,193 @@ export async function companyWonBefore(authority: string, companyName: string): 
     [authority, "%" + name + "%"],
   );
   return result.rows[0]?.n ?? 0;
+}
+
+/** One authority's recorded award count and total value, across every CPV. */
+export async function buyerAwardTotals(authority: string): Promise<{ awards: number; totalValue: number | null }> {
+  const name = authority.trim();
+  if (!name) return { awards: 0, totalValue: null };
+  if (!pool) {
+    const hits = ([...memory.awards.values()] as Record<string, unknown>[])
+      .filter((row) => String(row.authority ?? "").toLowerCase() === name.toLowerCase());
+    // An unpriced award is a count, not a zero: Number(null) would say €0.
+    const values = hits.map((row) => row.awardedValue)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    return { awards: hits.length, totalValue: values.length ? values.reduce((sum, value) => sum + value, 0) : null };
+  }
+  const result = await pool.query(
+    `SELECT count(*)::int AS awards, sum(awarded_value) AS total_value,
+            count(awarded_value)::int AS valued
+       FROM award_history WHERE lower(authority) = lower($1)`,
+    [name],
+  );
+  const row = result.rows[0];
+  return {
+    awards: row?.awards ?? 0,
+    totalValue: row && row.valued > 0 ? Number(row.total_value) : null,
+  };
+}
+
+/**
+ * The suppliers winning the awards in the given CPV families.
+ *
+ * A "family" is the configured code itself or anything under its division —
+ * the same fallback awardIntelligence uses, so a niche code with no history
+ * still contributes its neighbours. Suppliers are the dataset's own strings:
+ * the OGP file does not normalise a company's name between quarters.
+ */
+export async function competitorInsights(cpvCodes: string[], limit = 10): Promise<{
+  supplier: string; wins: number; totalValue: number | null; lastWin: string | null; buyers: string[];
+}[]> {
+  const prefixes = [...new Set(cpvCodes.map((code) => code.replace(/[^0-9]/g, "")).filter((code) => code.length >= 2)
+    .flatMap((code) => [code, code.slice(0, 2)]))];
+  if (!prefixes.length) return [];
+
+  const aggregate = new Map<string, { wins: number; total: number; valued: boolean; lastWin: string; buyers: Set<string> }>();
+  const record = (supplier: string, value: number | null, awardedOn: string, authority: string) => {
+    const entry = aggregate.get(supplier) ?? { wins: 0, total: 0, valued: false, lastWin: "", buyers: new Set<string>() };
+    entry.wins += 1;
+    if (value !== null && Number.isFinite(value)) { entry.total += value; entry.valued = true; }
+    if (awardedOn && awardedOn > entry.lastWin) entry.lastWin = awardedOn;
+    if (authority) entry.buyers.add(authority);
+    aggregate.set(supplier, entry);
+  };
+
+  if (!pool) {
+    for (const raw of memory.awards.values()) {
+      const row = raw as Record<string, unknown>;
+      const cpv = String(row.cpv ?? "");
+      if (!prefixes.some((prefix) => cpv.startsWith(prefix))) continue;
+      const supplier = String(row.suppliers ?? "").trim();
+      if (!supplier) continue;
+      const value = row.awardedValue === null || row.awardedValue === undefined ? null : Number(row.awardedValue);
+      record(supplier, value, String(row.awardedOn ?? ""), String(row.authority ?? ""));
+    }
+  } else {
+    const result = await pool.query(
+      `SELECT suppliers AS supplier, count(*)::int AS wins, sum(awarded_value) AS total_value,
+              count(awarded_value)::int AS valued, max(awarded_on) AS last_win,
+              array_agg(DISTINCT authority) AS buyers
+         FROM award_history
+        WHERE suppliers <> '' AND (${prefixes.map((_prefix, index) => `cpv LIKE $${index + 1}`).join(" OR ")})
+        GROUP BY suppliers`,
+      prefixes.map((prefix) => `${prefix}%`),
+    );
+    for (const row of result.rows) {
+      const lastWin = row.last_win ? new Date(row.last_win as string).toISOString().slice(0, 10) : "";
+      record(String(row.supplier), row.valued > 0 ? Number(row.total_value) : null, lastWin, "");
+      for (const buyer of row.buyers ?? []) aggregate.get(String(row.supplier))?.buyers.add(String(buyer));
+    }
+  }
+
+  return [...aggregate.entries()]
+    .map(([supplier, entry]) => ({
+      supplier,
+      wins: entry.wins,
+      totalValue: entry.valued ? entry.total : null,
+      lastWin: entry.lastWin || null,
+      buyers: [...entry.buyers].sort().slice(0, 10),
+    }))
+    .sort((a, b) => b.wins - a.wins || (b.totalValue ?? 0) - (a.totalValue ?? 0) || a.supplier.localeCompare(b.supplier))
+    .slice(0, limit);
+}
+
+/** Excludes a notice from the account's Discover results until restored. */
+export async function dismissDiscoveryNotice(accountId: string, externalId: string, source: string) {
+  if (!pool) {
+    if (!memory.dismissals.some((entry) => entry.accountId === accountId && entry.externalId === externalId && entry.source === source)) {
+      memory.dismissals.push({ accountId, externalId, source, createdAt: new Date().toISOString() });
+    }
+    return;
+  }
+  await pool.query(
+    "INSERT INTO discovery_dismissals(account_id,external_id,source) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
+    [accountId, externalId, source],
+  );
+}
+
+/** Undoes a dismissal; the notice appears in Discover again on the next view. */
+export async function restoreDiscoveryNotice(accountId: string, externalId: string, source: string) {
+  if (!pool) {
+    memory.dismissals = memory.dismissals.filter(
+      (entry) => !(entry.accountId === accountId && entry.externalId === externalId && entry.source === source));
+    return;
+  }
+  await pool.query(
+    "DELETE FROM discovery_dismissals WHERE account_id=$1 AND external_id=$2 AND source=$3",
+    [accountId, externalId, source],
+  );
+}
+
+export async function listDiscoveryDismissals(accountId: string): Promise<DiscoveryDismissal[]> {
+  if (!pool) return memory.dismissals.filter((entry) => entry.accountId === accountId);
+  const result = await pool.query(
+    "SELECT account_id, external_id, source, created_at FROM discovery_dismissals WHERE account_id=$1 ORDER BY created_at", [accountId]);
+  return result.rows.map((row) => ({
+    accountId: String(row.account_id), externalId: String(row.external_id),
+    source: String(row.source), createdAt: new Date(row.created_at as string).toISOString(),
+  }));
+}
+
+export async function getPortalConnection(accountId: string): Promise<StoredPortalConnection | null> {
+  if (!pool) return memory.portalConnections.get(accountId) ?? null;
+  const result = await pool.query("SELECT * FROM portal_connections WHERE account_id=$1", [accountId]);
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    accountId: String(row.account_id), email: String(row.email),
+    passwordEncrypted: String(row.password_encrypted), status: row.status,
+    verifiedAt: row.verified_at ? new Date(row.verified_at as string).toISOString() : null,
+    lastSyncAt: row.last_sync_at ? new Date(row.last_sync_at as string).toISOString() : null,
+    error: row.error === null || row.error === undefined ? null : String(row.error),
+  };
+}
+
+export async function savePortalConnection(accountId: string, email: string, passwordEncrypted: string): Promise<StoredPortalConnection> {
+  if (!pool) {
+    const record: StoredPortalConnection = {
+      accountId, email, passwordEncrypted, status: "untested", verifiedAt: null, lastSyncAt: null, error: null,
+    };
+    memory.portalConnections.set(accountId, record);
+    return record;
+  }
+  await pool.query(
+    `INSERT INTO portal_connections(account_id,email,password_encrypted,status,verified_at,last_sync_at,error,updated_at)
+     VALUES($1,$2,$3,'untested',NULL,NULL,NULL,now())
+     ON CONFLICT (account_id) DO UPDATE SET email=$2, password_encrypted=$3, status='untested', verified_at=NULL, last_sync_at=NULL, error=NULL, updated_at=now()`,
+    [accountId, email, passwordEncrypted],
+  );
+  return (await getPortalConnection(accountId))!;
+}
+
+/**
+ * Records the outcome of a real portal attempt. Called only after one — never
+ * on save — so the status is always something the portal itself told us.
+ */
+export async function updatePortalConnectionState(
+  accountId: string,
+  patch: { status: "ok" | "failed"; error?: string | null; verifiedAt?: string | null; lastSyncAt?: string | null },
+) {
+  if (!pool) {
+    const record = memory.portalConnections.get(accountId);
+    if (!record) return null;
+    record.status = patch.status;
+    record.error = patch.error ?? null;
+    if (patch.verifiedAt !== undefined) record.verifiedAt = patch.verifiedAt;
+    if (patch.lastSyncAt !== undefined) record.lastSyncAt = patch.lastSyncAt;
+    return record;
+  }
+  const result = await pool.query(
+    `UPDATE portal_connections SET status=$2, error=$3,
+       verified_at=COALESCE($4, verified_at), last_sync_at=COALESCE($5, last_sync_at), updated_at=now()
+     WHERE account_id=$1`,
+    [accountId, patch.status, patch.error ?? null, patch.verifiedAt ?? null, patch.lastSyncAt ?? null],
+  );
+  return result.rowCount ? getPortalConnection(accountId) : null;
+}
+
+export async function deletePortalConnection(accountId: string) {
+  if (!pool) return memory.portalConnections.delete(accountId);
+  const result = await pool.query("DELETE FROM portal_connections WHERE account_id=$1", [accountId]);
+  return (result.rowCount ?? 0) > 0;
 }

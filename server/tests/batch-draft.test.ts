@@ -81,7 +81,7 @@ function fakeDrafter(options: { failOn?: string[]; noEvidenceFor?: string[]; del
     return {
       outcome: {
         questionId: question.id, title: question.title, status: saved.status,
-        answerId: saved.id, citations, missingInputs,
+        answerId: saved.id, citations, missingInputs, claimsToVerify: [],
       },
     };
   };
@@ -266,7 +266,7 @@ test("TLY-67: evidence a run cites can be opened by its identifier", async () =>
     return {
       outcome: {
         questionId: question.id, title: question.title, status: saved.status, answerId: saved.id,
-        citations: [{ id: item.id, name: item.name, hasFile: false }], missingInputs: [],
+        citations: [{ id: item.id, name: item.name, hasFile: false }], missingInputs: [], claimsToVerify: [],
       },
     };
   };

@@ -25,6 +25,12 @@ export type BatchQuestionState = {
   /** Why it failed, in words a person can act on. Empty otherwise. */
   error?: string;
   citations?: { id: string; name: string; hasFile: boolean }[];
+  /**
+   * What a human must confirm before submitting this answer, including the
+   * pack's AI-use declaration duty. Delivered per question because a batch run
+   * is otherwise the one path where that duty would never be seen.
+   */
+  claimsToVerify?: string[];
 };
 
 export type BatchRun = {
@@ -183,6 +189,7 @@ export async function startBatchDraft(args: {
 function applyOutcome(state: BatchQuestionState, outcome: DraftOutcome) {
   state.state = outcome.status === "needs-input" ? "needs-input" : "drafted";
   state.citations = outcome.citations;
+  state.claimsToVerify = outcome.claimsToVerify;
 }
 
 /** Awaits the current run. Tests use it; the API never blocks on a run. */

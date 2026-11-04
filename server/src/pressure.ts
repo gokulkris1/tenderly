@@ -98,12 +98,34 @@ export function parseDeadline(value: string | undefined | null): Date | null {
   const isoMatch = /(\d{4})-(\d{2})-(\d{2})/.exec(text);
   if (isoMatch) return new Date(Date.UTC(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3])));
   const irish = /(\d{1,2})[/.](\d{1,2})[/.](\d{4})/.exec(text);
-  if (!irish) return null;
+  if (!irish) {
+    if (!/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s/.test(text)) return null;
+    const parsed = new Date(text);
+    return Number.isNaN(parsed.getTime()) ? null : new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()));
+  }
   const [day, month, year] = [Number(irish[1]), Number(irish[2]), Number(irish[3])];
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   const date = new Date(Date.UTC(year, month - 1, day));
   // Rejects 31/02: the roll-over would silently move the deadline.
   return date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? date : null;
+}
+
+/** Preserve published closing times; a date without a time remains open for that day. */
+export function deadlineInstant(value: string): Date | null {
+  const date = parseDeadline(value);
+  if (!date) return null;
+  if (/^\d{4}-\d{2}-\d{2}T|^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s/.test(value.trim())) {
+    const instant = new Date(value);
+    return Number.isNaN(instant.getTime()) ? null : instant;
+  }
+  const time = /\b(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(value);
+  if (!time) return new Date(date.getTime() + 86_400_000 - 1);
+  const [hours, minutes, seconds] = [Number(time[1]), Number(time[2]), Number(time[3] ?? 0)];
+  if (hours > 23 || minutes > 59 || seconds > 59) return null;
+  const local = date.getTime() + ((hours * 60 + minutes) * 60 + seconds) * 1000;
+  const offset = new Intl.DateTimeFormat("en", { timeZone: "Europe/Dublin", timeZoneName: "shortOffset" })
+    .formatToParts(new Date(local)).find((part) => part.type === "timeZoneName")?.value;
+  return new Date(local - (offset === "GMT+1" ? 3_600_000 : 0));
 }
 
 /**

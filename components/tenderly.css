@@ -631,6 +631,10 @@ button:disabled { cursor: wait; opacity: .62; }
 .role-unconfirmed { margin-top: 4.2px !important; font-size: 11.5px; color: var(--amber); }
 
 /* TLY-58 — a citation points at a document a buyer could be shown. */
+.claims-verify { margin-top: 12px; border: 1px solid #f5cd47; background: #fff7d6; border-radius: 8px; padding: 10px 14px; }
+.claims-verify ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: #5d4e07; }
+.ai-policy-reminder { margin: 8px 0 0; border: 1px solid #f5cd47; background: #fff7d6; border-radius: 6px; padding: 8px 12px; font-size: 12.5px; line-height: 1.6; color: #5d4e07; }
+.draft-claims { margin: 8px 0 0; padding: 8px 12px 8px 28px; border: 1px solid #f5cd47; background: #fff7d6; border-radius: 6px; font-size: 12px; line-height: 1.6; color: #5d4e07; }
 .answer-citations { margin-top: 9.9px; }
 .answer-citations .citation { margin: 5.6px 5.6px 0 0; padding: 3.5px 8.5px; border: 1px solid var(--green); border-radius: 703.5px; background: var(--green-soft); color: var(--green-2); font-size: 11.5px; cursor: pointer; }
 .answer-citations .citation:disabled { border-color: var(--line); background: var(--paper); color: var(--muted); cursor: default; }

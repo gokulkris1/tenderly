@@ -8,7 +8,8 @@ import { SEEDED, signIn } from "../support/app";
 test.describe("routing", () => {
   test("@smoke a bid stage has its own address and survives a reload", async ({ page }) => {
     await signIn(page);
-    await page.getByRole("button", { name: /My bids/ }).first().click();
+    await page.getByRole("button", { name: /Tender board/ }).first().click();
+    await page.getByText(SEEDED.blocked).first().click();
     await page.getByRole("button", { name: /Respond/ }).first().click();
     await expect(page).toHaveURL(/\/bids\/[^/]+\/respond$/);
 
@@ -32,6 +33,6 @@ test.describe("routing", () => {
     await signIn(page);
     await page.goto("/bids/does-not-exist/qualify");
     await expect(page.locator('[data-testid="bid-not-found"]')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("button", { name: /Back to My bids/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Back to tender board/i })).toBeVisible();
   });
 });

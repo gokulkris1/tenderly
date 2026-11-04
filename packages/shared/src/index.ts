@@ -97,6 +97,11 @@ export type Clarification = {
   /** Derived from whether a response exists, never stored separately. */
   status: "Open" | "Answered";
   createdAt: string;
+  /** Optional portal-integration fields; absent for manually recorded entries. */
+  subject?: string | null;
+  direction?: "out" | "in";
+  origin?: "manual" | "portal";
+  portalMessageId?: string | null;
 };
 
 /** What changed between two analyses of the same tender. */
@@ -315,6 +320,12 @@ export type AiUsePolicy = {
   confidence: "HIGH" | "MEDIUM" | "LOW";
   /** Set once a person has confirmed or dismissed the flag. */
   acknowledgement?: AiPolicyAcknowledgement;
+  /**
+   * The action this policy obliges the bidder to take before submission,
+   * re-derived on every serialization so the duty survives a reload. Absent
+   * for `unrestricted` and `not-stated`: silence is not a rule.
+   */
+  reminder?: string;
 };
 
 /** Who confirmed or dismissed the AI-use flag, and when. */
@@ -479,6 +490,51 @@ export type SynopsisSlide = {
   bullets: string[];
 };
 
+export type TenderStage = "NEW" | "REVIEW" | "IGNORE" | "CONSIDER" | "APPLICATION" | "DONE";
+export type TenderOutcome = "PENDING" | "WON" | "NOT_WON";
+export type TenderWorkflow = {
+  stage: TenderStage;
+  outcome: TenderOutcome;
+  assignee: string;
+  priority: "LOW" | "MEDIUM" | "HIGH";
+  history: { at: string; actor: string; message: string }[];
+};
+export type TenderWorkflowPatch = Partial<Omit<TenderWorkflow, "history">> & { comment?: string };
+export type TenderAttachment = { id: string; filename: string; role: string; sourceUrl?: string };
+export type TenderBoardConfig = { id: string; name: string; cpvCodes: string[]; /** ISO alpha-3 markets this board watches; omitted/empty = workspace-wide. */ countries?: string[] };
+
+/** Buyer directory row, aggregated from the workspace's tracked tenders and award history. */
+export type BuyerSummary = { name: string; activeTenders: number; trackedTenders: number; awards: number; awardedValue: string | null };
+
+/** One buyer's profile: their tenders in this workspace plus OGP award intelligence. */
+export type BuyerProfile = { name: string; tenders: Tender[]; intelligence: unknown };
+
+/** Market overview computed from real stored data only. EUR 200,000 is inclusive in `under`. */
+export type MarketStats = {
+  active: number;
+  newThisWeek: number;
+  closingSoon: { in7: number; in14: number; in30: number };
+  byDivision: { code: string; label: string; count: number }[];
+  topBuyers: { name: string; count: number }[];
+  valueBands: { under: number; over: number; unknown: number };
+  sources: { etenders: number; ted: number };
+  generatedAt: string;
+};
+
+/** A supplier with OGP award wins in the workspace's CPV families. */
+export type CompetitorInsight = { supplier: string; wins: number; totalValue: string | null; lastWin: string | null; buyers: string[] };
+
+/** eTenders portal connection state. Never carries the password. */
+export type PortalConnection = {
+  connected: boolean;
+  email: string | null;
+  /** "disabled" = TENDERLY_PORTAL_KEY unset on the server. */
+  status: "disabled" | "untested" | "ok" | "failed";
+  verifiedAt: string | null;
+  lastSyncAt: string | null;
+  error: string | null;
+};
+
 export type Tender = {
   id: string;
   resourceId: string;
@@ -495,6 +551,20 @@ export type Tender = {
   summary: string;
   sourceUrl: string;
   published: string;
+  workflow?: TenderWorkflow;
+  valueAmount?: number | null;
+  noticeFields?: Record<string, string>;
+  sourceDescription?: string;
+  sourceLinks?: { label: string; url: string }[];
+  contactEmails?: string[];
+  attachments?: TenderAttachment[];
+  sourceCheckedAt?: string;
+  sourceWarnings?: string[];
+  sourceChanges?: { at: string; field: string; from: string; to: string }[];
+  /** ISO alpha-3 markets this notice applies to (eTenders ⇒ ["IRL"]; TED ⇒ place-of-performance). */
+  markets?: string[];
+  /** Deep link to ask/answer clarifications on the official portal (eTenders CFT page; sign-in required). Absent for TED. */
+  messagingUrl?: string;
   framework: string;
   partnerNote?: string;
   gates: Gate[];
@@ -753,6 +823,8 @@ export type DiscoveryPreferences = {
   cpvCodes: string[];
   valueMin: number | null;
   valueMax: number | null;
+  /** ISO 3166-1 alpha-3 markets to watch (TED place-of-performance). Default ["IRL"]. */
+  countries: string[];
 };
 
 /**

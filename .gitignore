@@ -53,3 +53,6 @@ next-env.d.ts
 
 # credentials never enter the repo — they live in ~/.tenderly/secrets.env
 *.tsbuildinfo
+
+# Local Netlify folder
+.netlify

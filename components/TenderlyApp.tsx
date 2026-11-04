@@ -4,6 +4,13 @@ import { Component, FormEvent, ReactNode, useEffect, useMemo, useRef, useState }
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiError, createApiClient, type AccountDeletionState, type DraftRunState, type InvitationDetails, type TeamState } from "../web/src/api/client";
 import "./tenderly.css";
+import "./tracker.css";
+import "./superset.css";
+import { TENDER_STAGES, TenderBoard, TenderRecordPanel, workflowOf } from "./TenderTracker";
+import { BuyersDirectory, BuyerProfileView } from "./Buyers";
+import { MarketDashboard } from "./MarketDashboard";
+import { MarketBadges, MarketScopePicker, DEFAULT_MARKETS, showMarketBadges } from "./MarketScope";
+import { PortalConnectionCard } from "./PortalConnectionCard";
 
 import type {
   AiUsePolicy,
@@ -14,10 +21,12 @@ import type {
   AuditEntry,
   AwardCriterion,
   AwardIntelligence as AwardIntelligenceData,
-  BidQuestion,
   BidTask,
+  BuyerProfile,
+  BuyerSummary,
   Clarification,
   CompanyProfile,
+  CompetitorInsight,
   DeadlinePressure,
   Decision,
   DeclarationAnswer,
@@ -26,14 +35,15 @@ import type {
   DiscoveryPreferences,
   EvidenceItem,
   Formality,
-  Gate,
   GateState,
   Lot,
+  MarketStats,
   MockEvaluation,
   NotificationItem,
   PackQuestion,
   PersonFact,
   PersonItem,
+  PortalConnection,
   Portfolio,
   PortfolioRow,
   ProvenanceClass,
@@ -46,21 +56,25 @@ import type {
   SavedSearchFilter,
   SectorPreset,
   SkillMatrix,
-  SubmissionItem,
   Tender,
+  TenderAttachment,
+  TenderBoardConfig,
+  TenderWorkflowPatch,
   UsageTotals,
   VaultCompleteness,
   WatchlistItem,
 } from "@tenderly/shared";
 
 // Screen navigation is local to the app, not part of the wire contract.
-type AppSection = "Discover" | "Watchlist" | "Portfolio" | "My bids" | "Evidence" | "Team" | "Company" | "Settings";
-type BidStage = "Qualify" | "Synopsis" | "Respond" | "Assemble" | "Submit";
+type AppSection = "Discover" | "Watchlist" | "Portfolio" | "My bids" | "Buyers" | "Market" | "Evidence" | "Team" | "Company" | "Settings";
+type BidStage = "Overview" | "Qualify" | "Synopsis" | "Respond" | "Assemble" | "Submit";
 
 /** The URL is the source of truth for which screen is showing (TLY-23). */
 const SECTION_PATHS: Record<AppSection, string> = {
   Discover: "/discover",
   "My bids": "/bids",
+  Buyers: "/buyers",
+  Market: "/market",
   Evidence: "/evidence",
   Team: "/team",
   Company: "/company",
@@ -69,17 +83,23 @@ const SECTION_PATHS: Record<AppSection, string> = {
   Settings: "/settings",
 };
 const stageSlug = (stage: BidStage) => stage.toLowerCase().replace(/\s+/g, "-");
-const STAGES: BidStage[] = ["Qualify", "Synopsis", "Respond", "Assemble", "Submit"];
+const STAGES: BidStage[] = ["Overview", "Qualify", "Synopsis", "Respond", "Assemble", "Submit"];
 
-function readLocation(pathname: string): { section: AppSection; stage: BidStage; tenderId: string } {
+function readLocation(pathname: string): { section: AppSection; stage: BidStage; tenderId: string; buyerName: string } {
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] === "bids") {
-    const stage = STAGES.find((item) => stageSlug(item) === (parts[2] ?? "")) ?? "Qualify";
-    return { section: "My bids", stage, tenderId: parts[1] ?? "" };
+    const stage = STAGES.find((item) => stageSlug(item) === (parts[2] ?? "")) ?? "Overview";
+    return { section: "My bids", stage, tenderId: parts[1] ?? "", buyerName: "" };
   }
   const entry = (Object.entries(SECTION_PATHS) as [AppSection, string][])
     .find(([, path]) => path === `/${parts[0] ?? ""}`);
-  return { section: entry ? entry[0] : "Discover", stage: "Qualify", tenderId: "" };
+  const section = entry ? entry[0] : "My bids";
+  return {
+    section,
+    stage: "Overview",
+    tenderId: "",
+    buyerName: section === "Buyers" && parts[1] ? decodeURIComponent(parts[1]) : "",
+  };
 }
 
 // The CSS keys off hyphenated slugs; the wire enum is underscored.
@@ -94,108 +114,73 @@ const apiClient = createApiClient({ baseUrl: API_BASE, getToken: () => currentTo
 
 const demoTenders: Tender[] = [
   {
-    id: "pmp-training",
-    resourceId: "8796138",
-    title: "RFQ for the Delivery of Project Management Professional Training (PMP)",
-    authority: "BioPharmaChem Skillnet",
-    category: "Professional services",
+    id: "application-development",
+    resourceId: "DEMO-001",
+    title: "Application development and support services",
+    authority: "Example local authority",
+    category: "IT services",
+    cpv: { raw: "72212000", code: "72212000", recognised: true },
     procedure: "Open",
-    deadline: "27 Aug · 12:00",
-    deadlineIso: "2026-08-27T12:00:00+01:00",
-    value: "€49,000",
+    deadline: "27 Jan 2027 · 12:00",
+    deadlineIso: "2027-01-27T12:00:00Z",
+    value: "EUR 200,000",
+    valueAmount: 200000,
     match: 86,
     decision: "GO",
     access: "Open to qualified bidders",
     summary:
-      "Delivery of PMP preparation training up to three times per year in Ireland. The opportunity is open; no framework-membership restriction was identified in the notice.",
+      "Illustrative tender: design, deliver and support a customer-facing application, including migration, accessibility testing and a two-year support service.",
     sourceUrl: "https://www.etenders.gov.ie/epps/quickSearchAction.do?searchType=cftFTS",
-    published: "6 Aug 2026",
+    published: "4 Nov 2026",
     framework: "Direct contract",
-    gates: [
-      { label: "Competition access", state: "pass", bidder: "Open procedure", requirement: "Open tender submission", source: "eTenders notice · Procedure: Open" },
-      { label: "Delivery location", state: "pass", bidder: "Ireland", requirement: "Republic of Ireland", source: "eTenders notice · Services shall be delivered within the Republic of Ireland" },
-      { label: "PMP capability", state: "pass", bidder: "Programme / project delivery", requirement: "PMP preparation training", source: "eTenders notice · Delivery of Project Management Professional preparation Training" },
-      { label: "Trainer credentials", state: "review", bidder: "CV evidence required", requirement: "Confirm named-trainer requirements", source: "Tender documents · not yet imported" },
-    ],
-    questions: [
-      {
-        id: "q1",
-        title: "Approach to delivery and learner outcomes",
-        weight: 35,
-        maxWords: 900,
-        status: "draft",
-        prompt: "Describe the proposed methodology for delivering the PMP preparation programme and ensuring learner outcomes.",
-        answer: "",
-        evidence: ["Programme delivery methodology", "Training governance case study"],
-      },
-      {
-        id: "q2",
-        title: "Experience of proposed personnel",
-        weight: 30,
-        maxWords: 700,
-        status: "needs-input",
-        prompt: "Demonstrate the qualifications and relevant experience of the personnel proposed for delivery.",
-        answer: "",
-        evidence: ["Gokul Gurijala · Delivery CV", "Second trainer CV needed"],
-      },
-      {
-        id: "q3",
-        title: "Quality assurance and continuous improvement",
-        weight: 15,
-        maxWords: 500,
-        status: "draft",
-        prompt: "Explain the quality controls and improvement loop applied to the programme.",
-        answer: "",
-        evidence: ["QA governance model"],
-      },
-    ],
+    gates: [],
+    questions: [],
   },
   {
-    id: "energy-audit",
-    resourceId: "8788179",
-    title: "Deep Energy Retrofit 2 — Stage 0 Energy Audit",
-    authority: "Health Service Executive (HSE)",
-    category: "Consulting",
+    id: "cloud-platform",
+    resourceId: "DEMO-002",
+    title: "Managed cloud platform and security operations",
+    authority: "Example national agency",
+    category: "IT services",
+    cpv: { raw: "72500000", code: "72500000", recognised: true },
+    workflow: { stage: "REVIEW", outcome: "PENDING", priority: "HIGH", assignee: "Bid lead", history: [] },
     procedure: "Open",
-    deadline: "11 Sep · 17:00",
-    value: "Not stated",
+    deadline: "11 Feb 2027 · 17:00",
+    deadlineIso: "2027-02-11T17:00:00Z",
+    value: "EUR 480,000",
+    valueAmount: 480000,
     match: 61,
     decision: "PARTNER",
     access: "Open to qualified bidders",
     summary:
-      "Specialist energy consulting services for Stage 0 audits across 30 healthcare facilities. Delivery capability is adjacent, but specialist energy-audit credentials appear material.",
+      "Illustrative tender: migrate services to a managed cloud platform with monitoring, backup, incident response and independently evidenced security controls.",
     sourceUrl: "https://www.etenders.gov.ie/epps/quickSearchAction.do?searchType=cftFTS",
-    published: "6 Aug 2026",
+    published: "3 Nov 2026",
     framework: "Direct contract",
-    partnerNote: "Partner with an SEAI / building-energy specialist before committing bid effort.",
-    gates: [
-      { label: "Competition access", state: "pass", bidder: "Open procedure", requirement: "Open tender submission", source: "eTenders notice · Procedure: Open" },
-      { label: "Energy audit expertise", state: "review", bidder: "Gap in profile", requirement: "Specialist Stage 0 energy audit capability", source: "eTenders notice · specialist energy consulting services" },
-      { label: "National delivery", state: "pass", bidder: "Ireland delivery", requirement: "30 healthcare sites", source: "eTenders notice · across 30 SEU healthcare facilities" },
-    ],
+    gates: [],
     questions: [],
   },
   {
-    id: "flood-risk",
-    resourceId: "8799735",
-    title: "Multi-Party Framework for Flood Risk Assessment Consultancy Services",
-    authority: "Limerick City and County Council",
-    category: "Engineering consultancy",
+    id: "testing-framework",
+    resourceId: "DEMO-003",
+    title: "Software testing and quality assurance framework",
+    authority: "Example public university",
+    category: "IT services",
+    cpv: { raw: "72254000", code: "72254000", recognised: true },
+    workflow: { stage: "CONSIDER", outcome: "PENDING", priority: "MEDIUM", assignee: "", history: [] },
     procedure: "Open",
-    deadline: "4 Sep · 12:00",
+    deadline: "4 Feb 2027 · 12:00",
+    deadlineIso: "2027-02-04T12:00:00Z",
     value: "Not stated",
     match: 28,
     decision: "NO_GO",
     access: "Framework establishment — open competition",
     summary:
-      "This is the competition to establish a multi-party framework, not a mini-competition restricted to existing members. Access is open, but the specialist flood-risk capability is outside the current company profile.",
+      "Illustrative tender: establish a framework for functional, performance and accessibility testing. Contract value is not stated and must be checked in the published documents.",
     sourceUrl: "https://www.etenders.gov.ie/epps/quickSearchAction.do?searchType=cftFTS",
-    published: "6 Aug 2026",
+    published: "2 Nov 2026",
     framework: "Multi-party framework establishment",
-    gates: [
-      { label: "Competition access", state: "pass", bidder: "New entrants permitted", requirement: "Framework establishment", source: "eTenders notice · Establishment of a Multi-Party Framework" },
-      { label: "Flood-risk expertise", state: "fail", bidder: "Not evidenced", requirement: "Strategic Flood Risk Assessment consultancy", source: "eTenders notice · preparation of Strategic Flood Risk Assessments" },
-    ],
+    gates: [],
     questions: [],
   },
 ];
@@ -226,9 +211,63 @@ const demoNotifications: NotificationItem[] = [
   { id: "note-2", title: "HSE energy-audit tender · partner review", sourceUrl: demoTenders[1].sourceUrl, matchScore: 61 },
 ];
 
+// Demo-only superset fixtures: labelled "Demo data" wherever they render.
+const demoBuyers: BuyerSummary[] = [
+  { name: "Example local authority", activeTenders: 2, trackedTenders: 1, awards: 3, awardedValue: "EUR 620,000" },
+  { name: "Example national agency", activeTenders: 1, trackedTenders: 1, awards: 5, awardedValue: "EUR 1,940,000" },
+  { name: "Example public university", activeTenders: 1, trackedTenders: 1, awards: 0, awardedValue: null },
+  { name: "Example health board", activeTenders: 1, trackedTenders: 0, awards: 2, awardedValue: "EUR 350,000" },
+];
+
+const demoMarketStats: MarketStats = {
+  active: 5,
+  newThisWeek: 2,
+  closingSoon: { in7: 1, in14: 2, in30: 4 },
+  byDivision: [
+    { code: "72", label: "IT services: consulting, software development, Internet and support", count: 4 },
+    { code: "79", label: "Business services: law, marketing, consulting, recruitment, printing and security", count: 1 },
+  ],
+  topBuyers: [
+    { name: "Example local authority", count: 2 },
+    { name: "Example national agency", count: 1 },
+    { name: "Example public university", count: 1 },
+  ],
+  valueBands: { under: 3, over: 1, unknown: 1 },
+  sources: { etenders: 5, ted: 0 },
+  generatedAt: "2026-11-04T08:00:00Z",
+};
+
+const demoCompetitors: CompetitorInsight[] = [
+  { supplier: "Demo Systems Ltd", wins: 4, totalValue: "EUR 1,240,000", lastWin: "2026-09-14", buyers: ["Example national agency", "Example local authority"] },
+  { supplier: "Sample Consulting Group", wins: 2, totalValue: "EUR 410,000", lastWin: "2026-06-02", buyers: ["Example local authority"] },
+];
+
+const demoPortalConnection: PortalConnection = {
+  connected: false, email: null, status: "untested", verifiedAt: null, lastSyncAt: null, error: null,
+};
+
+function demoBuyerProfile(name: string): BuyerProfile {
+  const tenders = demoTenders.filter((tender) => tender.authority === name);
+  const summary = demoBuyers.find((buyer) => buyer.name === name);
+  const intelligence: AwardIntelligenceData | null = summary && summary.awards > 0
+    ? {
+      awards: summary.awards,
+      medianValue: 240000,
+      minValue: 90000,
+      maxValue: 620000,
+      topSuppliers: [{ supplier: "Demo Systems Ltd", awards: Math.min(2, summary.awards) }],
+      relatedCpv: false,
+      licenceNote: "Demo figures — illustrative only.",
+    }
+    : null;
+  return { name, tenders, intelligence };
+}
+
 const navItems: { label: AppSection; icon: string; badge?: string }[] = [
   { label: "Discover", icon: "⌕", badge: "12" },
   { label: "Watchlist", icon: "★" },
+  { label: "Buyers", icon: "◈" },
+  { label: "Market", icon: "▤" },
   { label: "Portfolio", icon: "▦" },
   { label: "My bids", icon: "▱", badge: "3" },
   { label: "Evidence", icon: "◇" },
@@ -237,7 +276,7 @@ const navItems: { label: AppSection; icon: string; badge?: string }[] = [
   { label: "Settings", icon: "⚙" },
 ];
 
-const stages: BidStage[] = ["Qualify", "Synopsis", "Respond", "Assemble", "Submit"];
+const stages = STAGES;
 
 function scoreTone(score: number) {
   if (score >= 75) return "strong";
@@ -371,49 +410,131 @@ function BidDecisionPanel({ tender, onRecord, busy }: {
  * pack, because a clarification that changes a requirement is part of the
  * tender in every sense that matters.
  */
-function Clarifications({ items, open, onAsk, onAnswer, busy }: {
+/** Thread order is oldest-first, the way the correspondence actually happened. */
+function clarificationTime(item: Clarification): number {
+  const stamp = Date.parse(item.createdAt || item.askedOn);
+  return Number.isNaN(stamp) ? 0 : stamp;
+}
+
+function Clarifications({ items, open, onAsk, onAnswer, busy, messagingUrl, portal, sendState, onSend, syncState, onSync }: {
   items: Clarification[]; open: number;
   onAsk: (question: string) => void;
   onAnswer: (clarificationId: string, response: string) => void;
   busy: boolean;
+  /** Official portal deep link for this tender; absent on TED notices. */
+  messagingUrl?: string;
+  portal: PortalConnection | null;
+  sendState: { state: "idle" | "sending" | "sent" | "error"; delivered?: boolean; warning?: string; message?: string };
+  onSend: (subject: string, question: string) => void;
+  syncState: { state: "idle" | "syncing" | "done" | "error"; synced?: number; message?: string };
+  onSync: () => void;
 }) {
   const [question, setQuestion] = useState("");
   const [answering, setAnswering] = useState("");
   const [response, setResponse] = useState("");
+  const [subject, setSubject] = useState("");
+  const [portalQuestion, setPortalQuestion] = useState("");
+
+  const thread = useMemo(() => [...items].sort((a, b) => clarificationTime(a) - clarificationTime(b)), [items]);
+  const connected = portal?.connected === true;
 
   return (
     <section className="panel clarifications" data-testid="clarifications">
       <div className="panel-heading">
-        <div><h2>Clarifications</h2><p>Questions put to the buyer, and what they answered.</p></div>
+        <div><h2>Clarifications</h2><p>One thread of buyer correspondence — recorded here, or sent and synced through the official portal.</p></div>
         {open > 0 && <span className="clar-count" data-testid="open-clarifications">{open} open clarification{open === 1 ? "" : "s"}</span>}
       </div>
 
       <form className="ask-form" onSubmit={(event) => { event.preventDefault(); if (question.trim()) { onAsk(question.trim()); setQuestion(""); } }}>
-        <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Is the site visit mandatory?" disabled={busy} />
+        <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Is the site visit mandatory?" disabled={busy} aria-label="Record a question asked outside Tenderly" />
         <button className="quiet-btn" disabled={busy || !question.trim()}>Record question</button>
       </form>
 
-      {items.length > 0 && (
-        <ul className="clar-list">
-          {items.map((item) => (
-            <li key={item.id} data-testid={`clarification-${item.id}`}>
-              <div className="clar-head">
-                <strong>{item.question}</strong>
-                <span className={item.status === "Answered" ? "verified" : "review-state"}>{item.status}</span>
-              </div>
-              <small>Asked {item.askedOn} by {item.askedBy}</small>
-              {item.response
-                ? <blockquote>“{item.response}”<cite>Buyer response · {item.respondedOn}</cite></blockquote>
-                : answering === item.id
-                  ? (
-                    <form className="ask-form" onSubmit={(event) => { event.preventDefault(); if (response.trim()) { onAnswer(item.id, response.trim()); setAnswering(""); setResponse(""); } }}>
-                      <input value={response} onChange={(event) => setResponse(event.target.value)} placeholder="What the buyer answered" disabled={busy} />
-                      <button className="quiet-btn" disabled={busy || !response.trim()}>Save</button>
-                    </form>
-                  )
-                  : <button className="text-action" onClick={() => { setAnswering(item.id); setResponse(""); }}>Record the buyer's answer</button>}
-            </li>
-          ))}
+      <div className="portal-area" data-testid="portal-clarifications">
+        {messagingUrl && (
+          <p className="portal-link-row">
+            <a href={messagingUrl} target="_blank" rel="noreferrer">Ask on eTenders ↗</a>
+            <span>Sign-in required — opens the official portal.</span>
+          </p>
+        )}
+
+        {connected ? (
+          <form
+            className="portal-compose"
+            data-testid="portal-compose"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (subject.trim() && portalQuestion.trim()) {
+                onSend(subject.trim(), portalQuestion.trim());
+                setPortalQuestion("");
+              }
+            }}
+          >
+            <input aria-label="Portal message subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Subject" disabled={busy || sendState.state === "sending"} />
+            <input aria-label="Portal message question" value={portalQuestion} onChange={(event) => setPortalQuestion(event.target.value)} placeholder="Your question to the buyer" disabled={busy || sendState.state === "sending"} />
+            <div className="portal-compose-actions">
+              <button className="quiet-btn" type="submit" disabled={busy || sendState.state === "sending" || !subject.trim() || !portalQuestion.trim()}>
+                {sendState.state === "sending" ? "Sending…" : "Send via portal"}
+              </button>
+              <button className="quiet-btn" type="button" onClick={onSync} disabled={busy || syncState.state === "syncing"}>
+                {syncState.state === "syncing" ? "Syncing…" : "Sync from portal"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p className="portal-hint">Connect the eTenders portal in Settings to ask and sync from Tenderly — or use the official portal link above.</p>
+        )}
+
+        {sendState.state === "sent" && (
+          <p className={sendState.delivered ? "clar-result delivered" : "clar-result local"} role="status" data-testid="send-result">
+            {sendState.delivered ? "Sent via the portal." : `Recorded locally — ${sendState.warning ?? "not delivered via the portal"}.`}
+          </p>
+        )}
+        {sendState.state === "error" && (
+          <p className="clar-error" role="alert" data-testid="send-error">
+            {sendState.message}
+            {messagingUrl && <> You can still <a href={messagingUrl} target="_blank" rel="noreferrer">ask on eTenders ↗</a> (sign-in required).</>}
+          </p>
+        )}
+        {syncState.state === "done" && (
+          <p className={syncState.message ? "clar-result local" : "clar-result delivered"} role="status" data-testid="sync-result">
+            {syncState.message ?? `Synced ${syncState.synced ?? 0} message${(syncState.synced ?? 0) === 1 ? "" : "s"} from the portal.`}
+          </p>
+        )}
+        {syncState.state === "error" && (
+          <p className="clar-error" role="alert" data-testid="sync-error">{syncState.message}</p>
+        )}
+      </div>
+
+      {thread.length > 0 && (
+        <ul className="clar-list clar-thread">
+          {thread.map((item) => {
+            const direction = item.direction ?? "out";
+            const origin = item.origin ?? "manual";
+            return (
+              <li key={item.id} data-testid={`clarification-${item.id}`}>
+                <div className="clar-head">
+                  <strong>{item.subject || item.question}{item.subject && <span className="clar-subject">{item.question}</span>}</strong>
+                  <span className="clar-badges">
+                    <i className={`clar-badge dir-${direction}`}>{direction === "out" ? "You → buyer" : "Buyer → you"}</i>
+                    <i className={`clar-badge origin-${origin}`}>{origin === "portal" ? "Portal" : "Manual"}</i>
+                    <span className={item.status === "Answered" ? "verified" : "review-state"}>{item.status}</span>
+                  </span>
+                </div>
+                <small>{direction === "out" ? "Asked" : "Received"} {item.askedOn}{item.askedBy ? ` by ${item.askedBy}` : ""}</small>
+                {item.response
+                  ? <blockquote>“{item.response}”<cite>Buyer response · {item.respondedOn}</cite></blockquote>
+                  : answering === item.id
+                    ? (
+                      <form className="ask-form" onSubmit={(event) => { event.preventDefault(); if (response.trim()) { onAnswer(item.id, response.trim()); setAnswering(""); setResponse(""); } }}>
+                        <input value={response} onChange={(event) => setResponse(event.target.value)} placeholder="What the buyer answered" disabled={busy} />
+                        <button className="quiet-btn" disabled={busy || !response.trim()}>Save</button>
+                      </form>
+                    )
+                    : <button className="text-action" onClick={() => { setAnswering(item.id); setResponse(""); }}>Record the buyer's answer</button>}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
@@ -629,6 +750,7 @@ function AiUsePolicyPanel({ policy, onAcknowledge, busy }: { policy?: AiUsePolic
       {policy.quote
         ? <blockquote className="ai-policy-quote">“{policy.quote}”<cite>{policy.source || "Tender pack"} · confidence {policy.confidence}</cite></blockquote>
         : <p className="ai-policy-quote empty">No clause found in the supplied documents.</p>}
+      {policy.reminder && <p className="ai-policy-reminder" data-testid="ai-policy-reminder">{policy.reminder}</p>}
       {flagged && (
         policy.acknowledgement
           ? <p className="ai-policy-ack" data-testid="ai-policy-ack">{policy.acknowledgement.action === "confirmed" ? "Confirmed" : "Dismissed"} by {policy.acknowledgement.actor} on {new Date(policy.acknowledgement.at).toLocaleString()}</p>
@@ -820,13 +942,20 @@ export default function TenderlyApp() {
   const section = route.section;
   const stage = route.stage;
   const setSection = (next: AppSection) => navigate(SECTION_PATHS[next]);
-  const openStage = (id: string, next: BidStage) => navigate(`/bids/${id}/${stageSlug(next)}`);
+  // Carry the board query (?board=) into the tender view so Back returns to
+  // the same board instead of resetting to "All tracked tenders".
+  const openStage = (id: string, next: BidStage) => navigate(`/bids/${id}/${stageSlug(next)}${location.search}`);
   const [fallbackId, setFallbackId] = useState(API_BASE ? "" : demoTenders[0].id);
   const selectedId = route.tenderId || fallbackId;
+  const activeTenderId = useRef(selectedId);
+  activeTenderId.current = selectedId;
   const setStage = (next: BidStage) => openStage(selectedId, next);
-  const setSelectedId = (id: string) => { setFallbackId(id); openStage(id, "Qualify"); };
+  const setSelectedId = (id: string) => { setFallbackId(id); openStage(id, "Overview"); };
   // A critique judges what the user wrote; it never carries replacement prose.
   const [critique, setCritique] = useState<AnswerCritique | null>(null);
+  // Claims Biddy flags for human verification after each draft/revise, keyed by
+  // question. Session-only: the server returns them with every draft response.
+  const [claimsToVerify, setClaimsToVerify] = useState<Record<string, string[]>>({});
   const [answerHistory, setAnswerHistory] = useState<AnswerHistory | null>(null);
   const [evaluation, setEvaluation] = useState<EvaluationState | null>(null);
   const [packQuestions, setPackQuestions] = useState<PackQuestion[]>([]);
@@ -840,13 +969,14 @@ export default function TenderlyApp() {
   const [runbookTotal, setRunbookTotal] = useState(0);
   const [attestationState, setAttestationState] = useState<AttestationState | null>(null);
   const [tenders, setTenders] = useState<Tender[]>(API_BASE ? [] : demoTenders);
+  const [boards, setBoards] = useState<TenderBoardConfig[]>(API_BASE ? [] : [{ id: "it-services", name: "IT services", cpvCodes: ["72000000"] }]);
+  const boardId = new URLSearchParams(location.search).get("board") ?? "";
   const [discoveries, setDiscoveries] = useState<Tender[]>(API_BASE ? [] : demoTenders);
   const [query, setQuery] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importUrl, setImportUrl] = useState("");
-  // What this person may do here. Defaults to editor so the demo build, which
-  // has no API to ask, behaves as it always has.
-  const [role, setRole] = useState<"owner" | "editor" | "viewer">("editor");
+  // Live accounts remain read-only until their membership is loaded.
+  const [role, setRole] = useState<"owner" | "editor" | "viewer">(API_BASE ? "viewer" : "editor");
   // A whole-questionnaire run, watched while it works. Null when none has run.
   const [draftRun, setDraftRun] = useState<DraftRunState | null>(null);
   // Held in a ref rather than state: aborting is an action, not something the
@@ -855,8 +985,11 @@ export default function TenderlyApp() {
   const readOnly = role === "viewer";
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState("");
+  const [syncStatus, setSyncStatus] = useState("");
+  const [workspaceError, setWorkspaceError] = useState("");
   const [company, setCompany] = useState(initialCompany);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [evidenceTab, setEvidenceTab] = useState<"Evidence" | "CVs">("Evidence");
   const [evidence, setEvidence] = useState<EvidenceItem[]>(API_BASE ? [] : demoEvidence);
   const [people, setPeople] = useState<PersonItem[]>(API_BASE ? [] : demoPeople);
@@ -886,13 +1019,38 @@ export default function TenderlyApp() {
   const auditAction = auditFilter.action;
   const auditDays = auditFilter.days;
   const [sectors, setSectors] = useState<SectorPreset[]>([]);
-  const [preferences, setPreferences] = useState<DiscoveryPreferences>({ sectors: [], keywords: [], cpvCodes: [], valueMin: null, valueMax: null });
+  const [preferences, setPreferences] = useState<DiscoveryPreferences>({ sectors: [], keywords: [], cpvCodes: [], valueMin: null, valueMax: null, countries: [...DEFAULT_MARKETS] });
+
+  // --- Superset: buyers, market, portal connection -----------------------
+  type LoadState = "idle" | "loading" | "ready" | "error";
+  const [buyerItems, setBuyerItems] = useState<BuyerSummary[]>(API_BASE ? [] : demoBuyers);
+  const [buyersState, setBuyersState] = useState<LoadState>(API_BASE ? "idle" : "ready");
+  const [buyersError, setBuyersError] = useState("");
+  const [buyerProfile, setBuyerProfile] = useState<BuyerProfile | null>(null);
+  const [buyerProfileState, setBuyerProfileState] = useState<LoadState>("idle");
+  const [buyerProfileError, setBuyerProfileError] = useState("");
+  const [marketStats, setMarketStats] = useState<MarketStats | null>(API_BASE ? null : demoMarketStats);
+  const [competitors, setCompetitors] = useState<CompetitorInsight[] | null>(API_BASE ? null : demoCompetitors);
+  const [marketState, setMarketState] = useState<LoadState>(API_BASE ? "idle" : "ready");
+  const [marketError, setMarketError] = useState("");
+  const [portal, setPortal] = useState<PortalConnection | null>(API_BASE ? null : demoPortalConnection);
+  const [portalState, setPortalState] = useState<LoadState>(API_BASE ? "idle" : "ready");
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [portalError, setPortalError] = useState("");
+  // The last dismissed discovery, kept so the Undo affordance can restore it.
+  const [dismissedNotice, setDismissedNotice] = useState<{ tender: Tender; index: number } | null>(null);
+  // Clarification send/sync results persist on screen — they are outcomes a
+  // colleague may need to act on, not toast ephemera.
+  type SendClarState = { state: "idle" | "sending" | "sent" | "error"; delivered?: boolean; warning?: string; message?: string };
+  const [sendClarState, setSendClarState] = useState<SendClarState>({ state: "idle" });
+  type SyncClarState = { state: "idle" | "syncing" | "done" | "error"; synced?: number; message?: string };
+  const [syncClarState, setSyncClarState] = useState<SyncClarState>({ state: "idle" });
 
   const isDemo = !API_BASE;
   currentToken = token;
   const routedTender = route.tenderId ? tenders.find((item) => item.id === route.tenderId) : undefined;
   const selected = routedTender ?? (route.tenderId ? undefined : tenders.find((item) => item.id === selectedId) ?? tenders[0]);
-  const tenderNotFound = Boolean(route.tenderId) && tenders.length > 0 && !routedTender;
+  const tenderNotFound = Boolean(route.tenderId) && loading !== "initial" && !workspaceError && !routedTender;
   const companyInitials = company.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "CO";
   const profileValues = [company.name, company.registration, company.turnover, company.employees, company.services, company.cpv, company.certifications, company.insurance];
   const profileCompleteness = Math.round((profileValues.filter((value) => value.trim()).length / profileValues.length) * 100);
@@ -953,16 +1111,23 @@ export default function TenderlyApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, selectedId]);
 
-  // The pack Q&A belongs to the tender being looked at.
+  // The pack Q&A belongs to the tender being looked at. `token` is a dep too:
+  // landing directly on a tender URL used to fire these reads before the saved
+  // session was restored, and they silently never ran again.
   useEffect(() => {
-    if (!selectedId || isDemo) return;
+    if (!selectedId || isDemo || !token) return;
+    setTasks([]);
+    setClarifications([]);
+    setOpenClarifications(0);
+    setSendClarState({ state: "idle" });
+    setSyncClarState({ state: "idle" });
     void refreshPackQuestions(selectedId);
     void refreshAnalysisChanges(selectedId);
     void refreshClarifications(selectedId);
     void refreshTasks(selectedId);
     void refreshRunbook(selectedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [selectedId, token]);
 
   useEffect(() => {
     if (!toast) return;
@@ -975,6 +1140,7 @@ export default function TenderlyApp() {
     let active = true;
     async function loadWorkspace() {
       setLoading("initial");
+      setWorkspaceError("");
       try {
         // Each piece lands as it arrives rather than waiting for the slowest of
         // eight. A single Promise.all meant the bids never appeared until every
@@ -989,6 +1155,7 @@ export default function TenderlyApp() {
             if (!active) return;
             if (error instanceof ApiError && error.isSessionExpired) throw error;
             console.error(`could not load ${what}:`, error);
+            if (what === "bids" || what === "tender boards") setWorkspaceError(`Could not load ${what}. Reload to retry; your saved data has not been removed.`);
           }
         };
 
@@ -1001,6 +1168,7 @@ export default function TenderlyApp() {
 
         await Promise.all([
           bids,
+          settle("tender boards", () => apiClient.tenderBoards(), (data) => setBoards(data.items)),
           settle("your account", () => apiClient.me(), (data) => setRole(data.role === "owner" || data.role === "editor" ? data.role : "viewer")),
           settle("the company profile", () => apiClient.getCompany(), (data) => setCompany((current) => ({ ...current, ...(data.company ?? {}) }))),
           settle("evidence", () => apiClient.listEvidence(), (data) => setEvidence(data.items ?? [])),
@@ -1011,12 +1179,6 @@ export default function TenderlyApp() {
         ]);
         if (!active) return;
 
-        try {
-          const discoveryData = await apiClient.discover();
-          if (active) setDiscoveries(discoveryData.items ?? []);
-        } catch (error) {
-          if (active) setToast(error instanceof ApiError && error.isSessionExpired ? "Session expired — sign in again" : "Workspace loaded · live eTenders feed is temporarily unavailable");
-        }
       } catch (error) {
         if (!active) return;
         if (error instanceof ApiError && error.isSessionExpired) {
@@ -1034,11 +1196,190 @@ export default function TenderlyApp() {
     return () => { active = false; };
   }, [token]);
 
+  useEffect(() => {
+    if (section !== "Discover" || isDemo || !token) return;
+    let active = true;
+    setLoading("discover");
+    apiClient.discover().then((data) => {
+      if (active) { setDiscoveries(data.items ?? []); setSyncStatus(data.warnings?.join("; ") ?? ""); }
+    }).catch((error: unknown) => {
+      if (active) setSyncStatus(error instanceof Error ? error.message : "Source discovery failed. Retry by reopening Browse sources.");
+    }).finally(() => { if (active) setLoading(""); });
+    return () => { active = false; };
+  }, [section, token, isDemo]);
+
+  // Buyers directory — only fetched while the directory itself is on screen.
+  const [buyersRetry, setBuyersRetry] = useState(0);
+  useEffect(() => {
+    if (section !== "Buyers" || route.buyerName || isDemo || !token) return;
+    let active = true;
+    setBuyersState("loading");
+    setBuyersError("");
+    apiClient.buyers().then(({ items }) => {
+      if (active) { setBuyerItems(items); setBuyersState("ready"); }
+    }).catch((error: unknown) => {
+      if (active) { setBuyersState("error"); setBuyersError(error instanceof Error ? error.message : "Could not load buyers"); }
+    });
+    return () => { active = false; };
+  }, [section, route.buyerName, token, isDemo, buyersRetry]);
+
+  // Buyer profile — keyed off the URL so a refresh or a shared link works.
+  useEffect(() => {
+    if (section !== "Buyers" || !route.buyerName) return;
+    if (isDemo) { setBuyerProfile(demoBuyerProfile(route.buyerName)); setBuyerProfileState("ready"); setBuyerProfileError(""); return; }
+    if (!token) return;
+    let active = true;
+    setBuyerProfileState("loading");
+    setBuyerProfileError("");
+    apiClient.buyer(route.buyerName).then((profile) => {
+      if (active) { setBuyerProfile(profile); setBuyerProfileState("ready"); }
+    }).catch((error: unknown) => {
+      if (active) { setBuyerProfile(null); setBuyerProfileState("error"); setBuyerProfileError(error instanceof Error ? error.message : "Could not load that buyer"); }
+    });
+    return () => { active = false; };
+  }, [section, route.buyerName, token, isDemo]);
+
+  // Market statistics and competitor history land together on the Market page.
+  const [marketRetry, setMarketRetry] = useState(0);
+  useEffect(() => {
+    if (section !== "Market" || isDemo || !token) return;
+    let active = true;
+    setMarketState("loading");
+    setMarketError("");
+    setCompetitors(null);
+    Promise.all([apiClient.marketStats(), apiClient.marketCompetitors()]).then(([stats, competitorData]) => {
+      if (!active) return;
+      setMarketStats(stats);
+      setCompetitors(competitorData.items);
+      setMarketState("ready");
+    }).catch((error: unknown) => {
+      if (active) { setMarketState("error"); setMarketError(error instanceof Error ? error.message : "Could not compute market statistics"); }
+    });
+    return () => { active = false; };
+  }, [section, token, isDemo, marketRetry]);
+
+  // The portal connection gates the clarification compose form, so it is read
+  // with the workspace and re-read whenever Settings or a tender is opened.
+  useEffect(() => {
+    if (isDemo || !API_BASE || !token) return;
+    let active = true;
+    if (section === "Settings") setPortalState("loading");
+    apiClient.portalConnection().then((connection) => {
+      if (active) { setPortal(connection); setPortalState("ready"); setPortalError(""); }
+    }).catch((error: unknown) => {
+      if (!active) return;
+      setPortal(null);
+      setPortalState("error");
+      setPortalError(error instanceof Error ? error.message : "Could not load the portal connection status");
+    });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, section, selectedId]);
+
+  useEffect(() => {
+    if (!route.tenderId || isDemo || !token) return;
+    let active = true;
+    apiClient.tender(route.tenderId).then(({ tender }) => {
+      if (active) setTenders((items) => items.some((item) => item.id === tender.id)
+        ? items.map((item) => item.id === tender.id ? tender : item) : [...items, tender]);
+    }).catch((error: unknown) => {
+      if (active) setToast(error instanceof Error ? error.message : "Could not reload tender details");
+    });
+    return () => { active = false; };
+  }, [route.tenderId, token, isDemo]);
+
   const visibleTenders = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return discoveries;
     return discoveries.filter((tender) => `${tender.title} ${tender.authority} ${tender.category}`.toLowerCase().includes(needle));
   }, [query, discoveries]);
+
+  async function syncTenders() {
+    if (isDemo) { setToast("Demo board: connect the API to sync live matching CFTs"); return; }
+    setLoading("sync");
+    setSyncStatus("Syncing all configured CPV families and refreshing tracked CFTs. This can take several minutes.");
+    try {
+      const data = await apiClient.syncTenders();
+      setTenders(data.items);
+      setSyncStatus(data.warnings.length ? `Sync needs attention: ${data.warnings.join("; ")}` : `${data.items.length} tracked tenders. Sources checked at ${new Date().toLocaleString()}.`);
+    } catch (error) { setSyncStatus(error instanceof Error ? error.message : "Tender sync failed. Retry sync; existing tenders have been kept."); }
+    finally { setLoading(""); }
+  }
+
+  async function changeTenderWorkflow(id: string, patch: TenderWorkflowPatch): Promise<boolean> {
+    if (readOnly) { setToast("Only workspace owners and editors can change tenders"); return false; }
+    setLoading("workflow");
+    try {
+      if (isDemo) {
+        setTenders((items) => items.map((item) => {
+          if (item.id !== id) return item;
+          const current = workflowOf(item);
+          const { comment, ...fields } = patch;
+          const next = { ...current, ...fields };
+          if (patch.outcome && patch.outcome !== "PENDING") next.stage = "DONE";
+          else if (patch.stage && patch.stage !== "DONE") next.outcome = "PENDING";
+          next.history = [...current.history, { at: new Date().toISOString(), actor: "Demo user", message: comment || `Tender updated: ${next.stage}, ${next.outcome}` }];
+          return { ...item, workflow: next };
+        }));
+        setToast("Tender updated for this demo session");
+      } else {
+        const { tender } = await apiClient.updateWorkflow(id, patch);
+        setTenders((items) => items.map((item) => item.id === id ? tender : item));
+        setToast("Tender updated");
+      }
+      return true;
+    } catch (error) { setToast(error instanceof Error ? error.message : "Could not update tender"); return false; }
+    finally { setLoading(""); }
+  }
+
+  async function createBoard(name: string, cpvCodes: string[], countries: string[] = []): Promise<boolean> {
+    if (readOnly) return false;
+    if (!name || !cpvCodes.length || cpvCodes.some((code) => !/^\d{8}$/.test(code))) { setToast("Enter a board name and eight-digit CPV codes"); return false; }
+    setLoading("boards");
+    try {
+      // The board scope rides along with creation; servers that predate market
+      // scope simply ignore it and the workspace countries apply.
+      const board: TenderBoardConfig = isDemo
+        ? { id: `board-${Date.now()}`, name, cpvCodes, ...(countries.length ? { countries } : {}) }
+        : (await apiClient.createTenderBoard(name, cpvCodes, countries)).board;
+      if (isDemo && boards.some((entry) => entry.name === name)) { setToast("A board with that name already exists"); return false; }
+      setBoards((items) => [...items, board]);
+      navigate(`/bids?board=${encodeURIComponent(board.id)}`);
+      setToast("Board created. Sync tenders to fetch its CPV families.");
+      return true;
+    } catch (error) { setToast(error instanceof Error ? error.message : "Could not create board"); return false; }
+    finally { setLoading(""); }
+  }
+
+  async function deleteBoard(id: string) {
+    if (readOnly) return;
+    setLoading("boards");
+    try {
+      if (!isDemo) await apiClient.deleteTenderBoard(id);
+      setBoards((items) => items.filter((item) => item.id !== id));
+      navigate("/bids");
+      setToast("Board removed; all tenders and their workflow have been kept");
+    } catch (error) { setToast(error instanceof Error ? error.message : "Could not remove board"); }
+    finally { setLoading(""); }
+  }
+
+  async function refreshTenderSource() {
+    if (!selected) return;
+    if (isDemo) { setToast("Demo data: source refresh requires the live API"); return; }
+    setLoading("source-refresh");
+    try {
+      const { tender } = await apiClient.refreshTender(selected.id);
+      setTenders((items) => items.map((item) => item.id === tender.id ? tender : item));
+      setToast("Published CFT information refreshed. Your workflow is unchanged.");
+    } catch (error) { setToast(error instanceof Error ? error.message : "Could not refresh CFT"); }
+    finally { setLoading(""); }
+  }
+
+  async function downloadTenderAttachment(attachment: TenderAttachment) {
+    if (!selected) return;
+    try { await apiClient.downloadTenderDocument(selected.id, attachment.id, attachment.filename); }
+    catch (error) { setToast(error instanceof Error ? error.message : "Could not download document"); }
+  }
 
   async function saveDiscoveryPreferences(next: DiscoveryPreferences) {
     if (isDemo) { setPreferences(next); setToast("Preferences saved in the demo workspace"); return; }
@@ -1142,8 +1483,6 @@ export default function TenderlyApp() {
       };
       setTenders((items) => [imported, ...items]);
       setSelectedId(id);
-      setStage("Qualify");
-      setSection("My bids");
       setShowImport(false);
       setImportUrl("");
       setToast("Tender imported into demo workspace");
@@ -1154,8 +1493,6 @@ export default function TenderlyApp() {
       const data = await apiClient.importTender(importUrl.trim());
       setTenders((items) => [data.tender, ...items.filter((item) => item.id !== data.tender.id)]);
       setSelectedId(data.tender.id);
-      setStage("Qualify");
-      setSection("My bids");
       setShowImport(false);
       setImportUrl("");
       setToast("Notice and public tender documents imported");
@@ -1179,7 +1516,7 @@ export default function TenderlyApp() {
       const data = await apiClient.importTender(opportunity.sourceUrl);
       setTenders((items) => [data.tender, ...items.filter((item) => item.id !== data.tender.id)]);
       setSelectedId(data.tender.id);
-      setToast("Tender pack imported and qualification started");
+      setToast("Tender added to New. Qualification runs only when you request it.");
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Could not import tender");
     } finally {
@@ -1263,8 +1600,11 @@ export default function TenderlyApp() {
     if (isDemo || !API_BASE || !token) return;
     try {
       const { tasks: items } = await apiClient.tasks(tenderId);
+      if (activeTenderId.current !== tenderId) return;
       setTasks(items);
-    } catch {
+    } catch (error) {
+      if (activeTenderId.current !== tenderId) return;
+      setWorkspaceError(error instanceof Error ? `Could not load tender tasks: ${error.message}` : "Could not load tender tasks. Reload to retry.");
       setTasks([]);
     }
   }
@@ -1301,9 +1641,12 @@ export default function TenderlyApp() {
     if (isDemo || !API_BASE || !token) return;
     try {
       const { items, open } = await apiClient.clarifications(tenderId);
+      if (activeTenderId.current !== tenderId) return;
       setClarifications(items);
       setOpenClarifications(open);
-    } catch {
+    } catch (error) {
+      if (activeTenderId.current !== tenderId) return;
+      setWorkspaceError(error instanceof Error ? `Could not load tender clarifications: ${error.message}` : "Could not load clarifications. Reload to retry.");
       setClarifications([]);
       setOpenClarifications(0);
     }
@@ -1335,6 +1678,132 @@ export default function TenderlyApp() {
       setToast(error instanceof ApiError ? error.message : "Could not record that response");
     } finally {
       setLoading("");
+    }
+  }
+
+  /** The notice id and source the dismiss API expects, derived from the record. */
+  function discoverySource(tender: Tender): string {
+    return tender.noticeSource === "TED" || tender.sourceUrl.includes("ted.europa.eu") ? "ted" : "etenders";
+  }
+
+  async function dismissDiscoveryNotice(tender: Tender) {
+    const index = discoveries.findIndex((item) => item.id === tender.id);
+    setDiscoveries((items) => items.filter((item) => item.id !== tender.id));
+    setDismissedNotice({ tender, index: index < 0 ? 0 : index });
+    if (isDemo) return;
+    try {
+      await apiClient.dismissDiscoveredTender(tender.resourceId, discoverySource(tender));
+    } catch (error) {
+      // A failed dismiss must not silently drop a notice: put it back.
+      setDiscoveries((items) => items.some((item) => item.id === tender.id) ? items : [...items, tender]);
+      setDismissedNotice(null);
+      setToast(error instanceof Error ? error.message : "Could not hide that notice");
+    }
+  }
+
+  async function undoDismissNotice() {
+    const dismissed = dismissedNotice;
+    if (!dismissed) return;
+    setDismissedNotice(null);
+    setDiscoveries((items) => {
+      if (items.some((item) => item.id === dismissed.tender.id)) return items;
+      const next = [...items];
+      next.splice(Math.min(dismissed.index, next.length), 0, dismissed.tender);
+      return next;
+    });
+    if (isDemo) return;
+    try {
+      await apiClient.restoreDiscoveredTender(dismissed.tender.resourceId, discoverySource(dismissed.tender));
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Could not restore that notice");
+    }
+  }
+
+  function downloadCsv(filename: string, csv: string) {
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function tendersToCsv(rows: Tender[]): string {
+    const escape = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
+    const header = ["id", "title", "authority", "cpv", "value", "deadline", "stage", "outcome", "sourceUrl"];
+    const lines = rows.map((tender) => {
+      const workflow = workflowOf(tender);
+      return [tender.id, tender.title, tender.authority, tender.cpv?.raw ?? "", tender.value, tender.deadline, workflow.stage, workflow.outcome, tender.sourceUrl].map(escape).join(",");
+    });
+    return [header.join(","), ...lines].join("\n");
+  }
+
+  /** The board export comes from the API; the demo workspace builds its own. */
+  async function exportBoardCsv() {
+    if (isDemo) { downloadCsv("tenderly-tenders.csv", tendersToCsv(tenders)); return; }
+    try {
+      await apiClient.exportTendersCsv();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Could not export tenders");
+    }
+  }
+
+  async function connectPortalAccount(email: string, password: string) {
+    if (isDemo) { setToast("Demo workspace: connect the live API to link a portal account"); return; }
+    setPortalBusy(true);
+    setPortalError("");
+    try {
+      setPortal(await apiClient.connectPortal(email, password));
+      setPortalState("ready");
+      setToast("eTenders portal connected");
+    } catch (error) {
+      setPortalError(error instanceof ApiError ? error.message : "Could not connect the portal account");
+    } finally {
+      setPortalBusy(false);
+    }
+  }
+
+  async function disconnectPortalAccount() {
+    if (isDemo) { setToast("Demo workspace: no portal account is linked"); return; }
+    setPortalBusy(true);
+    setPortalError("");
+    try {
+      await apiClient.disconnectPortal();
+      setPortal((current) => current ? { ...current, connected: false, email: null, status: "untested", verifiedAt: null, lastSyncAt: null, error: null } : current);
+      setToast("Portal disconnected; stored credentials removed");
+    } catch (error) {
+      setPortalError(error instanceof ApiError ? error.message : "Could not disconnect the portal");
+    } finally {
+      setPortalBusy(false);
+    }
+  }
+
+  async function sendPortalClarification(subject: string, question: string) {
+    if (!selected) return;
+    if (isDemo) { setSendClarState({ state: "error", message: "Demo workspace: connect the live API to message the buyer" }); return; }
+    setSendClarState({ state: "sending" });
+    try {
+      const result = await apiClient.sendClarification(selected.id, subject, question);
+      await refreshClarifications(selected.id);
+      setSendClarState(result.delivered
+        ? { state: "sent", delivered: true }
+        : { state: "sent", delivered: false, warning: result.warning ?? "Recorded locally; not delivered via the portal" });
+    } catch (error) {
+      setSendClarState({ state: "error", message: error instanceof ApiError ? error.message : "Could not send the clarification" });
+    }
+  }
+
+  async function syncPortalClarifications() {
+    if (!selected) return;
+    if (isDemo) { setSyncClarState({ state: "error", message: "Demo workspace: connect the live API to sync the portal" }); return; }
+    setSyncClarState({ state: "syncing" });
+    try {
+      const result = await apiClient.syncClarifications(selected.id);
+      setClarifications(result.items);
+      setOpenClarifications(result.items.filter((item) => item.status === "Open" || !item.response).length);
+      setSyncClarState({ state: "done", synced: result.synced, message: result.warning });
+    } catch (error) {
+      setSyncClarState({ state: "error", message: error instanceof ApiError ? error.message : "Could not sync clarifications from the portal" });
     }
   }
 
@@ -1600,7 +2069,6 @@ export default function TenderlyApp() {
       setTenders((items) => [tender, ...items.filter((entry) => entry.id !== tender.id)]);
       await refreshWatchlist();
       setSelectedId(tender.id);
-      setSection("My bids");
       setToast(`Imported ${tender.title}`);
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not import that notice");
@@ -1710,7 +2178,7 @@ export default function TenderlyApp() {
           answer: "We will deliver the programme through a controlled four-stage cycle: baseline, instructor-led delivery, exam-focused practice and measured improvement. Each cohort begins with a diagnostic assessment; the results tailor emphasis across the PMP domains. Weekly progress, attendance, mock-exam performance and learner feedback are tracked against agreed thresholds. Any learner below threshold receives a targeted recovery plan. Governance is led by a named programme manager with a concise RAID and quality log, giving the contracting authority clear evidence of progress and intervention throughout delivery.",
         }),
       }));
-      setToast("Evidence-grounded draft created · review claims before marking ready");
+      setToast("Biddy draft created · review claims before marking ready");
       return;
     }
     // The answer arrives as it is written. Tens of seconds of spinner is
@@ -1731,7 +2199,8 @@ export default function TenderlyApp() {
         signal: controller.signal,
       });
       showAnswer(data.answer, data.missingInputs.length ? "needs-input" : "draft");
-      setToast(data.missingInputs.length ? `Draft needs ${data.missingInputs.length} input${data.missingInputs.length > 1 ? "s" : ""}` : "Evidence-grounded draft created");
+      setClaimsToVerify((map) => ({ ...map, [questionId]: data.claimsToVerify ?? [] }));
+      setToast(data.missingInputs.length ? `Biddy draft needs ${data.missingInputs.length} input${data.missingInputs.length > 1 ? "s" : ""}` : "Biddy draft created · review claims before marking ready");
     } catch (error) {
       // Stopped, dropped or rejected: nothing was saved, so the screen goes
       // back to what the server still holds rather than keeping half a draft.
@@ -1761,9 +2230,10 @@ export default function TenderlyApp() {
         questions: item.questions.map((q) => q.id !== questionId ? q
           : { ...q, answer: data.answer, status: data.status === "needs-input" ? "needs-input" : "draft" }),
       }));
+      setClaimsToVerify((map) => ({ ...map, [questionId]: data.claimsToVerify ?? [] }));
       setToast(data.missingInputs.length
-        ? `Revised · ${data.words} words · ${data.missingInputs.length} gap${data.missingInputs.length > 1 ? "s" : ""} still open`
-        : `Revised · ${data.words} words`);
+        ? `Biddy revised · ${data.words} words · ${data.missingInputs.length} gap${data.missingInputs.length > 1 ? "s" : ""} still open`
+        : `Biddy revised · ${data.words} words`);
     } catch (error) {
       setToast(error instanceof ApiError ? error.message : "Could not refine that answer");
     } finally {
@@ -2033,12 +2503,14 @@ export default function TenderlyApp() {
           <span className="chev">⌄</span>
         </div>
         <nav className="primary-nav" aria-label="Primary">
-          <p className="nav-label">Workspace</p>
-          {navItems.slice(0, 5).map((item) => (
+          <p className="nav-label">Tender tracking</p>
+          {[...navItems.filter((item) => item.label === "My bids"), ...navItems.filter((item) => ["Discover", "Watchlist", "Buyers", "Market"].includes(item.label))].map((item) => (
             <button key={item.label} className={section === item.label ? "active" : ""} onClick={() => setSection(item.label)}>
-              <span className="nav-icon">{item.icon}</span><span>{item.label}</span>{item.badge && <em>{item.label === "Discover" ? discoveries.length : item.label === "My bids" ? tenders.length : item.badge}</em>}
+              <span className="nav-icon">{item.icon}</span><span>{item.label === "My bids" ? "Tender board" : item.label === "Discover" ? "Discover sources" : item.label}</span>{item.label === "My bids" && <em>{tenders.length}</em>}
             </button>
           ))}
+          <p className="nav-label">Company & tools</p>
+          {navItems.filter((item) => ["Company", "Evidence", "Team", "Portfolio"].includes(item.label)).map((item) => <button key={item.label} className={section === item.label ? "active" : ""} onClick={() => setSection(item.label)}><span className="nav-icon">{item.icon}</span><span>{item.label}</span></button>)}
         </nav>
         <div className="rail-spacer" />
         <div className="rail-callout">
@@ -2054,19 +2526,19 @@ export default function TenderlyApp() {
         </nav>
         <div className="user-card">
           <span className="user-avatar">{isDemo ? "GG" : companyInitials}</span>
-          <span><strong>Bid owner</strong><small>{isDemo ? "Demo workspace" : "Signed in"}</small></span>
+          <span><strong>{isDemo ? "Demo user" : `Workspace ${role}`}</strong><small>{isDemo ? "Demo workspace" : "Signed in"}</small></span>
           <span className="online-dot" />
         </div>
       </aside>
 
       <main className="main-shell">
         <header className="topbar">
-          <button className="mobile-menu" onClick={() => setSection("Discover")} aria-label="Open navigation">☰</button>
-          <div className="crumbs"><span>Tenderly</span><b>/</b><strong>{section === "My bids" && selected ? selected.title : section}</strong></div>
+          <button className="mobile-menu" onClick={() => setMobileNavOpen((value) => !value)} aria-label="Open navigation" aria-expanded={mobileNavOpen}>☰</button>
+          <div className="crumbs"><button className="text-action" onClick={() => navigate("/bids")}>Tenderly</button><b>/</b><strong>{section === "My bids" ? route.tenderId && selected ? `CFT-${selected.resourceId}` : "Tender board" : section === "Buyers" && route.buyerName ? route.buyerName : section}</strong></div>
           <div className="top-actions">
             {isDemo && <span className="demo-chip"><i /> Demo data</span>}
             <button className="icon-button" aria-label="Notifications" onClick={() => setNotificationOpen((value) => !value)}>♢<span className="notif-dot" /></button>
-            <button className="primary-compact" onClick={() => setShowImport(true)}>＋ Add tender</button>
+            <button className="primary-compact" disabled={readOnly} onClick={() => setShowImport(true)}>＋ Add tender</button>
           </div>
           {notificationOpen && (
             <div className="notification-popover">
@@ -2076,18 +2548,53 @@ export default function TenderlyApp() {
             </div>
           )}
         </header>
+        {mobileNavOpen && <nav className="mobile-nav" aria-label="Mobile navigation">{[...navItems.filter((item) => item.label === "My bids"), ...navItems.filter((item) => item.label !== "My bids")].map((item) => <button key={item.label} aria-current={section === item.label ? "page" : undefined} onClick={() => { setSection(item.label); setMobileNavOpen(false); }}>{item.label === "My bids" ? "Tender board" : item.label}</button>)}</nav>}
 
         <div className="content-wrap">
+          {workspaceError && <div className="criteria-warning" role="alert">{workspaceError}</div>}
+          {syncStatus && <div className="tracker-sync-status" role="status">{syncStatus}</div>}
+          {section === "My bids" && !route.tenderId && <TenderBoard tenders={tenders} boards={boards} boardId={boardId} onSelectBoard={(id) => navigate(id ? `/bids?board=${encodeURIComponent(id)}` : "/bids")} onCreateBoard={createBoard} onDeleteBoard={deleteBoard} onOpen={openBid} onMove={changeTenderWorkflow} onSync={syncTenders} onDiscover={() => setSection("Discover")} onOpenBuyer={(name) => navigate(`/buyers/${encodeURIComponent(name)}`)} onExport={exportBoardCsv} loading={Boolean(loading)} readOnly={readOnly} />}
+          {section === "Buyers" && !route.buyerName && (
+            <BuyersDirectory
+              items={buyerItems}
+              state={buyersState === "loading" ? "loading" : buyersState === "error" ? "error" : "ready"}
+              error={buyersError}
+              onOpen={(name) => navigate(`/buyers/${encodeURIComponent(name)}`)}
+              onRetry={() => setBuyersRetry((count) => count + 1)}
+              isDemo={isDemo}
+            />
+          )}
+          {section === "Buyers" && route.buyerName && (
+            <BuyerProfileView
+              profile={buyerProfile}
+              state={buyerProfileState === "loading" ? "loading" : buyerProfileState === "error" ? "error" : "ready"}
+              error={buyerProfileError}
+              onBack={() => navigate("/buyers")}
+              onOpenTender={(id) => openBid(id)}
+              isDemo={isDemo}
+            />
+          )}
+          {section === "Market" && (
+            <MarketDashboard
+              stats={marketStats}
+              competitors={competitors}
+              state={marketState === "loading" ? "loading" : marketState === "error" ? "error" : "ready"}
+              error={marketError}
+              onRetry={() => setMarketRetry((count) => count + 1)}
+              onOpenBuyer={(name) => navigate(`/buyers/${encodeURIComponent(name)}`)}
+              isDemo={isDemo}
+            />
+          )}
           {section === "Discover" && (
             <Discover
               tenders={visibleTenders}
               query={query}
               setQuery={setQuery}
               refreshDiscovery={refreshDiscovery}
-              loading={loading === "feed"}
+              loading={loading === "feed" || loading === "discover"}
               openBid={openBid}
               setShowImport={setShowImport}
-              hasPreferences={preferences.sectors.length > 0 || preferences.keywords.length > 0}
+              hasPreferences={boards.length > 0 || preferences.cpvCodes.length > 0 || preferences.sectors.length > 0 || preferences.keywords.length > 0}
               onOpenSettings={() => setSection("Settings")}
               watching={watchedIds}
               onToggleWatch={toggleWatch}
@@ -2097,6 +2604,10 @@ export default function TenderlyApp() {
               onSelectSearch={selectSavedSearch}
               onSaveSearch={saveCurrentSearch}
               onDeleteSearch={removeSavedSearch}
+              onDismiss={(tender) => void dismissDiscoveryNotice(tender)}
+              dismissed={dismissedNotice?.tender ?? null}
+              onUndoDismiss={() => void undoDismissNotice()}
+              onExportCsv={(rows) => downloadCsv("tenderly-discovery.csv", tendersToCsv(rows))}
             />
           )}
           {section === "Watchlist" && (
@@ -2118,10 +2629,13 @@ export default function TenderlyApp() {
               loading={loading === "portfolio"}
             />
           )}
-          {section === "My bids" && selected && (
+          {section === "My bids" && route.tenderId && selected && (
             <ScreenErrorBoundary onReset={() => navigate(SECTION_PATHS["Discover"])}>
-            <BidList tenders={tenders} selectedId={selected.id} onSelect={setSelectedId} />
+            <button className="tracker-back" onClick={() => navigate(boardId ? `/bids?board=${encodeURIComponent(boardId)}` : "/bids")}>← Back to tender board</button>
             <BidWorkspace
+              onWorkflow={(patch) => changeTenderWorkflow(selected.id, patch)}
+              onRefreshSource={refreshTenderSource}
+              onDownloadAttachment={downloadTenderAttachment}
               readOnly={readOnly}
               draftAll={draftAllAnswers}
               onStopDraft={stopDraft}
@@ -2138,12 +2652,19 @@ export default function TenderlyApp() {
               openClarifications={openClarifications}
               askClarification={askClarification}
               answerClarification={answerClarification}
+              portal={portal}
+              sendClarState={sendClarState}
+              onSendClarification={(subject, question) => void sendPortalClarification(subject, question)}
+              syncClarState={syncClarState}
+              onSyncClarifications={() => void syncPortalClarifications()}
               onOpenCitation={openCitation}
               setSelectedLots={setSelectedLots}
               recordBidDecision={recordBidDecision}
               setNoAiMode={setNoAiMode}
               critiqueAnswer={critiqueAnswer}
               critique={critique}
+              claimsByQuestion={claimsToVerify}
+              onOpenEvidence={() => setSection("Evidence")}
               evaluation={evaluation}
               runMockEvaluation={runMockEvaluation}
               answerHistory={answerHistory}
@@ -2177,53 +2698,24 @@ export default function TenderlyApp() {
           {section === "My bids" && tenderNotFound && (
             <div className="no-questions panel" data-testid="bid-not-found">
               <span>▱</span>
-              <h2>That bid could not be found</h2>
+              <h2>That tender could not be found</h2>
               <p>The link may be out of date, or the bid may belong to another workspace.</p>
-              <button className="continue-btn" onClick={() => setSection("My bids")}>Back to My bids</button>
+              <button className="continue-btn" onClick={() => setSection("My bids")}>Back to tender board</button>
             </div>
           )}
-          {section === "My bids" && !selected && !tenderNotFound && <div className="no-questions panel"><span>▱</span><h2>No active bids yet</h2><p>Open a recommended opportunity or paste an eTenders link. Tenderly will import it into this workspace before qualification begins.</p><button className="continue-btn" onClick={() => setSection("Discover")}>Discover opportunities →</button></div>}
           {section === "Company" && <CompanyView vaultReadiness={vaultReadiness} onOpenEvidence={() => setSection("Evidence")} declarations={declarations} onSaveDeclarations={saveDeclarations} onAffirmDeclarations={affirmDeclarations} busyDeclarations={loading === "declarations"} company={company} setCompany={setCompany} onSave={async () => {
             if (isDemo) { setToast("Company profile saved for this demo session"); return; }
             try { await apiClient.saveCompany(company); setToast("Company profile saved"); } catch (error) { setToast(error instanceof Error ? error.message : "Could not save profile"); }
           }} />}
           {section === "Evidence" && <EvidenceView tab={evidenceTab} setTab={setEvidenceTab} evidence={evidence} people={people} onUploadEvidence={uploadEvidenceFile} onUploadCv={uploadCvFile} onVerify={setEvidenceVerification} onDownload={downloadEvidence} loading={loading} />}
           {section === "Team" && <TeamView people={people} onUploadCv={uploadCvFile} onRename={renamePerson} onArchive={archivePerson} busyPersonId={busyPersonId} loading={loading === "cv-upload"} records={personRecords} selectedPersonId={recordsPersonId} onSelectPerson={loadPersonRecords} onConfirmAll={confirmPersonRecords} onCorrect={correctPersonRecord} busyRecords={loading === "cv-records"} matrix={skillsMatrix} skillFilter={skillFilter} onSkillFilter={filterSkills} onExportMatrix={exportSkillsMatrix} />}
-          {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} usage={usage} audit={{ entries: auditEntries, action: auditAction, days: auditDays, onFilter: setAuditFilter, loading: loading === "audit" }} />}
+          {section === "Settings" && <SettingsView isDemo={isDemo} sectors={sectors} preferences={preferences} onSave={saveDiscoveryPreferences} loading={loading} usage={usage} audit={{ entries: auditEntries, action: auditAction, days: auditDays, onFilter: setAuditFilter, loading: loading === "audit" }} portal={{ connection: portal, state: portalState === "loading" ? "loading" : portalState === "error" ? "error" : "ready", busy: portalBusy, error: portalError, onConnect: (email, password) => void connectPortalAccount(email, password), onDisconnect: () => void disconnectPortalAccount() }} />}
         </div>
       </main>
 
       {showImport && <ImportModal value={importUrl} setValue={setImportUrl} onClose={() => setShowImport(false)} onSubmit={importTender} loading={loading === "import"} />}
-      {toast && <div className="toast"><span>✓</span>{toast}</div>}
+      {toast && <div className="toast" role="status">{toast}</div>}
     </div>
-  );
-}
-
-/**
- * Every saved bid, so a user can get back to one. Before TLY-118 the workspace
- * showed tenders[0] and nothing else could be reached: openBid was wired only
- * from Discover's public-opportunity cards.
- */
-function BidList({ tenders, selectedId, onSelect }: { tenders: Tender[]; selectedId: string; onSelect: (id: string) => void }) {
-  if (tenders.length < 2) return null;
-  return (
-    <nav className="bid-list" aria-label="Your bids" data-testid="bid-list">
-      <p className="eyebrow">YOUR BIDS · {tenders.length}</p>
-      <div className="bid-list-items">
-        {tenders.map((tender) => (
-          <button
-            key={tender.id}
-            className={tender.id === selectedId ? "bid-list-item active" : "bid-list-item"}
-            aria-current={tender.id === selectedId ? "true" : undefined}
-            onClick={() => onSelect(tender.id)}
-          >
-            <strong>{tender.title}</strong>
-            <small>{tender.authority} · closes {tender.deadline}</small>
-            <span className={`decision-pill decision-${decisionSlug(tender.decision)}`}>{decisionLabel(tender.decision)}</span>
-          </button>
-        ))}
-      </div>
-    </nav>
   );
 }
 
@@ -2403,16 +2895,59 @@ function WatchlistView({ items, loading, onUnwatch, onImport, onDiscover }: {
   );
 }
 
-function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid, setShowImport, hasPreferences, onOpenSettings, watching, onToggleWatch, savedSearches, activeSearchId, activeSearchName, onSelectSearch, onSaveSearch, onDeleteSearch }: {
+/** Match-strength buckets: the score bands the chips and the filter share. */
+type MatchBucket = "strong" | "possible" | "weak";
+const bucketOf = (tender: Tender): MatchBucket => tender.match >= 70 ? "strong" : tender.match >= 45 ? "possible" : "weak";
+const BUCKET_LABELS: { id: MatchBucket; label: string }[] = [
+  { id: "strong", label: "Strong ≥70" },
+  { id: "possible", label: "Possible 45–69" },
+  { id: "weak", label: "Weak <45" },
+];
+
+function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid, setShowImport, hasPreferences, onOpenSettings, watching, onToggleWatch, savedSearches, activeSearchId, activeSearchName, onSelectSearch, onSaveSearch, onDeleteSearch, onDismiss, dismissed, onUndoDismiss, onExportCsv }: {
   tenders: Tender[]; query: string; setQuery: (value: string) => void; refreshDiscovery: () => void; loading: boolean; openBid: (id: string) => void; setShowImport: (value: boolean) => void; hasPreferences: boolean; onOpenSettings: () => void; watching: Set<string>; onToggleWatch: (tender: Tender) => void; savedSearches: SavedSearch[]; activeSearchId: string; activeSearchName: string; onSelectSearch: (id: string) => void; onSaveSearch: (name: string, filter: SavedSearchFilter) => void; onDeleteSearch: (id: string) => void;
+  onDismiss: (tender: Tender) => void; dismissed: Tender | null; onUndoDismiss: () => void; onExportCsv: (rows: Tender[]) => void;
 }) {
+  const [bucket, setBucket] = useState<MatchBucket | "all">("all");
+  const [valueMin, setValueMin] = useState("");
+  const [valueMax, setValueMax] = useState("");
+  const [within, setWithin] = useState<"any" | "7" | "14" | "30">("any");
+  const [procedure, setProcedure] = useState("");
+  const [market, setMarket] = useState("");
+
+  const bucketCounts = useMemo(() => {
+    const counts: Record<MatchBucket, number> = { strong: 0, possible: 0, weak: 0 };
+    for (const tender of tenders) counts[bucketOf(tender)] += 1;
+    return counts;
+  }, [tenders]);
+  const procedures = useMemo(() => [...new Set(tenders.map((tender) => tender.procedure).filter(Boolean))].sort(), [tenders]);
+  const markets = useMemo(() => [...new Set(tenders.flatMap((tender) => tender.markets ?? ["IRL"]))].sort(), [tenders]);
+
+  const filtered = useMemo(() => tenders.filter((tender) => {
+    if (bucket !== "all" && bucketOf(tender) !== bucket) return false;
+    // Notices without a stated value stay visible, matching the preferences rule.
+    if (valueMin.trim() !== "" && tender.valueAmount !== null && tender.valueAmount !== undefined && tender.valueAmount < Number(valueMin.replace(/[^0-9.]/g, ""))) return false;
+    if (valueMax.trim() !== "" && tender.valueAmount !== null && tender.valueAmount !== undefined && tender.valueAmount > Number(valueMax.replace(/[^0-9.]/g, ""))) return false;
+    if (within !== "any") {
+      const at = tender.deadlineIso ? Date.parse(tender.deadlineIso) : NaN;
+      if (Number.isNaN(at)) return false;
+      if (at - Date.now() > Number(within) * 86_400_000) return false;
+    }
+    if (procedure && tender.procedure !== procedure) return false;
+    if (market && !(tender.markets ?? ["IRL"]).includes(market)) return false;
+    return true;
+  }), [tenders, bucket, valueMin, valueMax, within, procedure, market]);
+
+  const filtersActive = bucket !== "all" || valueMin.trim() !== "" || valueMax.trim() !== "" || within !== "any" || procedure !== "" || market !== "";
+  const clearFilters = () => { setBucket("all"); setValueMin(""); setValueMax(""); setWithin("any"); setProcedure(""); setMarket(""); };
+
   return (
     <div className="discover-page">
       <section className="discover-hero">
         <div>
-          <p className="eyebrow"><span>✦</span> BID INTELLIGENCE</p>
-          <h1>Find the bids worth <em>winning.</em></h1>
-          <p>Tenderly watches public opportunities, checks them against your company, and tells you what deserves bid effort.</p>
+          <p className="eyebrow">PUBLIC PROCUREMENT SOURCES</p>
+          <h1>Discover tenders</h1>
+          <p>Browse public notices for your CPV criteria. Your tender board is the home for tracking stages, applications and results.</p>
         </div>
         <div className="hero-stats">
           <div><span className="stat-orb strong">{tenders.length}</span><p><strong>Matches in view</strong><small>profile-ranked</small></p></div>
@@ -2427,7 +2962,7 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
       </section>
 
       <section className="feed-head">
-        <div><h2>Recommended for you</h2><span>{tenders.length} opportunities · ranked against your profile</span></div>
+        <div><h2>Matching source notices</h2><span>{filtersActive ? `${filtered.length} of ${tenders.length} opportunities shown` : `${tenders.length} opportunities`} · no scoring threshold for CPV matches</span></div>
         <div className="feed-actions"><button className="refresh-btn" onClick={refreshDiscovery} disabled={loading}>{loading ? "Checking…" : "↻ Refresh live"}</button></div>
       </section>
 
@@ -2450,6 +2985,56 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
         onDelete={onDeleteSearch}
         busy={loading}
       />
+
+      <div className="tracker-chips match-buckets" role="group" aria-label="Filter by match strength">
+        <button aria-pressed={bucket === "all"} onClick={() => setBucket("all")}>All<span>{tenders.length}</span></button>
+        {BUCKET_LABELS.map((entry) => (
+          <button key={entry.id} className={`bucket-${entry.id}`} aria-pressed={bucket === entry.id} onClick={() => setBucket(bucket === entry.id ? "all" : entry.id)}>
+            {entry.label}<span>{bucketCounts[entry.id]}</span>
+          </button>
+        ))}
+      </div>
+
+      <section className="discover-filters" aria-label="Discovery filters">
+        <label className="filter-value">Value min (EUR)
+          <input inputMode="numeric" aria-label="Minimum value" value={valueMin} onChange={(event) => setValueMin(event.target.value)} placeholder="0" />
+        </label>
+        <label className="filter-value">Value max (EUR)
+          <input inputMode="numeric" aria-label="Maximum value" value={valueMax} onChange={(event) => setValueMax(event.target.value)} placeholder="any" />
+        </label>
+        <label>Deadline
+          <select aria-label="Deadline within" value={within} onChange={(event) => setWithin(event.target.value as "any" | "7" | "14" | "30")}>
+            <option value="any">Any deadline</option>
+            <option value="7">Within 7 days</option>
+            <option value="14">Within 14 days</option>
+            <option value="30">Within 30 days</option>
+          </select>
+        </label>
+        <label>Procedure
+          <select aria-label="Procedure" value={procedure} onChange={(event) => setProcedure(event.target.value)}>
+            <option value="">All procedures</option>
+            {procedures.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
+          </select>
+        </label>
+        <label>Market
+          <select aria-label="Market" value={market} onChange={(event) => setMarket(event.target.value)}>
+            <option value="">All markets</option>
+            {markets.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
+          </select>
+        </label>
+        <div className="filter-actions">
+          {filtersActive && <button className="quiet-btn" onClick={clearFilters}>Clear filters</button>}
+          <button className="quiet-btn" onClick={() => onExportCsv(filtered)} disabled={filtered.length === 0}>Export CSV</button>
+        </div>
+      </section>
+
+      {dismissed && (
+        <div className="dismiss-undo" role="status" data-testid="dismiss-undo">
+          “{dismissed.title}” hidden from Discover.
+          <button className="text-action" onClick={onUndoDismiss}>Undo</button>
+        </div>
+      )}
+
       {/*
         A work queue, not a product tour. One row per tender, the five facts a
         decision needs, and one action. The card layout spent most of its pixels
@@ -2465,21 +3050,22 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
           <span role="columnheader">Why it matched</span>
           <span role="columnheader" />
         </div>
-        {tenders.map((tender) => (
+        {filtered.map((tender) => (
           <div className="tt-row" role="row" key={tender.id} tabIndex={0}
             onClick={() => openBid(tender.id)}
             onKeyDown={(event) => { if (event.key === "Enter") openBid(tender.id); }}>
             <span className="tt-title" role="cell">
               <strong>{tender.title}</strong>
               <small>{tender.noticeSource ?? "eTenders"} · {tender.procedure}</small>
+              {tender.sourceCheckedAt && <small className="tt-fresh">checked {new Date(tender.sourceCheckedAt).toLocaleString()}</small>}
             </span>
-            <span className="tt-buyer" role="cell">{tender.authority}</span>
+            <span className="tt-buyer" role="cell">{tender.authority}{showMarketBadges(tender.markets) && <> <MarketBadges markets={tender.markets} /></>}</span>
             <span className="tt-value" role="cell">{tender.value}</span>
             <span className={`tt-closes ${tender.deadlineUnknown ? "unknown" : ""}`} role="cell">
               {tender.deadlineUnknown ? "not stated" : tender.deadline}
             </span>
             <span className="tt-why" role="cell" title={tender.ingestReason || undefined}>
-              {tender.ingestReason || (tender.matchedBy?.[0]?.label ?? `Match ${tender.match}`)}
+              {tender.ingestReason || (tender.matchedBy?.[0]?.label ?? "Selected CPV criteria")}
             </span>
             <span className="tt-act" role="cell">
               <button
@@ -2488,36 +3074,70 @@ function Discover({ tenders, query, setQuery, refreshDiscovery, loading, openBid
                 title={watching.has(tender.resourceId) ? "Remove from watchlist" : "Watch this notice"}
                 onClick={(event) => { event.stopPropagation(); onToggleWatch(tender); }}
               >{watching.has(tender.resourceId) ? "★" : "☆"}</button>
+              <button
+                className="tt-dismiss"
+                aria-label={`Not interested in ${tender.title}`}
+                title="Not interested — hide this notice"
+                onClick={(event) => { event.stopPropagation(); onDismiss(tender); }}
+              >✕</button>
               <button className="tt-open" aria-label={`Open ${tender.title}`}>Open</button>
             </span>
           </div>
         ))}
-        {tenders.length === 0 && <div className="empty-state"><span>⌕</span><h3>No matches in this view</h3><p>Try a broader search or paste an eTenders link directly.</p></div>}
+        {filtered.length === 0 && <div className="empty-state"><span>⌕</span><h3>No matches in this view</h3><p>{filtersActive ? "No notices match these filters — clear them to see everything." : "Try a broader search or paste an eTenders link directly."}</p>{filtersActive && <button className="quiet-btn" onClick={clearFilters}>Clear filters</button>}</div>}
       </div>
 
-      <div className="source-note"><span>●</span><p><strong>eTenders discovery</strong><small>Public opportunities are compared with your services, CPVs and evidence. Full eligibility is checked only after the tender pack is imported.</small></p><em>Profile-based ranking</em></div>
+      <div className="source-note"><span>●</span><p><strong>Public-source discovery</strong><small>Matching CPV families are included without a score threshold. Check the published CFT and documents before bidding.</small></p><em>Tracking first</em></div>
     </div>
   );
 }
 
-function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, assignRole, onOpenCitation, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, runbook, runbookCompleted, runbookTotal, tickRunbookStep, tasks, addTask, updateTask, blockers, readOnly, draftAll, draftRun, onStopDraft, onRefine }: {
+function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnswer, markAnswerReady, uploadTenderFile, downloadAsset, markChecklistReady, updateQuestion, acknowledgeAiPolicy, packQuestions, packSearchable, askThePack, analysisChanges, viewAnalysisVersion, clarifications, openClarifications, askClarification, answerClarification, portal, sendClarState, onSendClarification, syncClarState, onSyncClarifications, assignRole, onOpenCitation, onOpenEvidence, recordBidDecision, setSelectedLots, setNoAiMode, critiqueAnswer, critique, claimsByQuestion, evaluation, runMockEvaluation, answerHistory, selectVersion, compareVersions, restoreVersion, attestation, onAttest, runbook, runbookCompleted, runbookTotal, tickRunbookStep, tasks, addTask, updateTask, blockers, readOnly, draftAll, draftRun, onStopDraft, onRefine, onWorkflow, onRefreshSource, onDownloadAttachment }: {
+  onWorkflow: (patch: TenderWorkflowPatch) => Promise<boolean>;
+  onRefreshSource: () => void;
+  onDownloadAttachment: (attachment: TenderAttachment) => void;
   readOnly: boolean;
   onStopDraft: () => void;
   onRefine: (questionId: string, steering: string) => void;
+  claimsByQuestion: Record<string, string[]>;
+  onOpenEvidence: () => void;
   draftAll: () => void;
   draftRun: DraftRunState | null;
-  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; clarifications: Clarification[]; openClarifications: number; askClarification: (question: string) => void; answerClarification: (id: string, response: string) => void; assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; runbook: Runbook | null; runbookCompleted: number; runbookTotal: number; tickRunbookStep: (stepId: string, done: boolean) => void; tasks: BidTask[]; addTask: (title: string, dueOn: string) => void; updateTask: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void; blockers: string[];
+  tender: Tender; stage: BidStage; setStage: (stage: BidStage) => void; runAnalysis: () => void; loading: string; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; downloadAsset: (kind: "deck" | "pack", draft?: boolean) => void; markChecklistReady: (id: string) => void; updateQuestion: (id: string, answer: string) => void; acknowledgeAiPolicy: (action: "confirmed" | "dismissed") => void; packQuestions: PackQuestion[]; packSearchable: boolean; askThePack: (question: string) => void; analysisChanges: AnalysisChanges | null; viewAnalysisVersion: (versionId: string) => void; clarifications: Clarification[]; openClarifications: number; askClarification: (question: string) => void; answerClarification: (id: string, response: string) => void;
+  portal: PortalConnection | null;
+  sendClarState: { state: "idle" | "sending" | "sent" | "error"; delivered?: boolean; warning?: string; message?: string };
+  onSendClarification: (subject: string, question: string) => void;
+  syncClarState: { state: "idle" | "syncing" | "done" | "error"; synced?: number; message?: string };
+  onSyncClarifications: () => void;
+  assignRole: (role: string, personId: string | null) => void; recordBidDecision: (decision: "BID" | "NO_BID", reason: string) => void; setSelectedLots: (lotIds: string[]) => void; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; runMockEvaluation: () => void; answerHistory: AnswerHistory | null; selectVersion: (versionId: string) => void; compareVersions: () => void; restoreVersion: (versionId: string) => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; attestation: AttestationState | null; onAttest: () => void; runbook: Runbook | null; runbookCompleted: number; runbookTotal: number; tickRunbookStep: (stepId: string, done: boolean) => void; tasks: BidTask[]; addTask: (title: string, dueOn: string) => void; updateTask: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void; blockers: string[];
 }) {
+  const navigate = useNavigate();
   const passed = tender.gates.filter((gate) => gate.state === "pass").length;
   const reviewed = tender.gates.filter((gate) => gate.state === "review").length;
   const failed = tender.gates.filter((gate) => gate.state === "fail").length;
+  const workflow = workflowOf(tender);
+  const stageLabel = TENDER_STAGES.find((entry) => entry.id === workflow.stage)?.label ?? workflow.stage;
+  const clarHub = {
+    messagingUrl: tender.messagingUrl,
+    portal,
+    sendState: sendClarState,
+    onSend: onSendClarification,
+    syncState: syncClarState,
+    onSync: onSyncClarifications,
+  };
   return (
     <div className="workspace-page">
       <section className="bid-titlebar">
-        <div className="bid-id">eTenders <b>#{tender.resourceId}</b></div>
+        <div className="bid-id">{tender.sourceUrl.includes("ted.europa.eu") ? "TED" : "eTenders"} <b>#{tender.resourceId}</b></div>
         <div className="bid-title-row">
-          <div><h1>{tender.title}</h1><p>{tender.authority} · {tender.procedure} · closes <strong>{tender.deadline}</strong></p></div>
-          <div className="bid-title-actions"><a href={tender.sourceUrl} target="_blank" rel="noreferrer">View source ↗</a><button className="ghost-btn">•••</button></div>
+          <div><h1>{tender.title}</h1><p><button className="buyer-link" onClick={() => navigate(`/buyers/${encodeURIComponent(tender.authority)}`)} title={`Open buyer profile for ${tender.authority}`}>{tender.authority}</button> · {tender.procedure} · closes <strong>{tender.deadline}</strong></p></div>
+          <div className="bid-title-actions"><a href={tender.sourceUrl} target="_blank" rel="noreferrer">View source ↗</a></div>
+        </div>
+        <div className="bid-meta">
+          <span className={`stage-pill stage-${workflow.stage.toLowerCase()}`}>{stageLabel}</span>
+          {showMarketBadges(tender.markets) && <MarketBadges markets={tender.markets} />}
+          {workflow.outcome !== "PENDING" && <span className={`outcome-pill outcome-${workflow.outcome.toLowerCase()}`}>{workflow.outcome === "WON" ? "Won" : "Not won"}</span>}
+          <span className="bid-freshness">{tender.sourceCheckedAt ? `Source checked ${new Date(tender.sourceCheckedAt).toLocaleString()}` : "Source not checked since tracking"}{tender.sourceChanges?.length ? ` · ${tender.sourceChanges.length} published update${tender.sourceChanges.length === 1 ? "" : "s"}` : ""}</span>
         </div>
       </section>
 
@@ -2533,8 +3153,17 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
       )}
 
       <nav className="stage-tabs" aria-label="Bid workflow">
-        {stages.map((item, index) => <button key={item} className={stage === item ? "active" : ""} onClick={() => setStage(item)}><span>{index + 1}</span>{item}{item === "Qualify" && reviewed > 0 && <i>{reviewed}</i>}</button>)}
+        {stages.map((item) => <button key={item} className={stage === item ? "active" : ""} onClick={() => setStage(item)}>{item === "Qualify" ? "Qualification & scoring" : item}{item === "Qualify" && reviewed > 0 && <i>{reviewed}</i>}</button>)}
       </nav>
+
+      {stage === "Overview" && <>
+        <TenderRecordPanel key={tender.id} tender={tender} onChange={onWorkflow} onRefresh={onRefreshSource} onDownload={onDownloadAttachment} busy={Boolean(loading)} readOnly={readOnly} />
+        <div className="record-collaboration">
+          <Clarifications items={clarifications} open={openClarifications} onAsk={askClarification} onAnswer={answerClarification} busy={loading === "clarify" || readOnly} {...clarHub} />
+          <TaskList tasks={tasks} onAdd={addTask} onUpdate={updateTask} busy={loading === "tasks" || readOnly} />
+        </div>
+        <section className="panel tracker-next"><div><h2>Ready to assess this opportunity?</h2><p>Tracking is separate from scoring. Import the tender pack when you want eligibility checks and application support.</p></div><button className="quiet-btn" onClick={() => setStage("Qualify")}>Open qualification & scoring</button></section>
+      </>}
 
       {stage === "Qualify" && (
         <div className="bid-grid">
@@ -2546,13 +3175,13 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
             </section>
 
             <RecommendationPanel recommendation={tender.recommendation} />
-            <Clarifications items={clarifications} open={openClarifications} onAsk={askClarification} onAnswer={answerClarification} busy={loading === "clarify"} />
+            <Clarifications items={clarifications} open={openClarifications} onAsk={askClarification} onAnswer={answerClarification} busy={loading === "clarify" || readOnly} {...clarHub} />
             <WhatChanged state={analysisChanges} onSelectVersion={viewAnalysisVersion} />
-            <AskThePack questions={packQuestions} searchable={packSearchable} onAsk={askThePack} busy={loading === "ask"} />
-            <BidDecisionPanel tender={tender} onRecord={recordBidDecision} busy={loading === "decision"} />
-            <RoleMatches matches={tender.roleMatches ?? []} onAssign={assignRole} busy={loading === "assign-role"} />
-            <LotSelector lots={tender.lots ?? []} selected={tender.selectedLots ?? []} onChange={setSelectedLots} busy={loading === "lots"} />
-            <AiUsePolicyPanel policy={tender.aiUsePolicy} onAcknowledge={acknowledgeAiPolicy} busy={loading === "ai-policy"} />
+            <AskThePack questions={packQuestions} searchable={packSearchable} onAsk={askThePack} busy={loading === "ask" || readOnly} />
+            <BidDecisionPanel tender={tender} onRecord={recordBidDecision} busy={loading === "decision" || readOnly} />
+            <RoleMatches matches={tender.roleMatches ?? []} onAssign={assignRole} busy={loading === "assign-role" || readOnly} />
+            <LotSelector lots={tender.lots ?? []} selected={tender.selectedLots ?? []} onChange={setSelectedLots} busy={loading === "lots" || readOnly} />
+            <AiUsePolicyPanel policy={tender.aiUsePolicy} onAcknowledge={acknowledgeAiPolicy} busy={loading === "ai-policy" || readOnly} />
             <AwardHistory data={tender.awardIntelligence} />
             <AwardCriteria criteria={tender.awardCriteria ?? []} warning={tender.awardCriteriaWarning} />
             <Formalities formalities={tender.formalities ?? []} certificates={tender.requiredCertificates ?? []} />
@@ -2568,7 +3197,8 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
             <section className="panel fit-panel">
               <div className="panel-heading"><div><h2>Bid fit</h2><p>Commercial and delivery fit after eligibility.</p></div><strong className="fit-score">{tender.match}%</strong></div>
               <div className="fit-bars">
-                {[['Capability match', 92], ['Past evidence', 78], ['Team / CV fit', 84], ['Commercial fit', 73], ['Delivery confidence', 89]].map(([label, score]) => <div key={String(label)}><span><strong>{label}</strong><em>{score}%</em></span><i><b style={{ width: `${score}%` }} /></i></div>)}
+                {(tender.scoreBreakdown?.contributions ?? []).map((contribution) => <div key={contribution.kind}><span><strong>{contribution.label}</strong><em>{contribution.points} points</em></span><i><b style={{ width: `${contribution.points}%` }} /></i></div>)}
+                {!tender.scoreBreakdown?.contributions.length && <p>No evidence-based score breakdown is available yet. Run qualification when you are ready.</p>}
               </div>
             </section>
           </div>
@@ -2585,8 +3215,8 @@ function BidWorkspace({ tender, stage, setStage, runAnalysis, loading, draftAnsw
       )}
 
       {stage === "Synopsis" && <Synopsis tender={tender} onDownload={() => downloadAsset("deck")} onContinue={() => setStage("Respond")} loading={loading === "deck"} />}
-      {stage === "Respond" && <Respond readOnly={readOnly} onStopDraft={onStopDraft} onRefine={onRefine} draftAll={draftAll} draftRun={draftRun} tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} evaluation={evaluation} onRunEvaluation={runMockEvaluation} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
-      {stage === "Assemble" && <Assemble tender={tender} blockers={blockers} attestation={attestation} onAttest={onAttest} tasks={tasks} onAddTask={addTask} onUpdateTask={updateTask} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
+      {stage === "Respond" && <Respond readOnly={readOnly} onStopDraft={onStopDraft} onRefine={onRefine} draftAll={draftAll} draftRun={draftRun} tender={tender} setNoAiMode={setNoAiMode} critiqueAnswer={critiqueAnswer} critique={critique} claimsByQuestion={claimsByQuestion} onOpenEvidence={onOpenEvidence} evaluation={evaluation} onRunEvaluation={runMockEvaluation} history={answerHistory} onSelectVersion={selectVersion} onCompareVersions={compareVersions} onRestoreVersion={restoreVersion} onBackToQualify={() => setStage("Qualify")} onOpenCitation={onOpenCitation} draftAnswer={draftAnswer} markAnswerReady={markAnswerReady} uploadTenderFile={uploadTenderFile} loading={loading} updateQuestion={updateQuestion} onContinue={() => setStage("Assemble")} />}
+      {stage === "Assemble" && <Assemble readOnly={readOnly} tender={tender} blockers={blockers} attestation={attestation} onAttest={onAttest} tasks={tasks} onAddTask={addTask} onUpdateTask={updateTask} onDraft={() => downloadAsset("pack", true)} uploadTenderFile={uploadTenderFile} onMarkReady={markChecklistReady} onContinue={() => setStage("Submit")} loading={loading} />}
       {stage === "Submit" && <Submit readOnly={readOnly} runbook={runbook} runbookCompleted={runbookCompleted} runbookTotal={runbookTotal} onTickRunbook={tickRunbookStep} runbookBusy={loading === "runbook"} tender={tender} blockers={blockers} onDownload={() => downloadAsset("pack", false)} onReview={() => setStage("Assemble")} loading={loading === "pack"} />}
     </div>
   );
@@ -2794,12 +3424,12 @@ function RefineBox({ onRefine, busy, disabled }: { onRefine: (steering: string) 
     onRefine(steering);
     setSteering("");
   }}>
-    <label><span>Refine this answer</span>
+    <label><span>Ask Biddy to revise</span>
       <input value={steering} onChange={(event) => setSteering(event.target.value)}
         placeholder="Shorter · more on the Cork project · match the buyer's terminology"
         disabled={disabled} data-testid="refine-steering" /></label>
     <button className="quiet-btn" disabled={busy || disabled || !steering.trim()} data-testid="refine-submit">
-      {busy ? "Refining…" : "Refine"}</button>
+      {busy ? "Biddy is revising…" : "Revise"}</button>
     <small>A steer changes wording, length and emphasis. It cannot add a fact you have not evidenced, and it cannot remove an [INPUT NEEDED] marker — upload the document instead.</small>
   </form>;
 }
@@ -2818,7 +3448,7 @@ function DraftAllControl({ onDraftAll, run, busy }: { onDraftAll: () => void; ru
 
   return <div className="draft-all">
     <button type="button" className="ai-draft" onClick={onDraftAll} disabled={busy} data-testid="draft-all">
-      {busy ? "Drafting…" : "✦ Draft all from evidence"}</button>
+      {busy ? "Biddy is drafting…" : "✦ Ask Biddy to draft all answers"}</button>
     {state && (run?.running || busy) && (
       <p className="muted" data-testid="draft-progress">{state.completed} of {state.total} done</p>
     )}
@@ -2832,13 +3462,20 @@ function DraftAllControl({ onDraftAll, run, busy }: { onDraftAll: () => void; ru
         {failed.map((question) => <li key={question.questionId}>{question.title}: {question.error}</li>)}
       </ul>
     )}
+    {state && !run?.running && !busy && state.questions.some((question) => question.claimsToVerify?.length) && (
+      <ul className="draft-claims" data-testid="draft-claims">
+        {state.questions.filter((question) => question.claimsToVerify?.length).map((question) => (
+          <li key={question.questionId}><strong>{question.title}:</strong> {question.claimsToVerify!.join("; ")}</li>
+        ))}
+      </ul>
+    )}
   </div>;
 }
 
-function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, onRunEvaluation, history, onSelectVersion, onCompareVersions, onRestoreVersion, onBackToQualify, onOpenCitation, draftAnswer, onStopDraft, onRefine, draftAll, draftRun, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue, readOnly }: { readOnly: boolean; onStopDraft: () => void; onRefine: (questionId: string, steering: string) => void; draftAll: () => void; draftRun: DraftRunState | null; tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; evaluation: EvaluationState | null; onRunEvaluation: () => void; history: AnswerHistory | null; onSelectVersion: (versionId: string) => void; onCompareVersions: () => void; onRestoreVersion: (versionId: string) => void; onBackToQualify: () => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
+function Respond({ tender, setNoAiMode, critiqueAnswer, critique, claimsByQuestion, onOpenEvidence, evaluation, onRunEvaluation, history, onSelectVersion, onCompareVersions, onRestoreVersion, onBackToQualify, onOpenCitation, draftAnswer, onStopDraft, onRefine, draftAll, draftRun, markAnswerReady, uploadTenderFile, loading, updateQuestion, onContinue, readOnly }: { readOnly: boolean; onStopDraft: () => void; onRefine: (questionId: string, steering: string) => void; draftAll: () => void; draftRun: DraftRunState | null; tender: Tender; setNoAiMode: (enabled: boolean) => void; critiqueAnswer: (id: string) => void; critique: AnswerCritique | null; claimsByQuestion: Record<string, string[]>; onOpenEvidence: () => void; evaluation: EvaluationState | null; onRunEvaluation: () => void; history: AnswerHistory | null; onSelectVersion: (versionId: string) => void; onCompareVersions: () => void; onRestoreVersion: (versionId: string) => void; onBackToQualify: () => void; onOpenCitation: (citation: { id: string; name: string; hasFile: boolean }) => void; draftAnswer: (id: string) => void; markAnswerReady: (id: string) => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; loading: string; updateQuestion: (id: string, answer: string) => void; onContinue: () => void }) {
   const [activeId, setActiveId] = useState(tender.questions[0]?.id ?? "");
   const active = tender.questions.find((question) => question.id === activeId) ?? tender.questions[0];
-  if (!active) return <div className="no-questions panel"><span>◇</span><h2>Import the full tender pack first</h2><p>The notice gives Tenderly the opportunity metadata. The RFT / RFQ documents are needed to extract scored questions, word limits, mandatory roles and response templates.</p><FileButton label={loading === "upload" ? "Uploading…" : "Upload tender documents"} accept=".pdf,.docx,.xlsx,.xls,.pptx,.zip,.txt,.xml" onFile={(file) => uploadTenderFile(file, "source")} /></div>;
+  if (!active) return <div className="no-questions panel"><span>◇</span><h2>Import the full tender pack first</h2><p>The notice gives Tenderly the opportunity metadata. The RFT / RFQ documents are needed to extract scored questions, word limits, mandatory roles and response templates.</p>{!readOnly && <FileButton label={loading === "upload" ? "Uploading…" : "Upload tender documents"} accept=".pdf,.docx,.xlsx,.xls,.pptx,.zip,.txt,.xml" onFile={(file) => uploadTenderFile(file, "source")} />}</div>;
   return (
     <div className="response-layout">
       <aside className="question-list">
@@ -2866,21 +3503,21 @@ function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, on
         )}
         {tender.noAiMode ? (
           <div className="no-ai-banner" data-testid="no-ai-banner">
-            <strong>No-AI mode: generation disabled for this tender</strong>
-            <p>Analysis, the requirement checklist, gap analysis and critique of what you write all still work. Drafting does not.</p>
+            <strong>No-AI mode: Biddy drafting is disabled for this tender</strong>
+            <p>Analysis, the requirement checklist, gap analysis and critique of what you write all still work. Biddy drafting does not.</p>
             <button className="text-action" onClick={() => setNoAiMode(false)} disabled={loading === "no-ai-mode"}>Turn off</button>
           </div>
         ) : tender.aiUsePolicy?.state === "prohibited" && (
           <div className="ai-policy-prompt" data-testid="no-ai-prompt">
             <strong>This tender prohibits AI-generated content.</strong>
-            <p>“{tender.aiUsePolicy.quote}” — {tender.aiUsePolicy.source || "tender pack"}. Enable no-AI mode for this tender before using any draft control.</p>
+            <p>“{tender.aiUsePolicy.quote}” — {tender.aiUsePolicy.source || "tender pack"}. Biddy drafting is disabled when no-AI mode is on; enable it before using any draft control.</p>
             <button className="quiet-btn" onClick={() => setNoAiMode(true)} disabled={loading === "no-ai-mode"}>Enable no-AI mode</button>
           </div>
         )}
         <div className="answer-head"><div><p className="eyebrow">SCORED QUESTION · {active.weight}%</p><h2>{active.title}</h2><p>{active.prompt}</p><ProvenanceBadge entry={active.provenance} /></div><div className="mark-badge"><strong>{active.weight}</strong><small>marks</small></div></div>
-        <div className="answer-brief"><div><span>✦</span><p><strong>Tenderly writing brief</strong><small>Answer the question directly, lead with the outcome, evidence every material claim, and reserve ~10% of words for measurable controls and assurance.</small></p></div><button>View scoring logic</button></div>
+        <div className="answer-brief"><div><span>✦</span><p><strong>Biddy writing brief</strong><small>Answer the question directly, lead with the outcome, evidence every material claim, and reserve ~10% of words for measurable controls and assurance.</small></p></div><button onClick={onBackToQualify}>View scoring logic</button></div>
         <div className="editor-toolbar"><button><b>B</b></button><button><i>I</i></button><button>≡</button><button>• list</button><span /><button>Insert evidence ⌄</button></div>
-        <textarea value={active.answer} onChange={(event) => updateQuestion(active.id, event.target.value)} readOnly={readOnly} placeholder={readOnly ? "You have read access to this bid." : "Draft your response here, or ask Tenderly to build a first draft from verified evidence…"} />
+        <textarea value={active.answer} onChange={(event) => updateQuestion(active.id, event.target.value)} readOnly={readOnly} placeholder={readOnly ? "You have read access to this bid." : "Draft your response here, or ask Biddy to build a first draft from verified evidence…"} />
         {!readOnly && !tender.noAiMode && active.answer.trim() && (
           <RefineBox onRefine={(steering) => onRefine(active.id, steering)}
             busy={loading === `refine-${active.id}`} disabled={loading === active.id} />
@@ -2890,8 +3527,8 @@ function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, on
           : <>{active.status === "ready" ? <button className="ready-button" disabled>✓ Reviewed & ready</button> : <button className="quiet-btn" onClick={() => markAnswerReady(active.id)} disabled={loading === `ready-${active.id}`}>{loading === `ready-${active.id}` ? "Saving…" : "Mark reviewed & ready"}</button>}{tender.noAiMode
           ? <button className="quiet-btn" onClick={() => critiqueAnswer(active.id)} disabled={loading === `critique-${active.id}`}>{loading === `critique-${active.id}` ? "Reviewing…" : "◇ Critique what I wrote"}</button>
           : loading === active.id
-            ? <button className="quiet-btn" onClick={onStopDraft} data-testid="stop-draft">■ Stop</button>
-            : <button className="ai-draft" onClick={() => draftAnswer(active.id)}>✦ Draft from evidence</button>}</>}</div></div>
+            ? <><span className="muted" role="status">Biddy is drafting…</span><button className="quiet-btn" onClick={onStopDraft} data-testid="stop-draft">■ Stop</button></>
+            : <button className="ai-draft" onClick={() => draftAnswer(active.id)}>✦ Ask Biddy to draft</button>}</>}</div></div>
         <MockEvaluationPanel
           evaluation={evaluation?.result ?? null}
           gaps={evaluation?.gaps ?? []}
@@ -2925,7 +3562,13 @@ function Respond({ tender, setNoAiMode, critiqueAnswer, critique, evaluation, on
             ))}
           </section>
         )}
-        <section className="evidence-strip"><div className="evidence-title"><span>◇</span><p><strong>Evidence Tenderly will use</strong><small>Only approved library facts are passed into the draft.</small></p></div>{active.evidence.filter(Boolean).map((item) => <span className={String(item).toLowerCase().includes("needed") ? "missing" : ""} key={item}>{String(item).toLowerCase().includes("needed") ? "!" : "✓"} {item}</span>)}<button>＋ Attach evidence</button></section>
+        {(claimsByQuestion[active.id]?.length ?? 0) > 0 && active.status !== "ready" && (
+          <section className="claims-verify" data-testid="claims-to-verify">
+            <p className="eyebrow">VERIFY BEFORE MARKING READY</p>
+            <ul>{claimsByQuestion[active.id].map((claim) => <li key={claim}>{claim}</li>)}</ul>
+          </section>
+        )}
+        <section className="evidence-strip"><div className="evidence-title"><span>◇</span><p><strong>Evidence Biddy will use</strong><small>Only approved library facts are passed into the draft.</small></p></div>{active.evidence.filter(Boolean).map((item) => <span className={String(item).toLowerCase().includes("needed") ? "missing" : ""} key={item}>{String(item).toLowerCase().includes("needed") ? "!" : "✓"} {item}</span>)}<button onClick={onOpenEvidence}>＋ Attach evidence</button></section>
         <div className="response-next"><span><strong>Response readiness</strong><small>{tender.questions.filter((q) => q.status === "ready").length} of {tender.questions.length} sections ready</small></span><button className="continue-btn" onClick={onContinue}>Assemble pack <span>→</span></button></div>
       </section>
     </div>
@@ -2979,7 +3622,7 @@ function AttestationPanel({ state, onAttest, busy }: { state: AttestationState |
           ? <p className="attestation-waiting">Resolve the remaining blockers before attesting.</p>
           : (
             <div className="attestation-confirm">
-              <label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> I have reviewed this response and understand how each section was produced.</label>
+              <label><input type="checkbox" checked={confirmed} disabled={busy} onChange={(event) => setConfirmed(event.target.checked)} /> I have reviewed this response and understand how each section was produced.</label>
               <button className="outline-primary" onClick={onAttest} disabled={!confirmed || busy}>{busy ? "Recording…" : "Record attestation"}</button>
             </div>
           )}
@@ -3058,16 +3701,10 @@ function TaskList({ tasks, onAdd, onUpdate, busy }: {
   );
 }
 
-function Assemble({ tender, onDraft, uploadTenderFile, onMarkReady, onContinue, loading, blockers, attestation, onAttest, tasks, onAddTask, onUpdateTask }: { tender: Tender; onDraft: () => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; onMarkReady: (id: string) => void; onContinue: () => void; loading: string; blockers: string[]; attestation: AttestationState | null; onAttest: () => void; tasks: BidTask[]; onAddTask: (title: string, dueOn: string) => void; onUpdateTask: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void }) {
-  const fallbackRows: SubmissionItem[] = [
-    { id: "demo-response", label: "Tender response", required: true, kind: "RESPONSE", status: tender.questions.length && tender.questions.every((question) => question.status === "ready") ? "READY" : "ACTION", source: "Scored response workspace" },
-    { id: "demo-cv", label: "Personnel CVs", required: true, kind: "CV", status: "VERIFY", source: "Tender pack · role requirements" },
-    { id: "demo-pricing", label: "Pricing schedule", required: true, kind: "PRICING", status: "ACTION", source: "Buyer template" },
-    { id: "demo-sign", label: "Signed declarations", required: true, kind: "SIGNATURE", status: "ACTION", source: "Buyer declaration" },
-  ];
-  const rows = tender.submissionChecklist?.length ? tender.submissionChecklist : fallbackRows;
+function Assemble({ tender, onDraft, uploadTenderFile, onMarkReady, onContinue, loading, blockers, attestation, onAttest, tasks, onAddTask, onUpdateTask, readOnly }: { readOnly: boolean; tender: Tender; onDraft: () => void; uploadTenderFile: (file: File, role: "source" | "submission") => void; onMarkReady: (id: string) => void; onContinue: () => void; loading: string; blockers: string[]; attestation: AttestationState | null; onAttest: () => void; tasks: BidTask[]; onAddTask: (title: string, dueOn: string) => void; onUpdateTask: (taskId: string, patch: { owner?: string; dueOn?: string; completed?: boolean }) => void }) {
+  const rows = tender.submissionChecklist ?? [];
   const unresolved = rows.filter((row) => row.required && row.status !== "READY").length;
-  const readiness = Math.round(((rows.length - unresolved) / Math.max(1, rows.length)) * 100);
+  const readiness = Math.round((rows.filter((row) => row.status === "READY").length / Math.max(1, rows.length)) * 100);
   return (
     <div className="assemble-page">
       {blockers.length > 0 && (
@@ -3079,10 +3716,10 @@ function Assemble({ tender, onDraft, uploadTenderFile, onMarkReady, onContinue, 
           </div>
         </section>
       )}
-      <div className="section-intro"><div><p className="eyebrow">SUBMISSION ASSEMBLY</p><h2>One controlled pack. Nothing forgotten.</h2><p>Tenderly keeps mandatory buyer templates separate from generated response material and will not call a pack “final” while blockers remain.</p></div><div className="section-actions"><FileButton label={loading === "upload" ? "Uploading…" : "＋ Add completed buyer file"} accept=".pdf,.docx,.xlsx,.xls,.zip" onFile={(file) => uploadTenderFile(file, "submission")} /><button className="outline-primary" onClick={onDraft}>{loading === "pack" ? "Building…" : "⇩ Build draft ZIP"}</button></div></div>
+      <div className="section-intro"><div><p className="eyebrow">SUBMISSION ASSEMBLY</p><h2>One controlled pack. Nothing forgotten.</h2><p>Tenderly keeps mandatory buyer templates separate from generated response material and will not call a pack “final” while blockers remain.</p></div><div className="section-actions">{!readOnly && <FileButton label={loading === "upload" ? "Uploading…" : "＋ Add completed buyer file"} accept=".pdf,.docx,.xlsx,.xls,.zip" onFile={(file) => uploadTenderFile(file, "submission")} />}<button className="outline-primary" disabled={readOnly || Boolean(loading)} onClick={onDraft}>{loading === "pack" ? "Building…" : "⇩ Build draft ZIP"}</button></div></div>
       <div className="assemble-grid">
-        <section className="panel manifest"><div className="panel-heading"><div><h3>Submission manifest</h3><p>Extracted from the tender pack; verify each buyer-controlled file after completion.</p></div><span className="manifest-status">{unresolved ? `${unresolved} need attention` : "Checklist clear"}</span></div>{rows.map((item, index) => <div className="manifest-row" key={item.id}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{item.label}</strong><small>{item.kind.replace("_", " ")} · {item.source}</small></p><GatePill state={item.status === "READY" ? "pass" : "review"} />{item.status === "READY" ? <button className="manifest-done" disabled>✓</button> : <button className="manifest-ready" onClick={() => onMarkReady(item.id)} disabled={loading === `check-${item.id}`} title="Confirm only after you have checked/completed this item">Ready</button>}</div>)}</section>
-        <aside className="assembly-aside"><TaskList tasks={tasks} onAdd={onAddTask} onUpdate={onUpdateTask} busy={loading === "tasks"} /><AttestationPanel state={attestation} onAttest={onAttest} busy={loading === "attest"} /><section className="panel pack-score"><p className="eyebrow">PACK READINESS</p><div className="large-ring"><strong>{readiness}</strong><small>%</small></div><h3>{unresolved ? `${unresolved} thing${unresolved > 1 ? "s" : ""} left` : "Automated gates clear"}</h3><p>{unresolved ? "Resolve each required item, upload completed buyer files, then explicitly confirm it ready." : "Build the final checks view; human submission control still remains."}</p></section><section className="panel integrity-card"><strong>Submission guardrails</strong><p>✓ Eligibility checked before final pack</p><p>✓ Answer ready-state enforced</p><p>✓ Word-limit red-team available</p><p className={unresolved ? "warn" : ""}>{unresolved ? "!" : "✓"} Buyer checklist {unresolved ? "still open" : "cleared"}</p><p>✓ Final portal submit stays human</p></section><button className="continue-btn" onClick={onContinue}>Final checks <span>→</span></button></aside>
+        <section className="panel manifest"><div className="panel-heading"><div><h3>Submission manifest</h3><p>Extracted from the tender pack; verify each buyer-controlled file after completion.</p></div><span className="manifest-status">{!rows.length ? "Not extracted" : unresolved ? `${unresolved} need attention` : "Checklist reviewed"}</span></div>{!rows.length && <p>No published submission checklist has been extracted. Upload the full tender pack and run qualification before reviewing requirements.</p>}{rows.map((item, index) => <div className="manifest-row" key={item.id}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{item.label}</strong><small>{item.kind.replace("_", " ")} · {item.source}</small></p><GatePill state={item.status === "READY" ? "pass" : "review"} />{item.status === "READY" ? <button className="manifest-done" disabled>✓</button> : <button className="manifest-ready" onClick={() => onMarkReady(item.id)} disabled={readOnly || loading === `check-${item.id}`} title="Confirm only after you have checked/completed this item">Ready</button>}</div>)}</section>
+        <aside className="assembly-aside"><TaskList tasks={tasks} onAdd={onAddTask} onUpdate={onUpdateTask} busy={readOnly || loading === "tasks"} /><AttestationPanel state={attestation} onAttest={onAttest} busy={readOnly || loading === "attest"} /><section className="panel pack-score"><p className="eyebrow">CHECKLIST PROGRESS</p><div className="large-ring"><strong>{readiness}</strong><small>%</small></div><h3>{!rows.length ? "Checklist not extracted" : unresolved ? `${unresolved} thing${unresolved > 1 ? "s" : ""} left` : "Checklist reviewed"}</h3><p>{!rows.length ? "No buyer requirements are assumed from a notice alone." : unresolved ? "Resolve each required item, upload completed buyer files, then explicitly confirm it ready." : "Build the final checks view; human submission control still remains."}</p></section><section className="panel integrity-card"><strong>Submission guardrails</strong><p>✓ Eligibility checked before final pack</p><p>✓ Answer ready-state enforced</p><p>✓ Word-limit red-team available</p><p className={!rows.length || unresolved ? "warn" : ""}>{!rows.length || unresolved ? "!" : "✓"} Buyer checklist {!rows.length ? "not extracted" : unresolved ? "still open" : "reviewed"}</p><p>✓ Final portal submit stays human</p></section><button className="continue-btn" onClick={onContinue}>Final checks <span>→</span></button></aside>
       </div>
     </div>
   );
@@ -3788,7 +4425,7 @@ function YourDataPanel() {
   </section>;
 }
 
-function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage, audit }: { isDemo: boolean; sectors: SectorPreset[]; preferences: DiscoveryPreferences; onSave: (preferences: DiscoveryPreferences) => void; loading: string; usage: UsageTotals | null; audit: { entries: AuditEntry[]; action: string; days: number; onFilter: (next: { action: string; days: number }) => void; loading: boolean } }) {
+function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage, audit, portal }: { isDemo: boolean; sectors: SectorPreset[]; preferences: DiscoveryPreferences; onSave: (preferences: DiscoveryPreferences) => void; loading: string; usage: UsageTotals | null; audit: { entries: AuditEntry[]; action: string; days: number; onFilter: (next: { action: string; days: number }) => void; loading: boolean }; portal: { connection: PortalConnection | null; state: "loading" | "ready" | "error"; busy: boolean; error?: string; onConnect: (email: string, password: string) => void; onDisconnect: () => void } }) {
   const [draft, setDraft] = useState<DiscoveryPreferences>(preferences);
   const [keywordText, setKeywordText] = useState(preferences.keywords.join(", "));
   const [cpvText, setCpvText] = useState(preferences.cpvCodes.join(", "));
@@ -3817,7 +4454,9 @@ function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage, au
       setError("Upper value must be greater than lower value"); return;
     }
     setError("");
-    onSave({ ...draft, keywords: list(keywordText), cpvCodes: codes });
+    // An empty market selection would watch nothing; fall back to the default.
+    const countries = (draft.countries ?? []).length ? draft.countries : [...DEFAULT_MARKETS];
+    onSave({ ...draft, countries, keywords: list(keywordText), cpvCodes: codes });
   }
 
   const numberOrNull = (value: string) => (value.trim() === "" ? null : Number(value.replace(/[^0-9]/g, "")));
@@ -3854,6 +4493,9 @@ function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage, au
           <input inputMode="numeric" aria-label="Maximum value" value={draft.valueMax ?? ""} onChange={(event) => setDraft({ ...draft, valueMax: numberOrNull(event.target.value) })} placeholder="to" />
         </span></div>
 
+      <div data-testid="market-scope"><span><strong>Markets to watch</strong><small>Which countries' notices Discover includes. TED notices carry a place of performance; eTenders notices are Ireland.</small></span>
+        <MarketScopePicker label="Markets to watch" value={draft.countries ?? [...DEFAULT_MARKETS]} onChange={(countries) => setDraft({ ...draft, countries })} /></div>
+
       <div><span><strong>CPV codes these sectors cover</strong><small>{coveredCodes.length ? `${coveredCodes.length} codes applied once a tender is imported` : "Pick a sector to see its codes"}</small></span>
         <span className="cpv-chips" data-testid="covered-cpv">{coveredCodes.map((entry) => <i key={entry.code} title={entry.label}>{entry.code}</i>)}</span></div>
 
@@ -3865,6 +4507,16 @@ function SettingsView({ isDemo, sectors, preferences, onSave, loading, usage, au
       {error && <p className="auth-error" data-testid="preferences-error">{error}</p>}
       <div><span /><button className="continue-btn" onClick={save} disabled={loading === "preferences"}>{loading === "preferences" ? "Saving…" : "Save preferences"}</button></div>
     </section>
+
+    <PortalConnectionCard
+      portal={portal.connection}
+      state={portal.state}
+      busy={portal.busy}
+      error={portal.error}
+      onConnect={portal.onConnect}
+      onDisconnect={portal.onDisconnect}
+      isDemo={isDemo}
+    />
 
     <section className="panel settings-list"><div><span><strong>eTenders watcher</strong><small>Daily Render cron when enabled, plus manual Refresh live at any time</small></span><label className="switch disabled"><input type="checkbox" defaultChecked disabled /><i /></label></div><div><span><strong>Conservative eligibility</strong><small>Missing proof is Review, not Pass. Conflicting source evidence blocks final readiness.</small></span><label className="switch disabled"><input type="checkbox" defaultChecked disabled /><i /></label></div><div><span><strong>Automatic final submission</strong><small>Disabled by design — a human always performs the final portal submit action.</small></span><label className="switch disabled"><input type="checkbox" disabled /><i /></label></div><div><span><strong>Connection</strong><small>{isDemo ? "Demo mode · set VITE_API_URL in Netlify to connect the Render API" : "Render API connected"}</small></span><span className={isDemo ? "connection demo" : "connection live"}>● {isDemo ? "Demo" : "Live"}</span></div></section>
   </div>;

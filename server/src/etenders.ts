@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import type { PublicTender } from "./types.js";
+import { cpvDescendants, extractCpvCode } from "./cpv.js";
 
 const ETENDERS_HOSTS = new Set(["www.etenders.gov.ie", "etenders.gov.ie"]);
 const ALLOWED_PROCUREMENT_HOSTS = ETENDERS_HOSTS;
@@ -61,7 +62,10 @@ function safeAbsoluteHref(href: string | undefined, base: string) {
 /** The listing publishes "dd/mm/yyyy hh:mm:ss". Returns null when it publishes nothing readable. */
 function publishedAt(value: string): number | null {
   const match = String(value ?? "").match(/(\d{2})\/(\d{2})\/(\d{4})/);
-  if (!match) return null;
+  if (!match) {
+    const time = Date.parse(value);
+    return Number.isNaN(time) ? null : time;
+  }
   const time = Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
   return Number.isNaN(time) ? null : time;
 }
@@ -82,13 +86,15 @@ export function parseSearchHtml(html: string, baseUrl = START_URL): { items: Pub
       externalId,
       title,
       authority: clean($(cells[3]).text()),
-      description: clean($(cells[4]).text()),
+      description: clean($(cells[4]).text() || $(cells[4]).find("[title]").attr("title") || ""),
       published: clean($(cells[5]).text()),
       deadline: clean($(cells[6]).text()),
       procedure: clean($(cells[7]).text()),
       status: clean($(cells[8]).text()),
       estimatedValue: cells.length > 11 ? clean($(cells[11]).text()) : "",
       sourceUrl: link || `https://www.etenders.gov.ie/epps/cft/prepareViewCfTWS.do?resourceId=${encodeURIComponent(externalId)}`,
+      // eTenders publishes Irish competitions only; the market is never in doubt.
+      markets: ["IRL"],
     });
   });
 
@@ -113,42 +119,57 @@ export function parseSearchHtml(html: string, baseUrl = START_URL): { items: Pub
   return { items, nextUrl };
 }
 
-/**
- * How far back a run reads before it stops paging.
- *
- * eTenders holds 21,695 notices across 2,170 pages, so "read everything" is not
- * a strategy. The listing is ordered newest first, so a run that stops once it
- * reaches notices older than it cares about reads a few pages on an ordinary
- * day and still cannot miss one — where a fixed page count silently truncates
- * the moment a busy day publishes more than it allows for.
- */
-const DEFAULT_SINCE_DAYS = 3;
+/** Ask the portal for every open notice in these CPV families, including children. */
+export function cpvSearchUrl(codes: string[] = ["72000000"]) {
+  const url = new URL("https://www.etenders.gov.ie/epps/viewCFTSAction.do");
+  url.searchParams.set("type", "cftFTS");
+  url.searchParams.set("status", "cft.status.tender.submission");
+  const expanded = new Set(codes.flatMap((raw) => {
+    const code = extractCpvCode(raw);
+    if (!code) throw new Error(`Invalid discovery CPV: ${raw}`);
+    return [code, ...cpvDescendants(code).map((child) => child.code)];
+  }));
+  url.searchParams.set("cpvLabels", [...expanded].join(","));
+  return url.toString();
+}
 
 export async function discoverETenders(
   query = "",
-  options: { maxPages?: number; delayMs?: number; sinceDays?: number } = {},
+  options: { maxPages?: number; delayMs?: number; sinceDays?: number; cpvCodes?: string[] } = {},
 ) {
-  // The backstop is generous rather than tight: it exists to stop a runaway
-  // crawl, not to decide how much gets read. The date is what decides that.
-  const maxPages = Math.max(1, Math.min(options.maxPages ?? Number(process.env.ETENDERS_MAX_PAGES || 40), 200));
+  // A safety limit must fail explicitly, never look like a complete feed.
+  const maxPages = Math.max(1, Math.min(options.maxPages ?? Number(process.env.ETENDERS_MAX_PAGES || 1000), 5000));
   const delayMs = Math.max(200, Number(options.delayMs ?? process.env.ETENDERS_REQUEST_DELAY_MS ?? 850));
-  const sinceDays = Math.max(1, options.sinceDays ?? Number(process.env.ETENDERS_SINCE_DAYS || DEFAULT_SINCE_DAYS));
-  const cutoff = Date.now() - sinceDays * 86_400_000;
+  const cutoff = options.sinceDays === undefined ? null : Date.now() - Math.max(1, options.sinceDays) * 86_400_000;
 
   const discovered = new Map<string, PublicTender>();
-  let url = START_URL;
-  let reachedCutoff = false;
-  for (let page = 0; page < maxPages && url && !reachedCutoff; page += 1) {
-    const { html, url: fetchedUrl } = await fetchHtml(url);
-    const parsed = parseSearchHtml(html, fetchedUrl);
-    parsed.items.forEach((item) => discovered.set(item.externalId, item));
-    // A page whose every notice predates the cutoff is the end of what this run
-    // wants. A page with no readable dates is not evidence of anything, so it
-    // does not stop the crawl.
-    const dates = parsed.items.map((item) => publishedAt(item.published)).filter((value): value is number => value !== null);
-    if (dates.length && dates.every((value) => value < cutoff)) reachedCutoff = true;
-    url = parsed.nextUrl;
-    if (url && !reachedCutoff && page + 1 < maxPages) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  const search = new URL(cpvSearchUrl(options.cpvCodes));
+  const codes = (search.searchParams.get("cpvLabels") ?? "").split(",");
+  const searches: string[] = [];
+  for (let start = 0; start < codes.length; start += 250) {
+    const batch = new URL(search);
+    batch.searchParams.set("cpvLabels", codes.slice(start, start + 250).join(","));
+    searches.push(batch.toString());
+  }
+  const visited = new Set<string>();
+  for (const startUrl of searches) {
+    let url = startUrl;
+    let reachedCutoff = false;
+    for (let page = 0; page < maxPages && url && !reachedCutoff; page += 1) {
+      if (visited.has(url)) throw new Error("eTenders repeated a results page; discovery is incomplete");
+      visited.add(url);
+      const { html, url: fetchedUrl } = await fetchHtml(url);
+      const parsed = parseSearchHtml(html, fetchedUrl);
+      parsed.items.forEach((item) => discovered.set(item.externalId, item));
+      // Unreadable dates are not evidence that the publication cutoff was reached.
+      const dates = parsed.items.map((item) => publishedAt(item.published)).filter((value): value is number => value !== null);
+      if (cutoff !== null && dates.length && dates.every((value) => value < cutoff)) reachedCutoff = true;
+      if (!parsed.items.length && parsed.nextUrl) throw new Error("eTenders results could not be parsed; discovery is incomplete");
+      url = parsed.nextUrl;
+      if (url && !reachedCutoff && page + 1 < maxPages) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    if (url && !reachedCutoff) throw new Error(`eTenders exceeded ${maxPages} pages; discovery is incomplete. Raise ETENDERS_MAX_PAGES.`);
+    if (searches.length > 1 && startUrl !== searches.at(-1)) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   const needle = query.trim().toLowerCase();
   const items = [...discovered.values()];
@@ -186,6 +207,11 @@ function extractStructuredFields(html: string) {
     }
     result[label] = clean(compact.slice(valueStart, end)).slice(0, 10_000);
   }
+  $("dt").each((_index, node) => {
+    const label = clean($(node).text()).replace(/:\s*$/, "");
+    const value = $(node).next("dd");
+    if (label && value.length) result[label] = clean(value.text()).slice(0, 10_000);
+  });
   return { fields: result, sourceText: clean($("body").text()).slice(0, 150_000) };
 }
 
@@ -202,6 +228,27 @@ export function parseNoticeDetailHtml(html: string, resourceId: string): Importe
   const detailUrl = `https://www.etenders.gov.ie/epps/cft/prepareViewCfTWS.do?resourceId=${encodeURIComponent(resourceId)}`;
   const { fields, sourceText } = extractStructuredFields(html);
   const title = fields.Title || clean(cheerio.load(html)("h2").first().text()).replace(/^CfT:\s*/i, "") || `eTenders ${resourceId}`;
+  if (!fields.Title && !fields.Description && !fields["Name of Contracting Authority"]) {
+    throw new Error("eTenders returned no CFT details; the portal may require access or its layout has changed");
+  }
+  const $ = cheerio.load(html);
+  const sourceLinks = new Map<string, { label: string; url: string }>();
+  const documentsUrl = `https://www.etenders.gov.ie/epps/cft/listContractDocuments.do?resourceId=${encodeURIComponent(resourceId)}`;
+  sourceLinks.set(documentsUrl, { label: "Tender documents and attachments", url: documentsUrl });
+  const contactEmails = new Set<string>();
+  $("a[href]").each((_index, anchor) => {
+    const href = $(anchor).attr("href") || "";
+    if (/^mailto:/i.test(href)) {
+      const email = href.slice(7).split("?")[0];
+      if (/^[^\s@]+@[^\s@]+$/.test(email)) contactEmails.add(email);
+    }
+    const label = clean($(anchor).text() || $(anchor).attr("title") || "");
+    const url = safeAbsoluteHref(href, detailUrl);
+    if (url && /document|clarif|notice|corrigend|addend/i.test(`${label} ${url}`)) {
+      sourceLinks.set(url, { label: label || "Published notice", url });
+    }
+  });
+  for (const match of (fields["Contact Point"] || "").matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)) contactEmails.add(match[0]);
   return {
     resourceId,
     externalId: resourceId,
@@ -214,7 +261,7 @@ export function parseNoticeDetailHtml(html: string, resourceId: string): Importe
     status: "Tender Submission",
     estimatedValue: fields["Estimated value (EUR)"] || "",
     sourceUrl: detailUrl,
-    metadata: { ...fields, resourceId },
+    metadata: { ...fields, noticeFields: fields, resourceId, sourceLinks: [...sourceLinks.values()], contactEmails: [...contactEmails], sourceCheckedAt: new Date().toISOString() },
     sourceText,
   };
 }
@@ -314,4 +361,3 @@ export async function fetchPublicTenderDocuments(resourceId: string) {
   }
   return results;
 }
-

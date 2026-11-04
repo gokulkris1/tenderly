@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!-- Synthetic fixture: the shape the documented ePPS login page takes. -->
+<html>
+  <head><title>eTenders — Sign in</title></head>
+  <body>
+    <div id="header"><h1>eTenders</h1></div>
+    <form action="/epps/loginAction.do" method="post">
+      <input type="hidden" name="org.apache.struts.taglib.html.TOKEN" value="abc123token" />
+      <label>Email <input type="text" name="username" /></label>
+      <label>Password <input type="password" name="password" /></label>
+      <input type="submit" value="Sign in" />
+    </form>
+  </body>
+</html>

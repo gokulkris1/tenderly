@@ -27,6 +27,9 @@ export const AUDIT_ACTIONS = {
   accountDeletionCancelled: "account.deletion_cancelled",
   memberRoleChanged: "member.role_changed",
   memberRemoved: "member.removed",
+  portalConnectionSaved: "portal_connection.saved",
+  portalConnectionDeleted: "portal_connection.deleted",
+  portalMessageSent: "portal_message.sent",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!-- Synthetic fixture: the portal answering a wrong password with the login page again. -->
+<html>
+  <head><title>eTenders — Sign in</title></head>
+  <body>
+    <div class="error">The username or password is incorrect. Please try again.</div>
+    <form action="/epps/loginAction.do" method="post">
+      <input type="hidden" name="org.apache.struts.taglib.html.TOKEN" value="abc123token" />
+      <label>Email <input type="text" name="username" /></label>
+      <label>Password <input type="password" name="password" /></label>
+      <input type="submit" value="Sign in" />
+    </form>
+  </body>
+</html>

@@ -2,9 +2,37 @@ import type { AiUsePolicy as AiUsePolicyWire, ScoreBreakdown, TenderCpv as Tende
 import { ANALYSIS_SCHEMA_VERSION, orphanedAnswers } from "./analysis-schema.js";
 import { normaliseCpv } from "./cpv.js";
 import { badgeFor } from "./provenance.js";
+import { aiPolicyReminder } from "./ai-policy.js";
 import { summariseNotice } from "./notice-summary.js";
 import { isExpired } from "./vault.js";
+import { tenderWorkflow } from "./tender-workflow.js";
+import { parseContractValue } from "./scoring.js";
+import { KNOWN_FIELD_LABELS } from "./etenders.js";
+import { deadlineInstant } from "./pressure.js";
 import type { BidAnswer, EvidenceRecord, ProvenanceEntry, PublicTender, RequiredCertificate, TenderAnalysis, TenderRecord } from "./types.js";
+
+/**
+ * The official place to ask or answer clarifications for an eTenders CFT.
+ *
+ * There is no public messaging API, so this deep link opens the tender's
+ * workspace page on the portal, where a signed-in user reaches Messaging.
+ * TED notices have no such page here, so they carry no link.
+ */
+export function etendersMessagingUrl(source: string, externalId: string, sourceUrl = ""): string | undefined {
+  const onEtenders = source === "etenders" || /^https:\/\/(www\.)?etenders\.gov\.ie\//.test(sourceUrl);
+  if (!onEtenders || !externalId.trim()) return undefined;
+  return `https://www.etenders.gov.ie/epps/cft/prepareViewCfTWS.do?resourceId=${encodeURIComponent(externalId)}`;
+}
+
+function marketsOf(tender: Pick<PublicTender, "markets"> & { metadata?: Record<string, unknown>; source?: string }): string[] | undefined {
+  if (Array.isArray(tender.markets) && tender.markets.length) return tender.markets;
+  const stored = tender.metadata?.markets;
+  if (Array.isArray(stored) && stored.length) return stored.map(String);
+  // eTenders is Ireland-only; TED notices ingested before markets were
+  // recorded were found by the Ireland query, so Ireland is what they were.
+  if (tender.source === "etenders" || tender.source === "ted") return ["IRL"];
+  return undefined;
+}
 
 function accessLabel(access: TenderRecord["analysis"] extends infer _T ? string : never) {
   return access === "OPEN_TO_QUALIFIED_BIDDERS" ? "Open to qualified bidders" : access === "FRAMEWORK_MEMBERS_ONLY" ? "Framework members only" : access === "INVITED_ONLY" ? "Invited bidders only" : "Needs source review";
@@ -78,6 +106,10 @@ export function certificateStatus(certificates: RequiredCertificate[], evidence:
 /**
  * An analysis that predates TLY-74 has no policy at all. It reads as not-stated
  * rather than unrestricted: we have not looked, so we cannot say we were allowed.
+ *
+ * `reminder` re-derives the drafting pipeline's deterministic AI-policy note at
+ * serialization time. claimsToVerify is delivered per drafting call and never
+ * stored, so this is how the declaration duty survives a reload of the tender.
  */
 export function aiUsePolicy(
   policy: TenderAnalysis["aiUsePolicy"],
@@ -93,6 +125,7 @@ export function aiUsePolicy(
     quote: policy.evidence.quote,
     confidence: policy.evidence.confidence,
     acknowledgement: ack,
+    reminder: aiPolicyReminder(policy) ?? undefined,
   };
 }
 
@@ -159,14 +192,37 @@ export function serializeTender(tender: TenderRecord, answers: BidAnswer[] = [],
     authority: tender.authority || "Contracting authority",
     category: String(tender.metadata["Procurement Type"] ?? "Public procurement"),
     procedure: tender.procedure || "Review",
-    deadline: analysis?.deadline || tender.deadline || "Verify deadline",
-    value: analysis?.contractValue || tender.estimatedValue || "Not stated",
+    deadline: tender.deadline || analysis?.deadline || "Verify deadline",
+    deadlineIso: deadlineInstant(tender.deadline || analysis?.deadline || "")?.toISOString(),
+    value: tender.estimatedValue || analysis?.contractValue || "Not stated",
+    valueAmount: parseContractValue(tender.estimatedValue || analysis?.contractValue),
+    workflow: tenderWorkflow(tender.metadata.workflow),
+    sourceDescription: tender.description,
+    noticeFields: {
+      ...Object.fromEntries(KNOWN_FIELD_LABELS
+        .filter((key) => typeof tender.metadata[key] === "string")
+        .map((key) => [key, String(tender.metadata[key])])),
+      ...(tender.metadata.noticeFields && typeof tender.metadata.noticeFields === "object"
+        ? Object.fromEntries(Object.entries(tender.metadata.noticeFields).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+        : {}),
+    },
+    sourceLinks: Array.isArray(tender.metadata.sourceLinks) ? tender.metadata.sourceLinks.filter(
+      (entry): entry is { label: string; url: string } => Boolean(entry && typeof entry.label === "string" && typeof entry.url === "string" && /^https:\/\//.test(entry.url)),
+    ) : [],
+    contactEmails: Array.isArray(tender.metadata.contactEmails) ? tender.metadata.contactEmails.filter((email): email is string => typeof email === "string" && /^[^\s@]+@[^\s@]+$/.test(email)) : [],
+    sourceCheckedAt: typeof tender.metadata.sourceCheckedAt === "string" ? tender.metadata.sourceCheckedAt : undefined,
+    sourceChanges: Array.isArray(tender.metadata.amendments) ? tender.metadata.amendments.filter(
+      (entry): entry is { at: string; field: string; from: string; to: string } => Boolean(entry && ["at", "field", "from", "to"].every((key) => typeof entry[key] === "string")),
+    ) : [],
+    sourceWarnings: ["documentWarnings", "refreshWarnings"].flatMap((key) => Array.isArray(tender.metadata[key]) ? tender.metadata[key].map(String) : []),
     match: analysis?.fitScore ?? 0,
     decision: analysis?.decision ?? "REVIEW",
     access: accessLabel(analysis?.access ?? "UNKNOWN"),
     summary: analysis?.executiveSummary || tender.description || "Imported opportunity — run qualification after the full tender pack is available.",
     sourceUrl: tender.sourceUrl,
     published: tender.published || "",
+    markets: marketsOf(tender),
+    messagingUrl: etendersMessagingUrl(tender.source, tender.externalId, tender.sourceUrl),
     // The 05:00 run reads the notice, not the pack, so the board gets a summary
     // that states the four facts a go/no-go turns on and names the judgements
     // it has not made. Replaced by the real analysis once the pack is uploaded.
@@ -279,12 +335,15 @@ export function serializePublicTender(tender: PublicTender, score: number | Scor
     procedure: tender.procedure || "Review",
     deadline: tender.deadline || "Verify deadline",
     value: tender.estimatedValue || "Not stated",
+    valueAmount: parseContractValue(tender.estimatedValue),
     match: matchScore,
     decision: "REVIEW",
     access: "Import pack to verify",
     summary: tender.description,
     sourceUrl: tender.sourceUrl,
     published: tender.published,
+    markets: marketsOf(tender),
+    messagingUrl: etendersMessagingUrl("", tender.externalId, tender.sourceUrl),
     framework: /framework/i.test(tender.title) ? "Framework mentioned — import to classify" : "Import to classify",
     gates: [{ label: "Full eligibility", state: "review", bidder: "Not checked", requirement: "Import tender pack", source: "eTenders public listing" }],
     questions: [],

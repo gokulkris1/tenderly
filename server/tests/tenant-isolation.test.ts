@@ -52,7 +52,7 @@ async function makeTenant(label: string): Promise<Tenant> {
     type: "certification", value: `${label} confidential certification`, detail: "Body",
     period: "2026", quote: "…", confidence: "HIGH",
   }]);
-  await savePreferences(user.organisationId, { sectors: ["software-development"], keywords: [label], cpvCodes: [], valueMin: null, valueMax: null });
+  await savePreferences(user.organisationId, { sectors: ["software-development"], keywords: [label], cpvCodes: [], valueMin: null, valueMax: null, countries: ["IRL"] });
   return {
     token: signToken({ id: user.id, organisationId: user.organisationId, email: user.email }), tenderId: tender.id, evidenceId: ev.id, personId: person.id, factId: facts[0].id,
     questionId: question.id, checklistId: stored.submissionChecklist[0].id,
@@ -82,6 +82,9 @@ test("TLY-93: the two accounts are distinct and both hold data", () => {
 /** Every authenticated route, with the resource owned by A and the token of B. */
 function crossTenantCases(owner: Tenant) {
   return [
+    { method: "PATCH", path: `/api/tenders/${owner.tenderId}/workflow`, body: { stage: "REVIEW" } },
+    { method: "POST", path: `/api/tenders/${owner.tenderId}/refresh`, body: {} },
+    { method: "GET", path: `/api/tenders/${owner.tenderId}/documents/00000000-0000-0000-0000-000000000000/file` },
     { method: "GET", path: `/api/tenders/${owner.tenderId}` },
     { method: "POST", path: `/api/tenders/${owner.tenderId}/analyse`, body: {} },
     { method: "POST", path: `/api/tenders/${owner.tenderId}/answers/${owner.questionId}/draft`, body: {} },
@@ -165,7 +168,7 @@ test("TLY-93: an unauthenticated request is refused everywhere", async () => {
 
 test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
   const source = readFileSync(path.resolve(process.cwd(), "src/index.ts"), "utf8");
-  const routes = [...source.matchAll(/app\.(get|post|put|delete)\("(\/api\/[^"]*)"/g)]
+  const routes = [...source.matchAll(/app\.(get|post|put|patch|delete)\("(\/api\/[^"]*)"/g)]
     .map((m) => `${m[1].toUpperCase()} ${m[2]}`)
     // Auth, cron and invitation-link routes run before requireAuth: they have
     // no caller to scope to, which is the point of them.
@@ -173,6 +176,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
   // Routes that carry no tenant-owned resource: they read or write only the caller's own scope.
   const ownScopeOnly = [
     "GET /api/me", "GET /api/company", "PUT /api/company", "GET /api/sectors",
+    "GET /api/tender-boards", "POST /api/tender-boards", "DELETE /api/tender-boards/:id", "POST /api/tenders/sync",
     "GET /api/preferences", "PUT /api/preferences", "GET /api/tenders", "GET /api/usage", "GET /api/audit", "GET /api/my-tasks",
     "GET /api/skills-matrix",
     "GET /api/watchlist", "POST /api/watchlist", "DELETE /api/watchlist/:externalId", "GET /api/portfolio",
@@ -183,6 +187,13 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     "POST /api/evidence", "POST /api/evidence/upload", "GET /api/people",
     "POST /api/people", "POST /api/people/upload", "GET /api/notifications",
     "POST /api/tenders/:id/documents",
+    // Buyers, the market picture, dismissals and the CSV export read only the
+    // caller's own rows; award history is shared reference data (CC-BY OGP).
+    "GET /api/buyers", "GET /api/buyers/:name", "GET /api/market/stats", "GET /api/market/competitors",
+    "POST /api/tenders/discover/dismiss", "DELETE /api/tenders/discover/dismiss", "GET /api/tenders/export.csv",
+    // The portal connection row is keyed by account; another tenant's
+    // credentials are unreachable by construction.
+    "GET /api/portal/connection", "PUT /api/portal/connection", "DELETE /api/portal/connection",
     // Export and deletion act on the caller's own account and nothing else;
     // server/tests/account-erasure.test.ts proves the archive holds one tenant.
     "GET /api/account/export",
@@ -194,6 +205,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
   ];
   const covered = new Set([
     ...ownScopeOnly,
+    "PATCH /api/tenders/:id/workflow", "POST /api/tenders/:id/refresh", "GET /api/tenders/:id/documents/:documentId/file",
     "GET /api/tenders/:id", "POST /api/tenders/:id/analyse",
     "POST /api/tenders/:id/answers/:questionId/draft", "PUT /api/tenders/:id/answers/:questionId",
     "GET /api/tenders/:id/answers/:questionId/provenance",
@@ -210,6 +222,7 @@ test("TLY-93 AC3: every authenticated route is covered by a case here", () => {
     "GET /api/tenders/:id/mock-evaluation", "POST /api/tenders/:id/mock-evaluation",
     "GET /api/tenders/:id/ask", "POST /api/tenders/:id/ask", "GET /api/tenders/:id/analysis-versions",
     "GET /api/tenders/:id/clarifications", "POST /api/tenders/:id/clarifications", "PUT /api/tenders/:id/clarifications/:clarificationId",
+    "POST /api/tenders/:id/clarifications/send", "POST /api/tenders/:id/clarifications/sync",
     "GET /api/tenders/:id/tasks", "POST /api/tenders/:id/tasks", "PUT /api/tenders/:id/tasks/:taskId",
     "GET /api/tenders/:id/runbook", "POST /api/tenders/:id/runbook/:stepId",
     "GET /api/tenders/:id/deck", "GET /api/tenders/:id/pack",

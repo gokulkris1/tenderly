@@ -12,7 +12,7 @@ const notice = (over: Partial<PublicTender> & { cpvNormalised?: string } = {}) =
 });
 
 const preferences = (over: Partial<DiscoveryPreferences> = {}): DiscoveryPreferences => ({
-  sectors: [], keywords: ["retrofit"], cpvCodes: ["71314000"], valueMin: null, valueMax: null, ...over,
+  sectors: [], keywords: ["retrofit"], cpvCodes: ["71314000"], valueMin: null, valueMax: null, countries: ["IRL"], ...over,
 });
 
 const company = (over: Partial<CompanyProfile> = {}): CompanyProfile => ({

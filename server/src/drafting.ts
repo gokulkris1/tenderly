@@ -1,4 +1,5 @@
 import { aiModel, draftBidAnswer, refineBidAnswer, streamBidAnswer } from "./ai.js";
+import { aiPolicyReminder } from "./ai-policy.js";
 import { declarationEvidence } from "./declarations.js";
 import {
   getCompany, latestAffirmation, listActivePeople, listAnswers, listDeclarationAnswers, listEvidence,
@@ -66,6 +67,22 @@ export function ensureInputMarkers(answer: string, missingInputs: string[]) {
   const markers = absent.map(marker).join("\n");
   const prose = answer.trimEnd();
   return prose ? `${prose}\n\n${markers}` : markers;
+}
+
+/**
+ * The pack's AI-use policy becomes a checklist item, not a hope that the model
+ * remembered it. When the buyer demands an AI-use declaration — or forbids
+ * AI-generated content outright — every draft and revision carries that fact in
+ * claimsToVerify, so the human deciding on submission is told plainly whatever
+ * the model chose to mention. The same reminder is derived again at
+ * serialization time (see serializers.ts), so it survives a reload even though
+ * claimsToVerify itself is delivered per call rather than stored. Prohibited
+ * tenders are additionally refused server-side when the user enables no-AI
+ * mode; this note covers the drafts that exist before that decision is made.
+ */
+export function policyClaimsToVerify(tender: TenderRecord, claims: string[]) {
+  const note = aiPolicyReminder(tender.analysis?.aiUsePolicy);
+  return note && !claims.includes(note) ? [...claims, note] : claims;
 }
 
 /** How a streamed draft is produced. Replaced in tests so no model is called. */
@@ -160,6 +177,7 @@ export async function refineAndSaveAnswer(args: {
   const withOwnGaps = ensureInputMarkers(revision.answer, revision.missingInputs);
   const answer = preserveMarkers(args.answer.response, withOwnGaps);
   const status = markersIn(answer).length ? "needs-input" : "draft";
+  const claimsToVerify = policyClaimsToVerify(args.tender, revision.claimsToVerify ?? []);
 
   const saved = await saveAnswer(
     args.tender.id, args.question.id, answer, status,
@@ -175,7 +193,7 @@ export async function refineAndSaveAnswer(args: {
     provenanceClass: "ai-generated", actor: args.actor, steering: args.steering,
   });
 
-  return { revision: { ...revision, answer }, saved };
+  return { revision: { ...revision, answer, claimsToVerify }, saved };
 }
 
 export type DraftOutcome = {
@@ -185,6 +203,8 @@ export type DraftOutcome = {
   answerId: string;
   citations: { id: string; name: string; hasFile: boolean }[];
   missingInputs: string[];
+  /** Includes the deterministic AI-policy reminder, so batch runs deliver it too. */
+  claimsToVerify: string[];
 };
 
 /**
@@ -224,6 +244,7 @@ async function persistDraft(args: {
   const { draft } = args;
   const answer = ensureInputMarkers(draft.answer, draft.missingInputs);
   const status = draft.missingInputs.length ? "needs-input" : "draft";
+  const claimsToVerify = policyClaimsToVerify(args.tender, draft.claimsToVerify ?? []);
   // The citation stores the vault item's identifier, not just its name, so the
   // UI can open the document a buyer could be shown.
   const saved = await saveAnswer(
@@ -248,6 +269,7 @@ async function persistDraft(args: {
     answerId: saved.id,
     citations: draft.citations ?? [],
     missingInputs: draft.missingInputs,
+    claimsToVerify,
   };
-  return { draft: { ...draft, answer }, saved, outcome };
+  return { draft: { ...draft, answer, claimsToVerify }, saved, outcome };
 }

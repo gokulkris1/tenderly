@@ -9,24 +9,22 @@ import { SEEDED, signIn } from "../support/app";
 test.describe("workspace", () => {
   test("@smoke a seeded user signs in and lands on their current bid", async ({ page }) => {
     await signIn(page);
-    await page.getByRole("button", { name: /My bids/ }).first().click();
+    await page.getByRole("button", { name: /Tender board/ }).first().click();
     await expect(page.getByText(SEEDED.blocked).first()).toBeVisible({ timeout: 30_000 });
-    // The five bid stages are reachable.
-    for (const stage of ["Qualify", "Synopsis", "Respond", "Assemble", "Submit"]) {
+    await page.getByText(SEEDED.blocked).first().click();
+    for (const stage of ["Overview", "Qualification & scoring", "Synopsis", "Respond", "Assemble", "Submit"]) {
       await expect(page.getByRole("button", { name: new RegExp(stage) }).first()).toBeVisible();
     }
   });
 
   test("@smoke every saved bid is reachable, not just the most recent", async ({ page }) => {
     await signIn(page);
-    await page.getByRole("button", { name: /My bids/ }).first().click();
-    const list = page.locator('[data-testid="bid-list"]');
-    await expect(list).toBeVisible({ timeout: 30_000 });
+    await page.getByRole("button", { name: /Tender board/ }).first().click();
     // The seed creates two tenders; both must be listed and openable.
-    const items = page.locator(".bid-list-item");
+    const items = page.locator(".tracker-card");
     await expect(items).toHaveCount(2);
     await expect(page.getByText(SEEDED.blocked).first()).toBeVisible();
-    await items.filter({ hasText: /Software Testing and QA/ }).first().click();
+    await items.filter({ hasText: /Software Testing and QA/ }).getByRole("button").click();
     await expect(page.locator("h1").first()).toContainText(/Software Testing and QA/);
   });
 

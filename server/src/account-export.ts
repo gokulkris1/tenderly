@@ -2,7 +2,7 @@ import JSZip from "jszip";
 import {
   evidenceFile, getCompany, getUserById, listAnswers, listAudit, listBidDecisions, listBidTasks,
   listClarifications, listDeclarationAnswers, listDocuments, listEvidence, listAccountPersonFacts,
-  listPeople, listProvenance, listSavedSearches, listTenders, listUsage, listWatchlist,
+  listPeople, listProvenance, listSavedSearches, listTenderBoards, listTenders, listUsage, listWatchlist,
 } from "./db.js";
 import type { PersonFact, PersonRecord } from "./types.js";
 
@@ -78,6 +78,7 @@ export async function buildAccountExport(accountId: string, generatedAt = new Da
   zip.file("declarations.json", JSON.stringify(declarations, null, 2));
   zip.file("watchlist.json", JSON.stringify({ watchlist, savedSearches: searches }, null, 2));
   zip.file("activity.json", JSON.stringify({ usage, audit }, null, 2));
+  zip.file("tender-boards.json", JSON.stringify(await listTenderBoards(accountId), null, 2));
 
   // The original files, under their own names. A vault of PDFs exported as
   // JSON strings is not an export of the vault.
